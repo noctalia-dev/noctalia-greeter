@@ -11,6 +11,7 @@
 #include "greeter/appearance_config.h"
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -48,6 +49,8 @@ public:
                   std::uint32_t modifiers, bool pressed, bool preedit);
 
   void onThemeChanged();
+  [[nodiscard]] bool handleNavigationKey(std::uint32_t sym,
+                                         std::uint32_t modifiers);
   void requestLayout();
   void requestRedraw();
   void flushDeferredFrameRequests();
@@ -65,7 +68,20 @@ private:
   void updateStatus(const std::string &text, bool isError);
   void toggleUserMenu();
   void toggleSessionMenu();
+  void toggleSchemeMenu();
   void closeMenus();
+  void closeMenusAndRestoreFocus();
+  void selectSession(std::size_t index);
+  void selectScheme(std::size_t index);
+  void runBackAction();
+  void rebuildFocusRing();
+  void setFocusIndex(std::ptrdiff_t index);
+  void moveFocus(int delta);
+  void activateFocused();
+  [[nodiscard]] bool menuOpen() const noexcept;
+  void moveMenuHighlight(int delta);
+  void activateMenuHighlight();
+  void applyMenuHighlight();
   void rebuildUserMenu();
   void rebuildSessionMenu();
   void rebuildSchemeMenu();
@@ -136,8 +152,18 @@ private:
   std::chrono::steady_clock::time_point m_lastAnimTick{};
   bool m_animTickInitialized = false;
   bool m_inInputDispatch = false;
+  bool m_inLayout = false;
   bool m_deferredLayoutRequest = false;
   bool m_deferredRedrawRequest = false;
+
+  struct Focusable {
+    InputArea *area = nullptr;
+    std::function<void()> activate;
+  };
+  std::vector<Focusable> m_focusRing;
+  std::ptrdiff_t m_focusIndex = -1;
+  std::ptrdiff_t m_menuHighlight = -1;
+  bool m_initialFocusDone = false;
 
   struct SessionOption {
     std::string name;

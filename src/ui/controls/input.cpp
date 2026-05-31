@@ -88,6 +88,13 @@ Input::Input() : Node(NodeType::Container) {
   area->setOnKeyDown([this](const InputArea::KeyData &k) {
     handleKey(k.sym, k.utf32, k.modifiers, k.preedit);
   });
+  area->setOnFocusChange([this](bool focused) {
+    applyVisualState();
+    updateInteractiveGeometry();
+    if (!focused && m_onFocusLoss) {
+      m_onFocusLoss();
+    }
+  });
   m_inputArea = static_cast<InputArea *>(addChild(std::move(area)));
 
   applyVisualState();

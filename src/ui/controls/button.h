@@ -81,6 +81,7 @@ public:
 
   [[nodiscard]] Label* label() const noexcept { return m_label; }
   [[nodiscard]] Glyph* glyph() const noexcept { return m_glyph; }
+  [[nodiscard]] InputArea* inputArea() const noexcept { return m_inputArea; }
   [[nodiscard]] bool hovered() const noexcept;
   [[nodiscard]] bool pressed() const noexcept;
   [[nodiscard]] bool enabled() const noexcept { return m_enabled; }

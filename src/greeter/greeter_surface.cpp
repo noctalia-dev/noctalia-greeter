@@ -1,5 +1,7 @@
 #include "greeter/greeter_surface.h"
 
+#include "core/key_modifiers.h"
+#include "core/key_symbols.h"
 #include "core/log.h"
 #include "core/resource_paths.h"
 #include "greeter/appearance_config.h"
@@ -293,14 +295,7 @@ void GreeterSurface::initialize(GreeterWindow &window, RenderContext *context) {
     if (data.button != BTN_LEFT) {
       return;
     }
-    m_schemeMenuOpen = !m_schemeMenuOpen;
-    if (m_schemeMenuOpen) {
-      m_userMenuOpen = false;
-      m_sessionMenuOpen = false;
-      clearUserMenu();
-      clearSessionMenu();
-    }
-    requestLayout();
+    toggleSchemeMenu();
   });
   m_schemeSelectArea = schemeArea.get();
   m_schemeSelectArea->setZIndex(7);
@@ -333,13 +328,7 @@ void GreeterSurface::initialize(GreeterWindow &window, RenderContext *context) {
       .selected = std::nullopt,
   });
   backBtn->setContentAlign(ButtonContentAlign::Center);
-  backBtn->setOnClick([this]() {
-    m_passwordVisible = false;
-    m_passwordField->setValue("");
-    m_password.clear();
-    updateStatus("", false);
-    requestLayout();
-  });
+  backBtn->setOnClick([this]() { runBackAction(); });
   m_backButton = backBtn.get();
   m_backButton->setZIndex(6);
   m_root.addChild(std::move(backBtn));
@@ -486,7 +475,9 @@ void GreeterSurface::onKeyEvent(std::uint32_t sym, std::uint32_t utf32,
   if (!pressed)
     return;
   m_inInputDispatch = true;
-  m_inputDispatcher.keyEvent(sym, utf32, modifiers, pressed, preedit);
+  if (!handleNavigationKey(sym, modifiers)) {
+    m_inputDispatcher.keyEvent(sym, utf32, modifiers, pressed, preedit);
+  }
   m_inInputDispatch = false;
   flushDeferredFrameRequests();
   if (m_root.paintDirty() || m_root.layoutDirty()) {
@@ -504,6 +495,11 @@ void GreeterSurface::requestLayout() {
     m_deferredLayoutRequest = true;
     return;
   }
+  // Requests issued while a layout is already running (the window renders
+  // synchronously) would recurse; the in-progress pass already covers them.
+  if (m_inLayout) {
+    return;
+  }
   if (m_window) {
     m_window->requestLayout();
   }
@@ -512,6 +508,9 @@ void GreeterSurface::requestLayout() {
 void GreeterSurface::requestRedraw() {
   if (m_inInputDispatch) {
     m_deferredRedrawRequest = true;
+    return;
+  }
+  if (m_inLayout) {
     return;
   }
   if (m_window) {
@@ -557,7 +556,9 @@ void GreeterSurface::prepareFrame(bool /*needsUpdate*/, bool needsLayout) {
   if (needsLayout) {
     m_renderContext->syncContentScale(m_window->renderTarget());
     syncWallpaperTexture();
+    m_inLayout = true;
     layoutScene(m_window->width(), m_window->height());
+    m_inLayout = false;
   }
 }
 
@@ -899,6 +900,27 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
   rebuildUserMenu();
   rebuildSessionMenu();
   rebuildSchemeMenu();
+
+  rebuildFocusRing();
+  applyMenuHighlight();
+
+  // Place initial keyboard focus on the last-used user so a returning user can
+  // type their password immediately. Done here because the user rows only have
+  // valid focus targets once the scene has been laid out.
+  if (!m_initialFocusDone && !m_passwordVisible && !m_focusRing.empty()) {
+    std::ptrdiff_t initial = 0;
+    for (std::size_t i = 0; i < m_focusRing.size(); ++i) {
+      if (m_selectedUser < m_userRowButtons.size() &&
+          m_userRowButtons[m_selectedUser] != nullptr &&
+          m_focusRing[i].area ==
+              m_userRowButtons[m_selectedUser]->inputArea()) {
+        initial = static_cast<std::ptrdiff_t>(i);
+        break;
+      }
+    }
+    setFocusIndex(initial);
+    m_initialFocusDone = true;
+  }
 }
 
 void GreeterSurface::tryAuthenticate() {
@@ -1304,8 +1326,23 @@ void GreeterSurface::toggleSessionMenu() {
   m_sessionMenuOpen = !m_sessionMenuOpen;
   if (m_sessionMenuOpen) {
     m_userMenuOpen = false;
+    m_schemeMenuOpen = false;
     clearUserMenu();
+    clearSchemeMenu();
   }
+  m_menuHighlight = -1;
+  requestLayout();
+}
+
+void GreeterSurface::toggleSchemeMenu() {
+  m_schemeMenuOpen = !m_schemeMenuOpen;
+  if (m_schemeMenuOpen) {
+    m_userMenuOpen = false;
+    m_sessionMenuOpen = false;
+    clearUserMenu();
+    clearSessionMenu();
+  }
+  m_menuHighlight = -1;
   requestLayout();
 }
 
@@ -1313,9 +1350,289 @@ void GreeterSurface::closeMenus() {
   m_userMenuOpen = false;
   m_sessionMenuOpen = false;
   m_schemeMenuOpen = false;
+  m_menuHighlight = -1;
   clearUserMenu();
   clearSessionMenu();
   clearSchemeMenu();
+}
+
+void GreeterSurface::closeMenusAndRestoreFocus() {
+  InputArea *owner = m_sessionMenuOpen  ? m_sessionSelectArea
+                     : m_schemeMenuOpen ? m_schemeSelectArea
+                                        : nullptr;
+  closeMenus();
+  if (owner != nullptr) {
+    m_inputDispatcher.setFocus(owner);
+  }
+  requestLayout();
+}
+
+void GreeterSurface::selectSession(std::size_t index) {
+  if (index >= m_sessions.size()) {
+    return;
+  }
+  m_selectedSession = index;
+  refreshSelectionLabels();
+  savePreferences();
+  m_sessionMenuOpen = false;
+  m_menuHighlight = -1;
+  if (m_sessionSelectArea != nullptr) {
+    m_inputDispatcher.setFocus(m_sessionSelectArea);
+  }
+  requestLayout();
+}
+
+void GreeterSurface::selectScheme(std::size_t index) {
+  if (index >= m_schemeNames.size()) {
+    return;
+  }
+  applyScheme(index);
+  refreshSelectionLabels();
+  savePreferences();
+  m_schemeMenuOpen = false;
+  m_menuHighlight = -1;
+  if (m_schemeSelectArea != nullptr) {
+    m_inputDispatcher.setFocus(m_schemeSelectArea);
+  }
+  requestLayout();
+  requestRedraw();
+}
+
+void GreeterSurface::runBackAction() {
+  m_passwordVisible = false;
+  m_passwordField->setValue("");
+  m_password.clear();
+  updateStatus("", false);
+  if (m_selectedUser < m_userRowButtons.size() &&
+      m_userRowButtons[m_selectedUser] != nullptr &&
+      m_userRowButtons[m_selectedUser]->inputArea() != nullptr) {
+    m_inputDispatcher.setFocus(m_userRowButtons[m_selectedUser]->inputArea());
+  }
+  requestLayout();
+}
+
+bool GreeterSurface::menuOpen() const noexcept {
+  return m_userMenuOpen || m_sessionMenuOpen || m_schemeMenuOpen;
+}
+
+void GreeterSurface::rebuildFocusRing() {
+  InputArea *previouslyFocused = InputArea::getFocused();
+  m_focusRing.clear();
+
+  if (m_passwordVisible) {
+    if (m_passwordField != nullptr && m_passwordField->inputArea() != nullptr) {
+      m_focusRing.push_back({m_passwordField->inputArea(), {}});
+    }
+    if (m_loginButton != nullptr && m_loginButton->inputArea() != nullptr) {
+      m_focusRing.push_back(
+          {m_loginButton->inputArea(), [this]() { tryAuthenticate(); }});
+    }
+    if (m_backButton != nullptr && m_backButton->inputArea() != nullptr) {
+      m_focusRing.push_back(
+          {m_backButton->inputArea(), [this]() { runBackAction(); }});
+    }
+  } else {
+    for (std::size_t i = 0; i < m_userRowButtons.size(); ++i) {
+      Button *row = m_userRowButtons[i];
+      if (row == nullptr || row->inputArea() == nullptr) {
+        continue;
+      }
+      m_focusRing.push_back({row->inputArea(), [this, i]() {
+                               enterPasswordStep(i);
+                             }});
+    }
+  }
+
+  if (m_sessionSelectArea != nullptr) {
+    m_focusRing.push_back(
+        {m_sessionSelectArea, [this]() { toggleSessionMenu(); }});
+  }
+  if (m_schemeSelectArea != nullptr) {
+    m_focusRing.push_back(
+        {m_schemeSelectArea, [this]() { toggleSchemeMenu(); }});
+  }
+
+  // Keep focus on whatever was focused before the rebuild, if still present.
+  m_focusIndex = -1;
+  for (std::size_t i = 0; i < m_focusRing.size(); ++i) {
+    if (m_focusRing[i].area == previouslyFocused) {
+      m_focusIndex = static_cast<std::ptrdiff_t>(i);
+      break;
+    }
+  }
+}
+
+void GreeterSurface::setFocusIndex(std::ptrdiff_t index) {
+  if (m_focusRing.empty()) {
+    m_focusIndex = -1;
+    return;
+  }
+  const std::ptrdiff_t count = static_cast<std::ptrdiff_t>(m_focusRing.size());
+  index = ((index % count) + count) % count;
+  m_focusIndex = index;
+  m_inputDispatcher.setFocus(m_focusRing[static_cast<std::size_t>(index)].area);
+  requestRedraw();
+}
+
+void GreeterSurface::moveFocus(int delta) {
+  if (m_focusRing.empty()) {
+    return;
+  }
+  const std::ptrdiff_t start = m_focusIndex < 0 ? 0 : m_focusIndex + delta;
+  setFocusIndex(start);
+}
+
+void GreeterSurface::activateFocused() {
+  if (m_focusIndex < 0 ||
+      m_focusIndex >= static_cast<std::ptrdiff_t>(m_focusRing.size())) {
+    return;
+  }
+  const auto &activate =
+      m_focusRing[static_cast<std::size_t>(m_focusIndex)].activate;
+  if (activate) {
+    activate();
+  }
+}
+
+void GreeterSurface::applyMenuHighlight() {
+  std::vector<Box *> *rows = nullptr;
+  std::size_t selected = 0;
+  if (m_sessionMenuOpen) {
+    rows = &m_sessionMenuRows;
+    selected = m_selectedSession;
+  } else if (m_schemeMenuOpen) {
+    rows = &m_schemeMenuRows;
+    selected = m_selectedScheme;
+  } else if (m_userMenuOpen) {
+    rows = &m_userMenuRows;
+    selected = m_selectedUser;
+  }
+
+  if (rows == nullptr || rows->empty()) {
+    m_menuHighlight = -1;
+    return;
+  }
+
+  const std::ptrdiff_t count = static_cast<std::ptrdiff_t>(rows->size());
+  if (m_menuHighlight < 0 || m_menuHighlight >= count) {
+    m_menuHighlight =
+        std::min(static_cast<std::ptrdiff_t>(selected), count - 1);
+  }
+
+  for (std::ptrdiff_t i = 0; i < count; ++i) {
+    Box *row = (*rows)[static_cast<std::size_t>(i)];
+    if (row == nullptr) {
+      continue;
+    }
+    row->setStyle(RoundedRectStyle{
+        .fill = (i == m_menuHighlight)
+                    ? colorForRole(ColorRole::Hover, 0.35f)
+                    : colorForRole(ColorRole::SurfaceVariant, 0.01f),
+        .fillMode = FillMode::Solid,
+    });
+  }
+}
+
+void GreeterSurface::moveMenuHighlight(int delta) {
+  std::vector<Box *> *rows = m_sessionMenuOpen  ? &m_sessionMenuRows
+                             : m_schemeMenuOpen ? &m_schemeMenuRows
+                             : m_userMenuOpen   ? &m_userMenuRows
+                                                : nullptr;
+  if (rows == nullptr || rows->empty()) {
+    return;
+  }
+  const std::ptrdiff_t count = static_cast<std::ptrdiff_t>(rows->size());
+  if (m_menuHighlight < 0) {
+    m_menuHighlight = 0;
+  }
+  m_menuHighlight = (((m_menuHighlight + delta) % count) + count) % count;
+  applyMenuHighlight();
+  requestRedraw();
+}
+
+void GreeterSurface::activateMenuHighlight() {
+  if (m_menuHighlight < 0) {
+    return;
+  }
+  const std::size_t idx = static_cast<std::size_t>(m_menuHighlight);
+  if (m_sessionMenuOpen) {
+    selectSession(idx);
+  } else if (m_schemeMenuOpen) {
+    selectScheme(idx);
+  }
+}
+
+bool GreeterSurface::handleNavigationKey(std::uint32_t sym,
+                                         std::uint32_t modifiers) {
+  if (m_authenticating) {
+    return false;
+  }
+  const bool shift = (modifiers & KeyMod::Shift) != 0;
+  const bool backward = shift || sym == XKB_KEY_ISO_Left_Tab;
+
+  // A dropdown menu being open takes total precedence over the focus ring.
+  if (menuOpen()) {
+    if (KeySymbol::isUp(sym)) {
+      moveMenuHighlight(-1);
+      return true;
+    }
+    if (KeySymbol::isDown(sym)) {
+      moveMenuHighlight(1);
+      return true;
+    }
+    if (KeySymbol::isEnter(sym)) {
+      activateMenuHighlight();
+      return true;
+    }
+    if (KeySymbol::isEscape(sym)) {
+      closeMenusAndRestoreFocus();
+      return true;
+    }
+    if (KeySymbol::isTab(sym)) {
+      closeMenusAndRestoreFocus();
+      moveFocus(backward ? -1 : 1);
+      return true;
+    }
+    return true; // swallow everything else while a menu is open
+  }
+
+  // Tab / Shift+Tab cycles the focus ring, even from inside the password field.
+  if (KeySymbol::isTab(sym)) {
+    moveFocus(backward ? -1 : 1);
+    return true;
+  }
+
+  // Escape leaves the password step.
+  if (KeySymbol::isEscape(sym)) {
+    if (m_passwordVisible) {
+      runBackAction();
+      return true;
+    }
+    return false;
+  }
+
+  // Let the password field keep all of its editing/submit keys.
+  InputArea *focused = InputArea::getFocused();
+  if (m_passwordField != nullptr &&
+      focused == m_passwordField->inputArea()) {
+    return false;
+  }
+
+  // Non-text focusables: arrows move focus, Enter/Space activate.
+  if (KeySymbol::isUp(sym)) {
+    moveFocus(-1);
+    return true;
+  }
+  if (KeySymbol::isDown(sym)) {
+    moveFocus(1);
+    return true;
+  }
+  if (KeySymbol::isEnter(sym) || KeySymbol::isSpace(sym)) {
+    activateFocused();
+    return true;
+  }
+
+  return false;
 }
 
 void GreeterSurface::clearUserMenu() {
@@ -1553,11 +1870,7 @@ void GreeterSurface::rebuildSessionMenu() {
       if (data.button != BTN_LEFT) {
         return;
       }
-      m_selectedSession = i;
-      refreshSelectionLabels();
-      savePreferences();
-      m_sessionMenuOpen = false;
-      requestLayout();
+      selectSession(i);
     });
     m_root.addChild(std::move(area));
     areaPtr->setPosition(x, y + rowH * static_cast<float>(i));
@@ -1644,15 +1957,10 @@ void GreeterSurface::rebuildSchemeMenu() {
       }
     });
     areaPtr->setOnClick([this, i](const InputArea::PointerData &data) {
-      if (data.button != BTN_LEFT || i >= m_schemeNames.size()) {
+      if (data.button != BTN_LEFT) {
         return;
       }
-      applyScheme(i);
-      refreshSelectionLabels();
-      savePreferences();
-      m_schemeMenuOpen = false;
-      requestLayout();
-      requestRedraw();
+      selectScheme(i);
     });
     m_root.addChild(std::move(area));
     areaPtr->setPosition(x, y + rowH * static_cast<float>(i));

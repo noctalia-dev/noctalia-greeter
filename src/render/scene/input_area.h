@@ -38,6 +38,7 @@ public:
   void setOnMotion(std::function<void(const PointerData&)> callback);
   void setOnKeyDown(std::function<void(const KeyData&)> callback);
   void setOnAxisHandler(std::function<bool(const PointerData&)> callback);
+  void setOnFocusChange(std::function<void(bool focused)> callback);
 
   void focus();
   void blur();
@@ -69,6 +70,7 @@ private:
   std::function<void(const PointerData&)> m_onMotion;
   std::function<void(const KeyData&)> m_onKeyDown;
   std::function<bool(const PointerData&)> m_onAxisHandler;
+  std::function<void(bool)> m_onFocusChange;
 
   static InputArea* s_focused;
 };

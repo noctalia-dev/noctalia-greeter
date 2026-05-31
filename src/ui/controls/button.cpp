@@ -7,6 +7,7 @@
 #include "ui/palette.h"
 #include "ui/style.h"
 
+#include <algorithm>
 #include <cmath>
 #include <linux/input-event-codes.h>
 #include <memory>
@@ -218,6 +219,8 @@ Button::Button() {
       m_onClick();
     }
   });
+  area->setFocusable(true);
+  area->setOnFocusChange([this](bool /*focused*/) { applyVisualState(); });
   area->setEnabled(false);
   m_inputArea = static_cast<InputArea *>(addChild(std::move(area)));
   m_inputArea->setParticipatesInLayout(false);
@@ -454,7 +457,13 @@ void Button::ensureGlyph() {
 void Button::applyColors(const Color &bg, const Color &border,
                          const Color &label) {
   setFill(bg);
-  setBorder(border, m_palette.borderWidth);
+  const bool isFocused =
+      m_enabled && m_inputArea != nullptr && m_inputArea->focused() &&
+      !(m_inputArea->pressed());
+  const float borderWidth =
+      isFocused ? std::max(m_palette.borderWidth, Style::borderWidth * 2.0f)
+                : m_palette.borderWidth;
+  setBorder(border, borderWidth);
   if (m_label != nullptr) {
     m_label->setColor(label);
   }
@@ -486,6 +495,7 @@ void Button::resolveVisualStateColors(Color &targetBg, Color &targetBorder,
   bool isHovered = m_enabled && (!m_hoverSuppressed && hovered());
   bool isPressed = m_enabled && pressed();
   bool isSelected = m_enabled && m_selected;
+  bool isFocused = m_enabled && m_inputArea != nullptr && m_inputArea->focused();
 
   if (!m_enabled) {
     targetBg = resolveColorSpec(m_palette.disabled.bg);
@@ -499,6 +509,13 @@ void Button::resolveVisualStateColors(Color &targetBg, Color &targetBorder,
     targetBg = resolveColorSpec(m_palette.selected->bg);
     targetBorder = resolveColorSpec(m_palette.selected->border);
     targetLabel = resolveColorSpec(m_palette.selected->label);
+  } else if (isFocused) {
+    // Keyboard focus: lift to the hover surface and draw a Primary ring
+    // (the ring width is applied in applyColors so zero-border variants
+    // still get a visible focus indicator).
+    targetBg = resolveColorSpec(m_palette.hover.bg);
+    targetBorder = colorForRole(ColorRole::Primary);
+    targetLabel = resolveColorSpec(m_palette.hover.label);
   } else if (isHovered || isSelected) {
     targetBg = resolveColorSpec(m_palette.hover.bg);
     targetBorder = resolveColorSpec(m_palette.hover.border);
