@@ -245,6 +245,10 @@ void GreeterSurface::initialize(GreeterWindow &window, RenderContext *context) {
   });
   m_sessionSelectArea = sessionArea.get();
   m_sessionSelectArea->setZIndex(7);
+  m_sessionSelectArea->setOnFocusChange([this](bool) {
+    applySelectorBoxStyle(m_sessionSelectBox, m_sessionSelectArea);
+    requestRedraw();
+  });
   m_root.addChild(std::move(sessionArea));
 
   auto schemeBox = std::make_unique<Box>();
@@ -275,6 +279,10 @@ void GreeterSurface::initialize(GreeterWindow &window, RenderContext *context) {
   });
   m_schemeSelectArea = schemeArea.get();
   m_schemeSelectArea->setZIndex(7);
+  m_schemeSelectArea->setOnFocusChange([this](bool) {
+    applySelectorBoxStyle(m_schemeSelectBox, m_schemeSelectArea);
+    requestRedraw();
+  });
   m_root.addChild(std::move(schemeArea));
 
   auto loginBtn = std::make_unique<Button>();
@@ -710,15 +718,6 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
   const float gap = Style::spaceSm;
   const float inputWidth = std::max(120.0f, contentWidth - buttonWidth - gap);
 
-  const auto selectorStyle = RoundedRectStyle{
-      .fill = colorForRole(ColorRole::SurfaceVariant),
-      .border = colorForRole(ColorRole::Outline),
-      .fillMode = FillMode::Solid,
-      .radius = Style::scaledRadiusMd(),
-      .softness = 1.0f,
-      .borderWidth = Style::borderWidth,
-  };
-
   // Color scheme selector (top-right).
   const float schemeW = 210.0f;
   const float schemeH = 38.0f;
@@ -728,7 +727,7 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
   m_schemeSelectLabel->setVisible(true);
   m_schemeSelectGlyph->setVisible(true);
   m_schemeSelectArea->setVisible(true);
-  m_schemeSelectBox->setStyle(selectorStyle);
+  applySelectorBoxStyle(m_schemeSelectBox, m_schemeSelectArea);
   m_schemeSelectBox->setPosition(schemeX, schemeY);
   m_schemeSelectBox->setSize(schemeW, schemeH);
   m_schemeSelectBox->layout(*renderer);
@@ -857,7 +856,7 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
   m_sessionSelectLabel->setVisible(true);
   m_sessionSelectGlyph->setVisible(true);
   m_sessionSelectArea->setVisible(true);
-  m_sessionSelectBox->setStyle(selectorStyle);
+  applySelectorBoxStyle(m_sessionSelectBox, m_sessionSelectArea);
   m_sessionSelectBox->setPosition(sessionX, sessionY);
   m_sessionSelectBox->setSize(sessionW, sessionH);
   m_sessionSelectBox->layout(*renderer);
@@ -1406,6 +1405,25 @@ void GreeterSurface::rebuildFocusRing() {
   }
 }
 
+void GreeterSurface::applySelectorBoxStyle(Box *box, const InputArea *area) {
+  if (box == nullptr) {
+    return;
+  }
+  const bool focused = area != nullptr && area->focused();
+  box->setStyle(RoundedRectStyle{
+      .fill = focused ? colorForRole(ColorRole::Hover, 0.35f)
+                      : colorForRole(ColorRole::SurfaceVariant),
+      .border = focused ? colorForRole(ColorRole::Primary)
+                        : colorForRole(ColorRole::Outline),
+      .fillMode = FillMode::Solid,
+      .radius = Style::scaledRadiusMd(),
+      .softness = 1.0f,
+      .borderWidth = focused
+                         ? std::max(Style::borderWidth, Style::borderWidth * 2.0f)
+                         : Style::borderWidth,
+  });
+}
+
 void GreeterSurface::setFocusIndex(std::ptrdiff_t index) {
   if (m_focusRing.empty()) {
     m_focusIndex = -1;
@@ -1513,6 +1531,31 @@ bool GreeterSurface::handleNavigationKey(std::uint32_t sym,
   }
   const bool shift = (modifiers & KeyMod::Shift) != 0;
   const bool backward = shift || sym == XKB_KEY_ISO_Left_Tab;
+
+  // F3 / F7 jump straight to the session / color-scheme menus from anywhere
+  // (even from inside the password field or with another menu open).
+  if (KeySymbol::isF3(sym)) {
+    if (m_sessionMenuOpen) {
+      closeMenusAndRestoreFocus();
+    } else {
+      if (m_sessionSelectArea != nullptr) {
+        m_inputDispatcher.setFocus(m_sessionSelectArea);
+      }
+      toggleSessionMenu();
+    }
+    return true;
+  }
+  if (KeySymbol::isF7(sym)) {
+    if (m_schemeMenuOpen) {
+      closeMenusAndRestoreFocus();
+    } else {
+      if (m_schemeSelectArea != nullptr) {
+        m_inputDispatcher.setFocus(m_schemeSelectArea);
+      }
+      toggleSchemeMenu();
+    }
+    return true;
+  }
 
   // A dropdown menu being open takes total precedence over the focus ring.
   if (menuOpen()) {

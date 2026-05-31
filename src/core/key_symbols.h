@@ -51,4 +51,12 @@ namespace KeySymbol {
 [[nodiscard]] inline bool isSpace(std::uint32_t sym) noexcept {
   return sym == XKB_KEY_space || sym == XKB_KEY_KP_Space;
 }
+
+[[nodiscard]] inline bool isF3(std::uint32_t sym) noexcept {
+  return sym == XKB_KEY_F3;
+}
+
+[[nodiscard]] inline bool isF7(std::uint32_t sym) noexcept {
+  return sym == XKB_KEY_F7;
+}
 } // namespace KeySymbol

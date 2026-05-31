@@ -77,6 +77,7 @@ private:
   void selectScheme(std::size_t index);
   void runBackAction();
   void rebuildFocusRing();
+  void applySelectorBoxStyle(Box *box, const InputArea *area);
   void setFocusIndex(std::ptrdiff_t index);
   void moveFocus(int delta);
   void activateFocused();
