@@ -1,0 +1,3 @@
+#!/usr/bin/env sh
+set -eu
+exec /usr/share/noctalia-greeter/print_greetd_config.sh "$@"

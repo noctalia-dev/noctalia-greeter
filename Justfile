@@ -45,6 +45,10 @@ setup-greetd-pam:
 setup-system:
   sudo ./scripts/setup_greeter_system.sh
 
+# Print a copy-paste greetd config block (paths/user resolved for this machine).
+print-greetd-config:
+  ./scripts/print_greetd_config.sh
+
 # Create persistent log dirs for greetd (run once on the target machine)
 setup-log-dir:
   sudo mkdir -p /var/lib/noctalia-greeter

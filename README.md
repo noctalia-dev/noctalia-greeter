@@ -137,7 +137,19 @@ The greeter needs the shipped `assets/` tree at runtime. Copying only the `nocta
 
 ## Setting up greetd
 
-After install, point greetd at the session wrapper (path matches your prefix):
+`just install` and `setup_greeter_system.sh` prepare `/var/lib/noctalia-greeter/`, logs, and `greeter.conf`. They do **not** edit `/etc/greetd/config.toml` for you.
+
+After install, print a copy-paste block with paths and greeter user resolved for your machine:
+
+```sh
+just print-greetd-config
+# or, when installed:
+noctalia-greeter-print-greetd-config
+```
+
+Copy the printed commands into a terminal. On an existing greetd setup the block backs up `config.toml` to `config.toml.bak` before replacing it.
+
+Manual edit instead (path matches your prefix):
 
 ```toml
 [default_session]
@@ -145,9 +157,7 @@ command = "/usr/local/bin/noctalia-greeter-session"
 user = "greeter"
 ```
 
-Use the `user` value that matches your greetd config. `just install` / `setup_greeter_system.sh` reads greetd’s config and prepares `/var/lib/noctalia-greeter/` for that account.
-
-Optional default session (must match a name from the session picker, e.g. `niri`):
+Optional pinned desktop session (name must match the picker, e.g. `niri`):
 
 ```toml
 command = "/usr/local/bin/noctalia-greeter-session -- --session niri"
@@ -159,25 +169,7 @@ List valid session names:
 noctalia-greeter sessions
 ```
 
-Restart greetd:
-
-```sh
-sudo systemctl restart greetd
-```
-
-On runit:
-
-```sh
-sudo sv restart greetd
-```
-
-Create log files once if needed:
-
-```sh
-just setup-log-dir
-```
-
-Logs: `/var/log/noctalia-greeter.log` and `/var/lib/noctalia-greeter/greeter.log`.
+Logs: `/var/log/noctalia-greeter.log` and `/var/lib/noctalia-greeter/greeter.log`. Run `just setup-log-dir` if they are missing.
 
 ## Matching Noctalia Shell
 

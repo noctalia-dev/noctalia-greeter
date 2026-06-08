@@ -206,6 +206,23 @@ install_data(
   install_mode: 'rwxr-xr-x',
 )
 
+install_data(
+  'scripts/noctalia-greeter-print-greetd-config',
+  install_dir: get_option('bindir'),
+  install_mode: 'rwxr-xr-x',
+)
+
+install_data(
+  [
+    'scripts/greetd_setup_lib.sh',
+    'scripts/print_greetd_config.sh',
+    'scripts/setup_greetd_pam.sh',
+    'scripts/setup_greeter_system.sh',
+  ],
+  install_dir: get_option('datadir') / 'noctalia-greeter',
+  install_mode: 'rwxr-xr-x',
+)
+
 _apply_appearance_sources = files(
   'src/core/log.cpp',
   'src/greeter/appearance_sync.cpp',
