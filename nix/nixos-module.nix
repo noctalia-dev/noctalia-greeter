@@ -17,6 +17,7 @@ in {
     
     greeter-args = lib.mkOption {
       type = lib.types.str;
+      default = " ";
       description = "Arguments to add onto noctalia-greeter-session command.";
     };
   };
@@ -28,9 +29,6 @@ in {
       pkgs.wlr-randr
     ];
 
-    security.polkit.enable = true;
-    services.dbus.packages = [ cfg.package ];
-    
     systemd.tmpfiles.settings."10-noctalia-greeter" = {
       "/var/lib/noctalia-greeter".d = {
         inherit user;

@@ -15,11 +15,8 @@
   cairo,
   pango,
   libxkbcommon,
-  systemd,
-  pipewire,
   libwebp,
   glib,
-  polkit,
   librsvg,
   jemalloc,
   autoAddDriverRunpath,
@@ -59,11 +56,8 @@ in
       cairo
       pango
       libxkbcommon
-      systemd
-      pipewire
       libwebp
       glib
-      polkit
       librsvg
     ];
 
