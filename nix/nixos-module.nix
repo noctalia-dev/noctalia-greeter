@@ -24,7 +24,7 @@ in {
 
   config = lib.mkIf cfg.enable {
     environment.systemPackages = [
-      cfg.package
+      lib.optional (cfg.package != null) cfg.package
       pkgs.cage
       pkgs.wlr-randr
     ];
