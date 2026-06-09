@@ -14,6 +14,11 @@ in {
       type = lib.types.nullOr lib.types.package;
       description = "The noctalia-greeter package to use.";
     };
+    
+    settings = lib.mkOption {
+      type = types.lines;
+      description = "Configuration options for the Greeter.";
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -22,6 +27,10 @@ in {
       pkgs.cage
       pkgs.wlr-randr
     ];
+
+    greeter-config = pkgs.runCommand "greeter.conf" { } ''
+      cp ${pkgs.writeText "greeter.conf" cfg.settings} "/var/lib/noctalia-greeter/greeter.conf"
+    '';
     
     security.polkit.enable = true;
     services.dbus.packages = [ cfg.package ];
