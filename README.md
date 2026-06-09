@@ -165,6 +165,8 @@ List valid session names:
 noctalia-greeter sessions
 ```
 
+Sessions come from `wayland-sessions` `.desktop` files under `/usr/share`, each path in `XDG_DATA_DIRS`, and on NixOS `/run/current-system/sw/share`.
+
 ### Multi-monitor
 
 The greeter runs inside Cage, which can span all connected outputs. By default it shows on the **primary monitor only** (largest by pixel area). After Wayland connect it uses `wlr-randr` to turn off the other connectors so the login UI does not stretch across every display.
