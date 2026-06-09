@@ -15,9 +15,14 @@ in {
       description = "The noctalia-greeter package to use.";
     };
     
+    greeter-args = lib.mkOption {
+      type = types.str;
+      description = "Arguments to add onto noctalia-greeter-session command.";
+    };
+
     settings = lib.mkOption {
       type = types.lines;
-      description = "Configuration options for the Greeter.";
+      description = "Settings for the greeter.conf.";
     };
   };
 
@@ -29,7 +34,7 @@ in {
     ];
 
     greeter-config = pkgs.runCommand "greeter.conf" { } ''
-      cp ${pkgs.writeText "greeter.conf" cfg.settings} "/var/lib/noctalia-greeter/greeter.conf"
+      cp -f ${pkgs.writeText "greeter.conf" cfg.settings} "/var/lib/noctalia-greeter/greeter.conf"
     '';
     
     security.polkit.enable = true;
@@ -45,7 +50,7 @@ in {
 
     services.greetd = {
       enable = lib.mkDefault true;
-      settings.default_session.command = lib.mkDefault "${cfg.package}/bin/noctalia-greeter-session";
+      settings.default_session.command = lib.mkDefault "${cfg.package}/bin/noctalia-greeter-session ${cfg.greeter-args}";
     };
 
     assertions = [
