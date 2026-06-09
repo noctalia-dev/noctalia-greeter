@@ -5,13 +5,12 @@
   ...
 }: let
   cfg = config.programs.noctalia-greeter;
-  user = config.services.greetd.settings.default_session.user;
 in {
   options.programs.noctalia-greeter = {
     enable = lib.mkEnableOption "Whether to enable Noctalia Greeter, A minimal login greeter for greetd.";
 
     package = lib.mkOption {
-      type = lib.types.nullOr lib.types.package;
+      type = lib.types.package;
       description = "The noctalia-greeter package to use.";
     };
     
@@ -29,7 +28,9 @@ in {
       pkgs.wlr-randr
     ];
 
-    systemd.tmpfiles.settings."10-noctalia-greeter" = {
+    systemd.tmpfiles.settings."10-noctalia-greeter" =  let
+      user = config.services.greetd.settings.default_session.user;
+    in {
       "/var/lib/noctalia-greeter".d = {
         inherit user;
         group = if config.users.users.${user}.group != "" then config.users.users.${user}.group else "greeter";
@@ -42,7 +43,9 @@ in {
       settings.default_session.command = lib.mkDefault "${cfg.package}/bin/noctalia-greeter-session -- ${cfg.greeter-args}";
     };
 
-    assertions = [
+    assertions = let
+      user = config.services.greetd.settings.default_session.user;
+    in [
       {
         assertion = (config.users.users.${user} or { }) != { };
         message = "noctalia-greeter: user ${user} does not exist. Please create it before referencing it.";
