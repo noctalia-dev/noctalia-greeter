@@ -14,6 +14,11 @@ in {
       type = lib.types.nullOr lib.types.package;
       description = "The noctalia-greeter package to use.";
     };
+    
+    greeter-args = lib.mkOption {
+      type = lib.types.str;
+      description = "Arguments to add onto noctalia-greeter-session command.";
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -22,15 +27,9 @@ in {
       pkgs.cage
       pkgs.wlr-randr
     ];
-    
-    security.pam.services.noctalia-greeter = {
-      startSession = true;
-      unixAuth = true;
-    };
+
     security.polkit.enable = true;
-    
     services.dbus.packages = [ cfg.package ];
-    services.libinput.enable = true;
     
     systemd.tmpfiles.settings."10-noctalia-greeter" = {
       "/var/lib/noctalia-greeter".d = {
@@ -42,7 +41,7 @@ in {
 
     services.greetd = {
       enable = lib.mkDefault true;
-      settings.default_session.command = lib.mkDefault "${cfg.package}/bin/noctalia-greeter-session";
+      settings.default_session.command = lib.mkDefault "${cfg.package}/bin/noctalia-greeter-session -- ${cfg.greeter-args}";
     };
 
     assertions = [
