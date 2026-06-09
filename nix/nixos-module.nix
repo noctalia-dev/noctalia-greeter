@@ -5,7 +5,6 @@
   ...
 }: let
   cfg = config.programs.noctalia-greeter;
-  user = config.services.greetd.settings.default_session.user;
 in {
   options.programs.noctalia-greeter = {
     enable = lib.mkEnableOption "Whether to enable Noctalia Greeter, A minimal login greeter for greetd.";
@@ -24,7 +23,7 @@ in {
 
   config = lib.mkIf cfg.enable {
     environment.systemPackages = [
-      (lib.optional (cfg.package != null) cfg.package)
+      cfg.package
     ];
 
     systemd.tmpfiles.settings."10-noctalia-greeter" = {
