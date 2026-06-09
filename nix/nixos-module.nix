@@ -16,12 +16,12 @@ in {
     };
     
     greeter-args = lib.mkOption {
-      type = types.str;
+      type = lib.types.str;
       description = "Arguments to add onto noctalia-greeter-session command.";
     };
 
     settings = lib.mkOption {
-      type = types.lines;
+      type = lib.types.lines;
       description = "Settings for the greeter.conf.";
     };
   };
