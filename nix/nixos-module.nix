@@ -16,12 +16,12 @@ in {
     };
     
     greeter-args = lib.mkOption {
-      type = lib.types.str;
+      type = lib.types.nullOr lib.types.str;
       description = "Arguments to add onto noctalia-greeter-session command.";
     };
 
     settings = lib.mkOption {
-      type = lib.types.lines;
+      type = lib.types.nullOr lib.types.lines;
       description = "Settings for the greeter.conf.";
     };
   };
@@ -33,7 +33,7 @@ in {
       pkgs.wlr-randr
     ];
 
-    greeter-config = pkgs.runCommand "greeter.conf" { } ''
+    lib.mkIf cfg.settings != null pkgs.runCommand "greeter.conf" { } ''
       cp -f ${pkgs.writeText "greeter.conf" cfg.settings} "/var/lib/noctalia-greeter/greeter.conf"
     '';
     
