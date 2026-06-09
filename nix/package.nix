@@ -8,6 +8,8 @@
   wayland-scanner,
   wayland,
   wayland-protocols,
+  wlr-randr,
+  cage,
   libGL,
   libglvnd,
   freetype,
@@ -59,6 +61,11 @@ in
       libwebp
       glib
       librsvg
+    ];
+
+    dependencies = [
+      wlr-randr
+      cage
     ];
 
     mesonBuildType = "release";

@@ -24,9 +24,7 @@ in {
 
   config = lib.mkIf cfg.enable {
     environment.systemPackages = [
-      lib.optional (cfg.package != null) cfg.package
-      pkgs.cage
-      pkgs.wlr-randr
+      (lib.optional (cfg.package != null) cfg.package)
     ];
 
     systemd.tmpfiles.settings."10-noctalia-greeter" = {
