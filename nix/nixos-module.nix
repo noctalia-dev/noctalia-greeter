@@ -50,7 +50,7 @@ in {
 
     services.greetd = {
       enable = lib.mkDefault true;
-      settings.default_session.command = lib.mkDefault "${cfg.package}/bin/noctalia-greeter-session ${cfg.greeter-args}";
+      settings.default_session.command = lib.mkDefault "${cfg.package}/bin/noctalia-greeter-session -- ${cfg.greeter-args}";
     };
 
     assertions = [
