@@ -5,6 +5,7 @@
   ...
 }: let
   cfg = config.programs.noctalia-greeter;
+  user = config.services.greetd.settings.default_session.user;
 in {
   options.programs.noctalia-greeter = {
     enable = lib.mkEnableOption "Whether to enable Noctalia Greeter, A minimal login greeter for greetd.";
