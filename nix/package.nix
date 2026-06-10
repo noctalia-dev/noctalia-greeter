@@ -36,14 +36,13 @@ in
       sed -i "s/'-march=native', '-mtune=native',//" meson.build
     '';
 
-    nativeBuildInputs =
-      [
+    nativeBuildInputs = [
         meson
         ninja
         pkg-config
         wayland-scanner
         jemalloc
-      ]
+    ];
 
     buildInputs = [
       wayland
