@@ -8,8 +8,7 @@
   wayland-scanner,
   wayland,
   wayland-protocols,
-  cage,
-  wlr-randr,
+  wlroots_0_20,
   libGL,
   libglvnd,
   freetype,
@@ -22,7 +21,6 @@
   librsvg,
   jemalloc,
   autoAddDriverRunpath,
-  cudaSupport ? config.cudaSupport,
 }: let
   inherit (builtins) head match readFile;
   version = head (match ".*version: '([^']+)'.*" (readFile ../meson.build));
@@ -51,6 +49,7 @@ in
     buildInputs = [
       wayland
       wayland-protocols
+      wlroots_0_20
       libGL
       libglvnd
       freetype
@@ -63,10 +62,6 @@ in
       librsvg
     ];
 
-    runtimeDeps = [ 
-      cage
-      wlr-randr
-    ];
 
     mesonBuildType = "release";
 

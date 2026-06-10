@@ -16,21 +16,19 @@ in {
     
     greeter-args = lib.mkOption {
       type = lib.types.str;
-      default = " ";
+      default = "";
       description = "Arguments to add onto noctalia-greeter-session command.";
     };
   };
 
-  config = lib.mkIf cfg.enable {
+  config = let
+      user = config.services.greetd.settings.default_session.user;
+    in lib.mkIf cfg.enable {
     environment.systemPackages = [
       cfg.package
-      pkgs.cage
-      pkgs.wlr-randr
     ];
 
-    systemd.tmpfiles.settings."10-noctalia-greeter" =  let
-      user = config.services.greetd.settings.default_session.user;
-    in {
+    systemd.tmpfiles.settings."10-noctalia-greeter" =  {
       "/var/lib/noctalia-greeter".d = {
         inherit user;
         group = if config.users.users.${user}.group != "" then config.users.users.${user}.group else "greeter";
@@ -43,9 +41,7 @@ in {
       settings.default_session.command = lib.mkDefault "${cfg.package}/bin/noctalia-greeter-session -- ${cfg.greeter-args}";
     };
 
-    assertions = let
-      user = config.services.greetd.settings.default_session.user;
-    in [
+    assertions = [
       {
         assertion = (config.users.users.${user} or { }) != { };
         message = "noctalia-greeter: user ${user} does not exist. Please create it before referencing it.";

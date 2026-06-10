@@ -9,7 +9,6 @@
     self,
     nixpkgs,
   }: let
-    inherit (nixpkgs.lib) genAttrs getExe;
 
     systems = [
       "x86_64-linux"
