@@ -44,7 +44,6 @@ in
         wayland-scanner
         jemalloc
       ]
-      ++ lib.optional cudaSupport autoAddDriverRunpath;
 
     buildInputs = [
       wayland
