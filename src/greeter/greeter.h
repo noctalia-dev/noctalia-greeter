@@ -6,12 +6,15 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
+#include <vector>
 
 class GreeterSurface;
 class GreeterWindow;
 class RenderContext;
 class WaylandClient;
+struct wl_surface;
 
 class Greeter {
 public:
@@ -23,26 +26,40 @@ public:
 
   void onKeyboardEvent(std::uint32_t sym, std::uint32_t utf32,
                        std::uint32_t modifiers, bool pressed, bool preedit);
-  void onPointerMotion(double x, double y);
-  void onPointerButton(double x, double y, std::uint32_t button, bool pressed);
+  void onPointerLeave(GreeterWindow &window);
+  void onPointerMotion(GreeterWindow &window, double x, double y);
+  void onPointerButton(GreeterWindow &window, double x, double y,
+                       std::uint32_t button, bool pressed);
 
   void onThemeChanged();
 
   bool startSession(const std::string &command);
 
 private:
+  struct View {
+    std::unique_ptr<GreeterSurface> surface;
+    std::unique_ptr<GreeterWindow> window;
+  };
+
   void connectGreetd();
   void setupInputCallbacks(WaylandClient &client);
-  void syncUiScale();
+  void syncOutputWindows();
+  void syncStateFrom(const GreeterSurface *source);
+  [[nodiscard]] View *viewForWindow(GreeterWindow &window) noexcept;
+  [[nodiscard]] View *viewForSurface(wl_surface *surface) noexcept;
 
   WaylandClient *m_client = nullptr;
   GlSharedContext m_glSharedContext;
   std::unique_ptr<RenderContext> m_renderContext;
-  std::unique_ptr<GreeterSurface> m_surface;
-  std::unique_ptr<GreeterWindow> m_window;
+  std::vector<View> m_views;
   GreetdClient m_greetdClient;
+  GreeterSurface *m_activeSurface = nullptr;
 
   std::string m_defaultUsername;
   bool m_sessionStarted = false;
   bool m_exitRequested = false;
+  bool m_sceneReady = false;
+  bool m_initializing = false;
+  bool m_pendingOutputSync = false;
+  bool m_syncingOutputWindows = false;
 };

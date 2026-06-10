@@ -39,12 +39,17 @@ public:
   GreeterSurface();
   ~GreeterSurface();
 
-  void initialize(GreeterWindow &window, RenderContext *context);
+  void initialize(RenderContext *context);
 
+  void setWindow(GreeterWindow *window);
   void setGreetdClient(GreetdClient *client);
   void setUsername(const std::string &username);
   void setOnExitRequested(std::function<void()> callback);
+  void setOnStateChanged(std::function<void(GreeterSurface *)> callback);
 
+  void mirrorStateFrom(const GreeterSurface &other);
+
+  void onPointerLeave();
   void onPointerEvent(float x, float y, std::uint32_t button, bool pressed);
   void onPointerMotion(float x, float y);
   void onKeyEvent(std::uint32_t sym, std::uint32_t utf32,
@@ -57,7 +62,8 @@ public:
   void requestRedraw();
   void flushDeferredFrameRequests();
 
-  void prepareFrame(bool needsUpdate, bool needsLayout);
+  void prepareFrame(std::uint32_t width, std::uint32_t height,
+                    bool needsLayout);
 
   void setOutputViewport(float x, float y, float width, float height);
   void clearOutputViewport();
@@ -65,6 +71,7 @@ public:
   [[nodiscard]] Node *sceneRoot() noexcept { return &m_root; }
 
 private:
+  void notifyStateChanged();
   [[nodiscard]] bool pointerInViewport(float x, float y) const;
   void syncScaledTypography();
   void layoutScene(std::uint32_t width, std::uint32_t height);
@@ -85,6 +92,13 @@ private:
   void runBackAction();
   void rebuildFocusRing();
   void applySelectorBoxStyle(Box *box, const InputArea *area);
+  void syncPanelSessionChrome();
+  [[nodiscard]] float measureIconSelectorWidth(Glyph *icon,
+                                               Glyph *chevron) const;
+  void layoutSelector(Box *box, Glyph *icon, Glyph *chevron, InputArea *area,
+                      float x, float y, float w, float h);
+  void layoutPanelSessionSelector(float x, float y, float w, float h);
+  void commitImmediateFrame(bool layout);
   void setFocusIndex(std::ptrdiff_t index);
   void moveFocus(int delta);
   void activateFocused();
@@ -120,6 +134,7 @@ private:
   RenderContext *m_renderContext = nullptr;
   GreetdClient *m_greetdClient = nullptr;
   InputDispatcher m_inputDispatcher;
+  std::function<void(GreeterSurface *)> m_onStateChanged;
 
   WallpaperNode *m_wallpaper = nullptr;
   RectNode *m_letterbox = nullptr;
@@ -130,22 +145,24 @@ private:
   float m_viewportHeight = 0.0f;
   bool m_outputViewportActive = false;
   Node *m_brandPane = nullptr;
-  ImageNode *m_brandLogo = nullptr;
+  ImageNode *m_bottomBrandLogo = nullptr;
+  Glyph *m_headerUserGlyph = nullptr;
   Label *m_brandTitleLabel = nullptr;
   Label *m_brandSubtitleLabel = nullptr;
   Label *m_formSubtitleLabel = nullptr;
   Node *m_panelDivider = nullptr;
-  Label *m_titleLabel = nullptr;
   Box *m_loginPanel = nullptr;
   Box *m_userSelectBox = nullptr;
   Label *m_userSelectLabel = nullptr;
   Glyph *m_userSelectGlyph = nullptr;
   InputArea *m_userSelectArea = nullptr;
   Box *m_sessionSelectBox = nullptr;
+  Glyph *m_sessionSelectIcon = nullptr;
   Label *m_sessionSelectLabel = nullptr;
   Glyph *m_sessionSelectGlyph = nullptr;
   InputArea *m_sessionSelectArea = nullptr;
   Box *m_schemeSelectBox = nullptr;
+  Glyph *m_schemeSelectIcon = nullptr;
   Label *m_schemeSelectLabel = nullptr;
   Glyph *m_schemeSelectGlyph = nullptr;
   InputArea *m_schemeSelectArea = nullptr;
@@ -163,7 +180,7 @@ private:
   bool m_authenticating = false;
   bool m_authSessionStarted = false;
   std::function<void()> m_onExitRequested;
-  TextureHandle m_brandLogoTexture;
+  TextureHandle m_brandLogoTexture{};
   TextureHandle m_wallpaperTexture{};
   std::string m_wallpaperPath;
   WallpaperFillMode m_wallpaperFillMode = WallpaperFillMode::Crop;

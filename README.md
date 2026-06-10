@@ -30,20 +30,20 @@ A minimal login greeter for [greetd](https://github.com/kennylevinsen/greetd) th
 
 Noctalia Greeter is the screen you see before your desktop session starts. It lets you pick a user, enter your password, choose a Wayland session, and pick a color scheme - with the same visual language as Noctalia Shell.
 
-It is built for **greetd**: greetd starts a small Wayland compositor ([Cage](https://github.com/cage-kiosk/cage)), and the greeter runs inside that session. It is a login UI only, not a desktop shell or compositor.
+It is built for **greetd**: greetd starts the bundled wlroots compositor (`noctalia-greeter-compositor`), and the greeter runs inside that session.
 
 Pair it with **[Noctalia v5](https://github.com/noctalia-dev/noctalia)** if you want wallpaper and palette synced from the shell settings (optional).
 
 ## Dependencies
 
-Install everything below on the machine where greetd will run. Each list covers build tools and libraries, plus **greetd**, **Cage**, and **D-Bus** (used by `noctalia-greeter-session`). You still need your desktop sessions separately (niri, Hyprland, and so on).
+Install everything below on the machine where greetd will run. Each list covers build tools and libraries, plus **greetd** and **D-Bus** (used by `noctalia-greeter-session`). You still need your desktop sessions separately (niri, Hyprland, and so on).
 
 ### Arch
 
 ```sh
 sudo pacman -S meson gcc just \
-  greetd cage wlr-randr dbus polkit \
-  wayland wayland-protocols \
+  greetd dbus \
+  wayland wayland-protocols wlroots0.20 \
   libglvnd freetype2 fontconfig \
   cairo pango \
   libxkbcommon glib2 \
@@ -54,8 +54,8 @@ sudo pacman -S meson gcc just \
 
 ```sh
 sudo dnf install meson gcc-c++ just \
-  greetd cage wlr-randr dbus polkit \
-  wayland-devel wayland-protocols-devel \
+  greetd dbus \
+  wayland-devel wayland-protocols-devel wlroots-devel \
   libEGL-devel mesa-libGLES-devel \
   freetype-devel fontconfig-devel \
   cairo-devel pango-devel \
@@ -67,8 +67,8 @@ sudo dnf install meson gcc-c++ just \
 
 ```sh
 sudo apt install meson g++ just \
-  greetd cage wlr-randr dbus policykit-1 \
-  libwayland-dev wayland-protocols \
+  greetd dbus \
+  libwayland-dev wayland-protocols libwlroots-0.20-dev \
   libegl-dev libgles-dev \
   libfreetype-dev libfontconfig-dev \
   libcairo2-dev libpango1.0-dev \
@@ -80,14 +80,16 @@ sudo apt install meson g++ just \
 
 ```sh
 sudo xbps-install meson ninja pkg-config git \
-  greetd cage wlr-randr dbus polkit \
-  wayland-devel wayland-protocols libepoxy-devel \
+  greetd dbus \
+  wayland-devel wayland-protocols wlroots-devel libepoxy-devel \
   MesaLib-devel libglvnd-devel cairo-devel \
   pango-devel fontconfig-devel freetype-devel \
   libxkbcommon-devel libwebp-devel librsvg-devel
 ```
 
 Vendored dependencies, with no system package needed: `nlohmann/json`, `stb`, and `Wuffs`.
+
+Build requires `wlroots-0.20` and `wayland-server` development packages (see distro lists above).
 
 `libwebp` handles WebP wallpapers when syncing appearance from the shell. Wuffs handles other raster image formats.
 
@@ -128,6 +130,7 @@ Meson installs the greeter binary, session launcher and assets. With the default
 
 ```text
 <prefix>/bin/noctalia-greeter
+<prefix>/bin/noctalia-greeter-compositor
 <prefix>/bin/noctalia-greeter-session
 <prefix>/bin/noctalia-greeter-apply-appearance
 <prefix>/share/noctalia-greeter/assets/...
@@ -169,19 +172,29 @@ Sessions come from `wayland-sessions` `.desktop` files under `/usr/share`, each 
 
 ### Multi-monitor
 
-The greeter runs inside Cage, which can span all connected outputs. By default it shows on the **primary monitor only** (largest by pixel area). After Wayland connect it uses `wlr-randr` to turn off the other connectors so the login UI does not stretch across every display.
-
-To pin the greeter to a specific connector, set `output` in `/var/lib/noctalia-greeter/greeter.conf`:
+By default the greeter is **mirrored on every connected monitor** (same UI on each display, sized to the primary output). To pin it to a single connector, set `output` in `/var/lib/noctalia-greeter/greeter.conf`:
 
 ```ini
 output="DP-2"
 ```
 
-`wlr-randr` is required (see Dependencies). If `output` is missing, empty, or names a disconnected connector, the greeter falls back to the primary display only.
+The compositor disables the other connectors at the KMS level when `output` is set. If `output` names a disconnected connector, the greeter falls back to mirroring on all outputs.
 
-When `wlr-randr` cannot disable every other connector (some setups keep the primary on), the greeter letterboxes onto the chosen or primary output inside Cage's combined desktop instead of stretching the UI.
+Test locally with:
 
-On high-DPI panels (for example 4K without fractional scaling), the greeter scales its UI from the monitor's physical size when EDID reports it, otherwise from resolution. Scale is capped at 2×.
+```sh
+just run
+```
+
+On high-DPI panels (for example 4K), the greeter compositor applies fractional output scaling from the monitor's physical size when EDID reports it, otherwise from resolution. Scale is capped at 2×. The greeter client lays out at logical size and renders HiDPI buffers via Wayland fractional scale.
+
+To override auto scaling, set `scale` in `greeter.conf` (read by the compositor):
+
+```ini
+scale=1.5
+```
+
+If `scale` is missing or invalid, the compositor falls back to auto scaling.
 
 List connector names from a running Wayland session:
 
@@ -211,7 +224,7 @@ Logs: `/var/log/noctalia-greeter.log` and `/var/lib/noctalia-greeter/greeter.log
 
 ## Matching Noctalia Shell
 
-With [Noctalia Shell v5](https://github.com/noctalia-dev/noctalia-shell/tree/v5) installed, open **Settings → Shell → Security → Noctalia Greeter → Sync Now**. The shell copies your wallpaper and palette to the greeter (admin prompt via polkit). After syncing, log out or restart greetd to see the changes on the login screen.
+With [Noctalia v5](https://github.com/noctalia-dev/noctalia) installed, open **Settings → Shell → Security → Noctalia Greeter → Sync Now**. The shell copies your wallpaper and palette to the greeter (you may be prompted for admin credentials). After syncing, log out or restart greetd to see the changes on the login screen.
 
 The greeter adds a **Synced** color scheme when sync data is present. Session and scheme choices you make on the login screen are remembered in `/var/lib/noctalia-greeter/greeter.conf`.
 
@@ -219,6 +232,8 @@ Admin-only keys in `greeter.conf` (set by you, not the UI):
 
 - `default_session` - session selected when the greeter opens (overrides last-used unless you pass `--session` on the command line)
 - `greeter_user` - greetd account name (setup/logging)
+- `output` - Wayland connector name (see Multi-monitor)
+- `scale` - manual compositor scale factor (e.g. `1.5`); invalid or missing → auto scale
 
 The greeter updates `session` and `scheme` when you change them in the UI.
 
@@ -240,9 +255,10 @@ The greeter works without a mouse.
 
 - **Blank screen** - Check `/var/log/noctalia-greeter.log` and `/var/lib/noctalia-greeter/greeter.log`. Run `just setup-log-dir` if they are missing.
 - **`Failed to spawn client` / wrong path in greetd config** - `command` must be the full path from `which noctalia-greeter-session` (often `/usr/bin/...` on packaged installs, not `/usr/local/bin/...`).
-- **`WAYLAND_DISPLAY is not set`** - greetd must use `noctalia-greeter-session` (it starts Cage). Fix `command` in `/etc/greetd/config.toml`.
+- **`WAYLAND_DISPLAY is not set`** - greetd must use `noctalia-greeter-session` (it starts `noctalia-greeter-compositor`). Fix `command` in `/etc/greetd/config.toml`.
+- **Black screen after reboot** - logs survive under `/var/log/noctalia-greeter.log` and `/var/lib/noctalia-greeter/greeter.log` (run `just setup-log-dir` once). Session output also goes there when writable.
 - **Wrong session on startup** - If `default_session` is set in `greeter.conf`, it wins over last-used `session`. Run `noctalia-greeter sessions` for exact **Name** spelling.
-- **Synced look missing** - Install shell v5, greeter, and the polkit policy; sync again; restart greetd or log out once.
+- **Synced look missing** - Install shell v5 and greeter; run **Sync Now** in shell settings again; restart greetd or log out once.
 
 Stuck display over SSH:
 

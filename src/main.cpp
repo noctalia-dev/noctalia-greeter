@@ -151,7 +151,7 @@ int main(int argc, char *argv[]) {
           "       noctalia-greeter sessions\n"
           "       noctalia-greeter outputs\n"
           "\n"
-          "Run as a Wayland client under a compositor (e.g. cage).\n"
+          "Run as a Wayland client under noctalia-greeter-compositor.\n"
           "\n"
           "Commands:\n"
           "  sessions              List available session names and exit\n"
@@ -200,8 +200,7 @@ int main(int argc, char *argv[]) {
   }
 
   if (std::getenv("WAYLAND_DISPLAY") == nullptr) {
-    kLog.error("WAYLAND_DISPLAY is not set; run under a Wayland compositor "
-               "(e.g. cage)");
+    kLog.error("WAYLAND_DISPLAY is not set; run via noctalia-greeter-session");
     if (greetdLaunched) {
       preventGreetdRespawnLoop();
     }

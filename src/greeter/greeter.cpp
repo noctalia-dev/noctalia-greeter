@@ -4,53 +4,42 @@
 #include "greeter/greeter_preferences.h"
 #include "greeter/greeter_surface.h"
 #include "greeter/greeter_window.h"
-#include "greeter/output_layout.h"
 #include "render/render_context.h"
 #include "render/text/glyph_registry.h"
-#include "ui/style.h"
 #include "wayland/wayland_client.h"
 #include "wayland/wayland_seat.h"
 
-#include <cmath>
+#include <cerrno>
 #include <cstdlib>
+#include <cstring>
 #include <poll.h>
 #include <wayland-client.h>
 
 namespace {
 constexpr Logger kLog("greeter");
 
-void syncOutputViewport(WaylandClient &client, GreeterSurface &surface) {
-  if (!client.needsOutputViewport()) {
-    surface.clearOutputViewport();
+void logWaylandDispatchError(wl_display *display, const char *stage) {
+  const wl_interface *interface = nullptr;
+  std::uint32_t code = 0;
+  const std::uint32_t protocolError =
+      wl_display_get_protocol_error(display, &interface, &code);
+  if (protocolError != 0) {
+    const char *interfaceName =
+        interface != nullptr && interface->name != nullptr ? interface->name
+                                                           : "unknown";
+    kLog.error("Wayland {} failed: protocol error {} interface={} code={}",
+               stage, protocolError, interfaceName, code);
     return;
   }
-
-  if (const auto layout = client.greeterOutputLayout()) {
-    kLog.info("output viewport at ({},{}) {}x{}", layout->x, layout->y,
-              layout->width, layout->height);
-    surface.setOutputViewport(
-        static_cast<float>(layout->x), static_cast<float>(layout->y),
-        static_cast<float>(layout->width), static_cast<float>(layout->height));
-    return;
-  }
-
-  surface.clearOutputViewport();
-}
-
-void isolateToPrimaryOutput(WaylandClient &client) {
-  if (!client.hasReadyOutputs()) {
-    return;
-  }
-  if (const auto name = client.primaryConnectorName()) {
-    (void)greeter::disableNonPreferredOutputs(*name);
-  }
+  const int displayError = wl_display_get_error(display);
+  kLog.error("Wayland {} failed (display error={} errno={} '{}')", stage,
+             displayError, errno, std::strerror(errno));
 }
 
 void applyConfiguredOutput(WaylandClient &client,
                            const std::optional<std::string> &configured) {
   if (!configured.has_value() || configured->empty()) {
     client.forgetPreferredOutput();
-    isolateToPrimaryOutput(client);
     return;
   }
 
@@ -60,15 +49,13 @@ void applyConfiguredOutput(WaylandClient &client,
   }
 
   if (!client.hasResolvedPreferredOutput()) {
-    kLog.warn("output '{}' is not connected; using primary display only",
+    kLog.warn("output '{}' is not connected; showing on all outputs",
               *configured);
     client.forgetPreferredOutput();
-    isolateToPrimaryOutput(client);
     return;
   }
 
   kLog.info("preferred output connector: {}", *configured);
-  (void)greeter::disableNonPreferredOutputs(*configured);
 }
 } // namespace
 
@@ -78,6 +65,7 @@ Greeter::~Greeter() = default;
 
 bool Greeter::initialize(WaylandClient &client) {
   m_client = &client;
+  m_initializing = true;
 
   const greeter::GreeterPreferences prefs = greeter::loadGreeterPreferences();
 
@@ -90,42 +78,56 @@ bool Greeter::initialize(WaylandClient &client) {
 
   connectGreetd();
 
-  m_surface = std::make_unique<GreeterSurface>();
-  m_surface->setGreetdClient(&m_greetdClient);
-  m_surface->setOnExitRequested([this]() { m_exitRequested = true; });
-
-  m_window = std::make_unique<GreeterWindow>(client, m_glSharedContext,
-                                             *m_renderContext, *m_surface);
   client.setOutputsChangedCallback([this, configured = prefs.output]() {
+    if (m_initializing) {
+      m_pendingOutputSync = true;
+      return;
+    }
     applyConfiguredOutput(*m_client, configured);
-    syncUiScale();
-    if (m_window != nullptr) {
-      m_window->matchPrimaryOutputSize();
-    }
-    if (m_surface != nullptr) {
-      syncOutputViewport(*m_client, *m_surface);
-    }
+    syncOutputWindows();
   });
-  if (!m_window->initialize()) {
-    kLog.error("failed to create greeter window");
-    return false;
+
+  applyConfiguredOutput(client, prefs.output);
+
+  for (int attempt = 0; attempt < 5; ++attempt) {
+    if (client.flush() < 0) {
+      break;
+    }
+    if (wl_display_roundtrip(client.display()) < 0) {
+      logWaylandDispatchError(client.display(),
+                              "roundtrip before syncOutputWindows");
+      break;
+    }
+    if (client.readyOutputsSorted().size() > 1 || attempt == 4) {
+      break;
+    }
   }
 
-  m_window->matchPrimaryOutputSize();
-  applyConfiguredOutput(client, prefs.output);
-  syncUiScale();
+  syncOutputWindows();
 
-  m_surface->initialize(*m_window, m_renderContext.get());
-  syncOutputViewport(client, *m_surface);
+  if (m_views.empty()) {
+    kLog.warn("no outputs ready yet; waiting for output events");
+  }
+
   setupInputCallbacks(client);
-  m_window->setSceneReady(true);
+
+  m_sceneReady = true;
+  for (auto &view : m_views) {
+    view.window->setSceneReady(true);
+  }
+
+  m_initializing = false;
+  if (m_pendingOutputSync) {
+    m_pendingOutputSync = false;
+    syncOutputWindows();
+  }
 
   if (client.flush() < 0) {
     kLog.error("Wayland flush failed after greeter init");
     return false;
   }
 
-  kLog.info("greeter initialized");
+  kLog.info("greeter initialized ({} view(s))", m_views.size());
   return true;
 }
 
@@ -145,7 +147,7 @@ int Greeter::run(WaylandClient &client) {
 
     while (wl_display_prepare_read(display) != 0) {
       if (wl_display_dispatch_pending(display) < 0) {
-        kLog.error("Wayland dispatch_pending failed");
+        logWaylandDispatchError(display, "dispatch_pending");
         return 1;
       }
     }
@@ -160,7 +162,7 @@ int Greeter::run(WaylandClient &client) {
     }
 
     if (wl_display_dispatch_pending(display) < 0) {
-      kLog.error("Wayland dispatch_pending failed");
+      logWaylandDispatchError(display, "dispatch_pending");
       return 1;
     }
   }
@@ -168,21 +170,116 @@ int Greeter::run(WaylandClient &client) {
   return 0;
 }
 
-void Greeter::syncUiScale() {
-  if (m_client == nullptr) {
+void Greeter::syncOutputWindows() {
+  if (m_client == nullptr || m_syncingOutputWindows) {
     return;
   }
+  m_syncingOutputWindows = true;
 
-  const float next = m_client->uiScale();
-  if (std::fabs(next - Style::uiScale()) < 0.01f) {
+  const auto targets = m_client->greeterTargetOutputs();
+  kLog.info("syncOutputWindows: {} target output(s), {} view(s)",
+            targets.size(), m_views.size());
+
+  while (m_views.size() > targets.size()) {
+    if (m_activeSurface == m_views.back().surface.get()) {
+      m_activeSurface =
+          m_views.empty() ? nullptr : m_views.front().surface.get();
+    }
+    m_views.pop_back();
+  }
+
+  const std::size_t viewsBefore = m_views.size();
+  while (m_views.size() < targets.size()) {
+    View view;
+    view.surface = std::make_unique<GreeterSurface>();
+    view.surface->setGreetdClient(&m_greetdClient);
+    view.surface->setOnExitRequested([this]() { m_exitRequested = true; });
+    view.surface->setOnStateChanged(
+        [this](GreeterSurface *source) { syncStateFrom(source); });
+    view.surface->initialize(m_renderContext.get());
+
+    view.window = std::make_unique<GreeterWindow>(
+        *m_client, m_glSharedContext, *m_renderContext, *view.surface);
+    view.surface->setWindow(view.window.get());
+
+    if (!view.window->createSurface()) {
+      kLog.error("failed to create greeter window");
+      m_syncingOutputWindows = false;
+      return;
+    }
+
+    const std::size_t index = m_views.size();
+    view.window->bindOutput(targets[index]->output);
+    kLog.info("greeter view for output '{}'",
+              targets[index]->name.empty() ? "?"
+                                           : targets[index]->name.c_str());
+
+    if (!m_views.empty()) {
+      view.surface->mirrorStateFrom(*m_views.front().surface);
+    }
+
+    m_views.push_back(std::move(view));
+  }
+
+  if (m_views.size() > viewsBefore) {
+    if (m_client->flush() < 0) {
+      kLog.error("Wayland flush failed while creating greeter windows");
+      m_syncingOutputWindows = false;
+      return;
+    }
+    if (wl_display_roundtrip(m_client->display()) < 0) {
+      logWaylandDispatchError(m_client->display(),
+                              "roundtrip after createSurface");
+      m_syncingOutputWindows = false;
+      return;
+    }
+  }
+
+  for (std::size_t i = 0; i < targets.size(); ++i) {
+    m_views[i].window->bindOutput(targets[i]->output);
+    m_views[i].window->matchOutputLogicalSize();
+    if (m_sceneReady) {
+      m_views[i].window->setSceneReady(true);
+    }
+  }
+
+  if (m_activeSurface == nullptr && !m_views.empty()) {
+    m_activeSurface = m_views.front().surface.get();
+  }
+
+  m_syncingOutputWindows = false;
+}
+
+void Greeter::syncStateFrom(const GreeterSurface *source) {
+  if (source == nullptr) {
     return;
   }
-
-  Style::setUiScale(next);
-  kLog.info("UI scale set to {:.2f}", Style::uiScale());
-  if (m_surface != nullptr) {
-    m_surface->requestLayout();
+  for (auto &view : m_views) {
+    if (view.surface.get() != source) {
+      view.surface->mirrorStateFrom(*source);
+    }
   }
+}
+
+Greeter::View *Greeter::viewForWindow(GreeterWindow &window) noexcept {
+  for (auto &view : m_views) {
+    if (view.window.get() == &window) {
+      return &view;
+    }
+  }
+  return nullptr;
+}
+
+Greeter::View *Greeter::viewForSurface(wl_surface *surface) noexcept {
+  if (surface == nullptr) {
+    return nullptr;
+  }
+  for (auto &view : m_views) {
+    if (view.window->wlSurface() == surface) {
+      return &view;
+    }
+  }
+  return nullptr;
 }
 
 void Greeter::connectGreetd() {
@@ -196,13 +293,28 @@ void Greeter::connectGreetd() {
 
 void Greeter::setupInputCallbacks(WaylandClient &client) {
   client.setPointerEventCallback([this](const PointerEvent &event) {
+    View *view = viewForSurface(event.surface);
+    if (view == nullptr) {
+      return;
+    }
+
     switch (event.type) {
+    case PointerEvent::Type::Enter:
+      m_activeSurface = view->surface.get();
+      onPointerMotion(*view->window, event.sx, event.sy);
+      break;
+    case PointerEvent::Type::Leave:
+      onPointerLeave(*view->window);
+      break;
     case PointerEvent::Type::Motion:
-      onPointerMotion(event.sx, event.sy);
+      m_activeSurface = view->surface.get();
+      onPointerMotion(*view->window, event.sx, event.sy);
       break;
     case PointerEvent::Type::Button:
-      onPointerMotion(event.sx, event.sy);
-      onPointerButton(event.sx, event.sy, event.button, event.state != 0);
+      m_activeSurface = view->surface.get();
+      onPointerMotion(*view->window, event.sx, event.sy);
+      onPointerButton(*view->window, event.sx, event.sy, event.button,
+                      event.state != 0);
       break;
     default:
       break;
@@ -218,28 +330,39 @@ void Greeter::setupInputCallbacks(WaylandClient &client) {
 void Greeter::onKeyboardEvent(std::uint32_t sym, std::uint32_t utf32,
                               std::uint32_t modifiers, bool pressed,
                               bool preedit) {
-  if (m_surface) {
-    m_surface->onKeyEvent(sym, utf32, modifiers, pressed, preedit);
+  GreeterSurface *surface = m_activeSurface;
+  if (surface == nullptr && !m_views.empty()) {
+    surface = m_views.front().surface.get();
+  }
+  if (surface != nullptr) {
+    surface->onKeyEvent(sym, utf32, modifiers, pressed, preedit);
   }
 }
 
-void Greeter::onPointerMotion(double x, double y) {
-  if (m_surface) {
-    m_surface->onPointerMotion(static_cast<float>(x), static_cast<float>(y));
+void Greeter::onPointerLeave(GreeterWindow &window) {
+  if (View *view = viewForWindow(window)) {
+    view->surface->onPointerLeave();
   }
 }
 
-void Greeter::onPointerButton(double x, double y, std::uint32_t button,
-                              bool pressed) {
-  if (m_surface) {
-    m_surface->onPointerEvent(static_cast<float>(x), static_cast<float>(y),
-                              button, pressed);
+void Greeter::onPointerMotion(GreeterWindow &window, double x, double y) {
+  if (View *view = viewForWindow(window)) {
+    view->surface->onPointerMotion(static_cast<float>(x),
+                                   static_cast<float>(y));
+  }
+}
+
+void Greeter::onPointerButton(GreeterWindow &window, double x, double y,
+                              std::uint32_t button, bool pressed) {
+  if (View *view = viewForWindow(window)) {
+    view->surface->onPointerEvent(static_cast<float>(x), static_cast<float>(y),
+                                  button, pressed);
   }
 }
 
 void Greeter::onThemeChanged() {
-  if (m_surface) {
-    m_surface->onThemeChanged();
+  for (auto &view : m_views) {
+    view.surface->onThemeChanged();
   }
 }
 

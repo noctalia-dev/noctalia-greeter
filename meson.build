@@ -38,6 +38,8 @@ librsvg_dep        = dependency('librsvg-2.0')
 glib_dep           = dependency('glib-2.0')
 gobject_dep        = dependency('gobject-2.0')
 gio_dep            = dependency('gio-2.0')
+wayland_server_dep = dependency('wayland-server')
+wlroots_dep = dependency('wlroots-0.20')
 
 egl_dep = dependency('egl', required: false)
 gles2_dep = dependency('glesv2', required: false)
@@ -70,6 +72,8 @@ _protocol_sources = []
 foreach _p : [
   ['xdg-shell', wayland_protos_dir / 'stable/xdg-shell/xdg-shell.xml'],
   ['cursor-shape-v1', 'protocols/cursor-shape-v1.xml'],
+  ['fractional-scale-v1', wayland_protos_dir / 'staging/fractional-scale/fractional-scale-v1.xml'],
+  ['viewporter', wayland_protos_dir / 'stable/viewporter/viewporter.xml'],
 ]
   _name = _p[0]
   _xml  = _p[1]
@@ -94,7 +98,6 @@ _greeter_sources = files(
   'src/core/resource_paths.cpp',
   'src/core/ui_phase.cpp',
   'src/wayland/wayland_client.cpp',
-  'src/wayland/display_scale.cpp',
   'src/wayland/wayland_seat.cpp',
   'src/render/gl_shared_context.cpp',
   'src/render/render_context.cpp',
@@ -150,7 +153,6 @@ _greeter_sources = files(
   'src/greeter/appearance_sync.cpp',
   'src/greeter/appearance_config.cpp',
   'src/greeter/greeter_preferences.cpp',
-  'src/greeter/output_layout.cpp',
   'src/greeter/greeter_sessions.cpp',
   'src/greeter/greeter_surface.cpp',
   'src/greeter/greeter_window.cpp',
@@ -217,7 +219,6 @@ install_data(
 install_data(
   [
     'scripts/greetd_setup_lib.sh',
-    'scripts/noctalia-greeter-cage-entry',
     'scripts/print_greetd_config.sh',
     'scripts/setup_greetd_pam.sh',
     'scripts/setup_greeter_system.sh',
@@ -249,4 +250,21 @@ executable('noctalia-greeter-apply-appearance',
 install_data(
   'data/org.noctalia.greeter.apply-appearance.policy',
   install_dir: get_option('datadir') / 'polkit-1' / 'actions',
+)
+
+executable('noctalia-greeter-compositor',
+  sources: files(
+    'src/compositor/noctalia_compositor.c',
+  ),
+  dependencies: [
+    wlroots_dep,
+    wayland_server_dep,
+    xkbcommon_dep,
+  ],
+  c_args: [
+    '-Wall', '-Wextra', '-Wpedantic', '-Wconversion',
+    '-DWLR_USE_UNSTABLE',
+    '-DNOCTALIA_GREETER_INSTALLED_BINDIR="' + get_option('prefix') / get_option('bindir') + '"',
+  ],
+  install: true,
 )

@@ -12,6 +12,8 @@ struct GreeterPreferences {
   std::optional<std::string> session;
   std::optional<std::string> scheme;
   std::optional<std::string> output;
+  // Manual UI scale; unset or invalid → auto from display geometry.
+  std::optional<float> scale;
 };
 
 [[nodiscard]] std::filesystem::path greeterConfPath();

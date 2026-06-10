@@ -6,6 +6,8 @@
 #include <array>
 #include <cctype>
 #include <cerrno>
+#include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -138,10 +140,11 @@ using KeyValueMap = std::map<std::string, std::string>;
   out << "# noctalia-greeter greeter.conf\n";
   out << "# default_session: admin default (Wayland session Name=)\n";
   out << "# session: last used (UI); scheme: color scheme name\n";
-  out << "# output: Wayland connector; admin-only\n";
+  out << "# output: Wayland connector; scale: UI scale; admin-only\n";
 
   static constexpr const char *kPreferredOrder[] = {
-      "greeter_user", "default_session", "session", "scheme", "output"};
+      "greeter_user", "default_session", "session",
+      "scheme",       "output",          "scale"};
   for (const char *key : kPreferredOrder) {
     const auto it = map.find(key);
     if (it != map.end()) {
@@ -175,6 +178,24 @@ mapValue(const KeyValueMap &map, std::initializer_list<const char *> keys) {
     }
   }
   return std::nullopt;
+}
+
+[[nodiscard]] std::optional<float> parseScaleValue(std::string_view raw) {
+  const std::string value = trim(raw);
+  if (value.empty()) {
+    return std::nullopt;
+  }
+
+  char *end = nullptr;
+  errno = 0;
+  const float scale = std::strtof(value.c_str(), &end);
+  if (errno != 0 || end == value.c_str() || *end != '\0') {
+    return std::nullopt;
+  }
+  if (!std::isfinite(scale) || scale <= 0.0f) {
+    return std::nullopt;
+  }
+  return scale;
 }
 
 [[nodiscard]] bool setPathMode(const std::filesystem::path &path,
@@ -240,8 +261,9 @@ GreeterPreferences loadGreeterPreferences() {
   const auto path = greeterConfPath();
   const KeyValueMap map = loadKeyValues(path);
 
-  static constexpr std::array<std::string_view, 5> kKnownKeys = {
-      "greeter_user", "default_session", "session", "scheme", "output"};
+  static constexpr std::array<std::string_view, 6> kKnownKeys = {
+      "greeter_user", "default_session", "session",
+      "scheme",       "output",          "scale"};
   for (const auto &[key, value] : map) {
     if (std::find(kKnownKeys.begin(), kKnownKeys.end(),
                   std::string_view(key)) == kKnownKeys.end()) {
@@ -253,6 +275,14 @@ GreeterPreferences loadGreeterPreferences() {
   prefs.session = mapValue(map, {"session"});
   prefs.scheme = mapValue(map, {"scheme"});
   prefs.output = mapValue(map, {"output"});
+  if (const auto rawScale = mapValue(map, {"scale"})) {
+    if (const auto scale = parseScaleValue(*rawScale)) {
+      prefs.scale = *scale;
+    } else {
+      kLog.warn("{}: invalid scale '{}' (using auto scale)", path.string(),
+                *rawScale);
+    }
+  }
   return prefs;
 }
 

@@ -1,7 +1,8 @@
 #include "wayland/wayland_client.h"
 
 #include "core/log.h"
-#include "wayland/display_scale.h"
+#include "fractional-scale-v1-client-protocol.h"
+#include "viewporter-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
 
 #include <algorithm>
@@ -34,23 +35,31 @@ const wl_registry_listener kRegistryListener = {
     .global_remove = &WaylandClient::handleGlobalRemove,
 };
 
+[[nodiscard]] float outputScaleFactor(const WaylandOutputInfo &out) noexcept {
+  if (out.preferredScale > 0.0f) {
+    return out.preferredScale;
+  }
+  return static_cast<float>(std::max(1, out.scale));
+}
+
 std::optional<std::pair<std::uint32_t, std::uint32_t>>
 logicalSizeForOutputInfo(const WaylandOutputInfo &out) {
   if (!out.done || out.pixelWidth <= 0 || out.pixelHeight <= 0) {
     return std::nullopt;
   }
 
-  const int32_t scale = std::max(1, out.scale);
-  const int32_t derivedLogicalW = (out.pixelWidth + scale - 1) / scale;
-  if (scale <= 1 || (derivedLogicalW < 640 && out.pixelWidth >= 640)) {
+  const float scale = outputScaleFactor(out);
+  if (scale <= 1.01f) {
     return std::pair{static_cast<std::uint32_t>(out.pixelWidth),
                      static_cast<std::uint32_t>(out.pixelHeight)};
   }
 
   const auto logicalWidth = static_cast<std::uint32_t>(
-      std::max(1, (out.pixelWidth + scale - 1) / scale));
+      std::max(1, static_cast<int32_t>(std::lround(
+                      static_cast<float>(out.pixelWidth) / scale))));
   const auto logicalHeight = static_cast<std::uint32_t>(
-      std::max(1, (out.pixelHeight + scale - 1) / scale));
+      std::max(1, static_cast<int32_t>(std::lround(
+                      static_cast<float>(out.pixelHeight) / scale))));
   return std::pair{logicalWidth, logicalHeight};
 }
 
@@ -319,17 +328,13 @@ int32_t WaylandClient::effectiveBufferScale() const noexcept {
       continue;
     }
 
-    const int32_t scale = std::max(1, out.scale);
-    if (scale <= 1) {
+    const float scale = outputScaleFactor(out);
+    if (scale <= 1.01f) {
       continue;
     }
 
-    const int32_t derivedLogicalW = (out.pixelWidth + scale - 1) / scale;
-    if (derivedLogicalW < 640 && out.pixelWidth >= 640) {
-      continue;
-    }
-
-    maxScale = std::max(maxScale, scale);
+    maxScale =
+        std::max(maxScale, static_cast<int32_t>(std::lround(std::ceil(scale))));
   }
 
   return maxScale;
@@ -355,15 +360,34 @@ WaylandClient::outputBufferScale(const wl_output *output) const noexcept {
       continue;
     }
 
-    const int32_t scale = std::max(1, out.scale);
-    const int32_t derivedLogicalW = (out.pixelWidth + scale - 1) / scale;
-    if (scale <= 1 || (derivedLogicalW < 640 && out.pixelWidth >= 640)) {
+    const float scale = outputScaleFactor(out);
+    if (scale <= 1.01f) {
       return 1;
     }
-    return scale;
+    return static_cast<int32_t>(std::lround(std::ceil(scale)));
   }
 
   return effectiveBufferScale();
+}
+
+void WaylandClient::setOutputPreferredScale(wl_output *output,
+                                            float scale) noexcept {
+  if (output == nullptr || scale <= 0.0f) {
+    return;
+  }
+  for (auto &out : m_outputs) {
+    if (out.output != output) {
+      continue;
+    }
+    if (std::fabs(out.preferredScale - scale) < 0.01f) {
+      return;
+    }
+    out.preferredScale = scale;
+    if (out.done) {
+      notifyOutputsChanged();
+    }
+    break;
+  }
 }
 
 std::optional<std::pair<std::uint32_t, std::uint32_t>>
@@ -399,6 +423,33 @@ bool WaylandClient::hasPreferredOutputName() const noexcept {
 
 bool WaylandClient::hasReadyOutputs() const noexcept {
   return readyOutputCount(m_outputs) > 0;
+}
+
+std::vector<const WaylandOutputInfo *>
+WaylandClient::readyOutputsSorted() const noexcept {
+  std::vector<const WaylandOutputInfo *> ready;
+  ready.reserve(m_outputs.size());
+  for (const auto &out : m_outputs) {
+    if (out.done && out.pixelWidth > 0 && out.pixelHeight > 0) {
+      ready.push_back(&out);
+    }
+  }
+  std::sort(ready.begin(), ready.end(),
+            [](const WaylandOutputInfo *lhs, const WaylandOutputInfo *rhs) {
+              return lhs->name < rhs->name;
+            });
+  return ready;
+}
+
+std::vector<const WaylandOutputInfo *>
+WaylandClient::greeterTargetOutputs() const noexcept {
+  if (hasResolvedPreferredOutput()) {
+    if (const WaylandOutputInfo *out = preferredOutput()) {
+      return {out};
+    }
+    return {};
+  }
+  return readyOutputsSorted();
 }
 
 bool WaylandClient::hasResolvedPreferredOutput() const noexcept {
@@ -481,7 +532,7 @@ WaylandClient::greeterOutputLayout() const noexcept {
 }
 
 bool WaylandClient::needsOutputViewport() const noexcept {
-  if (readyOutputCount(m_outputs) <= 1) {
+  if (readyOutputCount(m_outputs) <= 1 || !hasPreferredOutputName()) {
     return false;
   }
   const auto layout = greeterOutputLayout();
@@ -595,17 +646,6 @@ WaylandClient::logicalSizeForOutput(const wl_output *output) const noexcept {
     }
   }
   return std::nullopt;
-}
-
-float WaylandClient::uiScale() const noexcept {
-  const WaylandOutputInfo *out = preferredOutput();
-  if (out == nullptr) {
-    out = primaryOutput();
-  }
-  if (out == nullptr) {
-    return 1.0f;
-  }
-  return uiScaleForOutput(*out);
 }
 
 void WaylandClient::notifyOutputsChanged() {
@@ -767,5 +807,18 @@ void WaylandClient::bindGlobal(wl_registry *registry, std::uint32_t name,
 
   if (interfaceName == wl_output_interface.name) {
     bindOutput(registry, name, version);
+    return;
+  }
+
+  if (interfaceName == wp_fractional_scale_manager_v1_interface.name) {
+    m_fractionalScaleManager =
+        static_cast<wp_fractional_scale_manager_v1 *>(wl_registry_bind(
+            registry, name, &wp_fractional_scale_manager_v1_interface, 1));
+    return;
+  }
+
+  if (interfaceName == wp_viewporter_interface.name) {
+    m_viewporter = static_cast<wp_viewporter *>(
+        wl_registry_bind(registry, name, &wp_viewporter_interface, 1));
   }
 }

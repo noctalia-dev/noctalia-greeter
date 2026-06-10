@@ -15,6 +15,8 @@ struct wl_display;
 struct wl_output;
 struct wl_registry;
 struct wl_seat;
+struct wp_fractional_scale_manager_v1;
+struct wp_viewporter;
 struct xdg_wm_base;
 
 struct WaylandOutputLayout {
@@ -35,6 +37,7 @@ struct WaylandOutputInfo {
   int32_t pixelWidth = 0;
   int32_t pixelHeight = 0;
   int32_t scale = 1;
+  float preferredScale = 0.0f;
   bool done = false;
 };
 
@@ -67,6 +70,13 @@ public:
   }
   [[nodiscard]] wl_seat *seat() const noexcept { return m_seat; }
   [[nodiscard]] xdg_wm_base *xdgWmBase() const noexcept { return m_xdgWmBase; }
+  [[nodiscard]] wp_fractional_scale_manager_v1 *
+  fractionalScaleManager() const noexcept {
+    return m_fractionalScaleManager;
+  }
+  [[nodiscard]] wp_viewporter *viewporter() const noexcept {
+    return m_viewporter;
+  }
   [[nodiscard]] bool hasXdgShell() const noexcept {
     return m_xdgWmBase != nullptr;
   }
@@ -88,6 +98,10 @@ public:
   preferredLogicalSize() const noexcept;
   [[nodiscard]] bool hasPreferredOutputName() const noexcept;
   [[nodiscard]] bool hasReadyOutputs() const noexcept;
+  [[nodiscard]] std::vector<const WaylandOutputInfo *>
+  readyOutputsSorted() const noexcept;
+  [[nodiscard]] std::vector<const WaylandOutputInfo *>
+  greeterTargetOutputs() const noexcept;
   [[nodiscard]] bool hasResolvedPreferredOutput() const noexcept;
   void forgetPreferredOutput() noexcept;
   [[nodiscard]] std::optional<WaylandOutputLayout>
@@ -101,7 +115,7 @@ public:
   combinedLogicalSize() const noexcept;
   [[nodiscard]] std::optional<std::pair<std::uint32_t, std::uint32_t>>
   logicalSizeForOutput(const wl_output *output) const noexcept;
-  [[nodiscard]] float uiScale() const noexcept;
+  void setOutputPreferredScale(wl_output *output, float scale) noexcept;
 
   static void handleGlobal(void *data, wl_registry *registry,
                            std::uint32_t name, const char *interface,
@@ -143,6 +157,8 @@ private:
   wl_compositor *m_compositor = nullptr;
   wl_seat *m_seat = nullptr;
   xdg_wm_base *m_xdgWmBase = nullptr;
+  wp_fractional_scale_manager_v1 *m_fractionalScaleManager = nullptr;
+  wp_viewporter *m_viewporter = nullptr;
   WaylandSeat m_seatHandler;
   std::vector<WaylandOutputInfo> m_outputs;
   std::function<void()> m_outputsChangedCallback;

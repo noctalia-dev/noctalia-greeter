@@ -1,14 +1,17 @@
 #include "greeter/greeter_window.h"
 
 #include "core/log.h"
+#include "fractional-scale-v1-client-protocol.h"
 #include "greeter/greeter_surface.h"
 #include "render/gl_shared_context.h"
 #include "render/render_context.h"
 #include "render/scene/node.h"
+#include "viewporter-client-protocol.h"
 #include "wayland/wayland_client.h"
 #include "xdg-shell-client-protocol.h"
 
 #include <algorithm>
+#include <cmath>
 #include <wayland-client.h>
 
 namespace {
@@ -28,6 +31,10 @@ const xdg_toplevel_listener kToplevelListener = {
 const wl_callback_listener kFrameListener = {
     .done = &GreeterWindow::handleFrameDone,
 };
+
+const wp_fractional_scale_v1_listener kFractionalScaleListener = {
+    .preferred_scale = &GreeterWindow::handleFractionalPreferredScale,
+};
 } // namespace
 
 GreeterWindow::GreeterWindow(WaylandClient &client, GlSharedContext &gl,
@@ -41,7 +48,7 @@ GreeterWindow::~GreeterWindow() {
   destroySurface();
 }
 
-bool GreeterWindow::initialize() {
+bool GreeterWindow::createSurface() {
   if (!m_client.hasXdgShell() || m_client.compositor() == nullptr) {
     kLog.error("missing xdg-shell or compositor");
     return false;
@@ -51,6 +58,16 @@ bool GreeterWindow::initialize() {
   if (m_wlSurface == nullptr) {
     kLog.error("wl_compositor_create_surface failed");
     return false;
+  }
+
+  if (m_client.fractionalScaleManager() != nullptr) {
+    m_fractionalScale = wp_fractional_scale_manager_v1_get_fractional_scale(
+        m_client.fractionalScaleManager(), m_wlSurface);
+    wp_fractional_scale_v1_add_listener(m_fractionalScale,
+                                        &kFractionalScaleListener, this);
+  }
+  if (m_client.viewporter() != nullptr) {
+    m_viewport = wp_viewporter_get_viewport(m_client.viewporter(), m_wlSurface);
   }
 
   m_xdgSurface = xdg_wm_base_get_xdg_surface(m_client.xdgWmBase(), m_wlSurface);
@@ -70,7 +87,6 @@ bool GreeterWindow::initialize() {
   xdg_toplevel_add_listener(m_toplevel, &kToplevelListener, this);
   xdg_toplevel_set_title(m_toplevel, "Noctalia Greeter");
   xdg_toplevel_set_app_id(m_toplevel, "dev.noctalia.Greeter");
-  xdg_toplevel_set_fullscreen(m_toplevel, nullptr);
 
   // Initial commit (shell ToplevelSurface::initialize).
   wl_surface_commit(m_wlSurface);
@@ -81,20 +97,26 @@ bool GreeterWindow::initialize() {
     return false;
   }
 
-  if (wl_display_roundtrip(m_client.display()) < 0) {
-    kLog.error("initial configure roundtrip failed");
-    destroyRoleObjects();
-    destroySurface();
-    return false;
-  }
-
-  kLog.info("greeter window created");
+  kLog.info("greeter surface created");
   return true;
 }
 
 void GreeterWindow::setSceneReady(bool ready) {
   m_sceneReady = ready;
-  if (ready && m_configured) {
+  if (!ready) {
+    return;
+  }
+
+  if (m_pendingConfigureSerial != 0) {
+    const std::uint32_t serial = m_pendingConfigureSerial;
+    const std::uint32_t width = m_pendingConfigureWidth;
+    const std::uint32_t height = m_pendingConfigureHeight;
+    m_pendingConfigureSerial = 0;
+    acknowledgeConfigure(width, height, serial);
+    return;
+  }
+
+  if (m_configured) {
     m_layoutNeeded = true;
     m_redrawNeeded = true;
     renderNow();
@@ -112,21 +134,43 @@ void GreeterWindow::requestRedraw() {
   renderNow();
 }
 
-void GreeterWindow::matchPrimaryOutputSize() {
+void GreeterWindow::bindOutput(wl_output *output) {
+  m_boundOutput = output;
+  applySurfaceScale();
+}
+
+void GreeterWindow::handleFractionalPreferredScale(
+    void *data, struct wp_fractional_scale_v1 * /*fs*/, std::uint32_t scale) {
+  auto *self = static_cast<GreeterWindow *>(data);
+  self->m_surfaceScale = static_cast<float>(scale) / 120.0f;
+  self->m_client.setOutputPreferredScale(self->m_boundOutput,
+                                         self->m_surfaceScale);
+  self->applySurfaceScale();
+
+  if (!self->m_configured || self->m_width == 0 || self->m_height == 0) {
+    return;
+  }
+
+  self->m_renderTarget.destroy();
+  self->m_layoutNeeded = true;
+  self->m_redrawNeeded = true;
+  if (self->m_sceneReady) {
+    self->renderNow();
+  }
+}
+
+void GreeterWindow::matchOutputLogicalSize() {
   if (m_lastToplevelWidth > 0 && m_lastToplevelHeight > 0) {
     return;
   }
 
-  const auto logical = m_client.targetLogicalSize();
+  const auto logical = m_client.logicalSizeForOutput(m_boundOutput);
   if (!logical) {
     return;
   }
 
-  const int32_t nextScale = m_client.effectiveBufferScale();
-  const bool sizeChanged =
-      m_width != logical->first || m_height != logical->second || !m_configured;
-  const bool scaleChanged = m_bufferScale != nextScale;
-  if (sizeChanged || scaleChanged) {
+  if (m_width != logical->first || m_height != logical->second ||
+      !m_configured) {
     applyConfigure(logical->first, logical->second);
   }
 }
@@ -145,22 +189,41 @@ void GreeterWindow::applySurfaceScale() {
   if (m_wlSurface == nullptr) {
     return;
   }
-  m_bufferScale = m_client.effectiveBufferScale();
+
+  const bool useFractional = m_fractionalScale != nullptr &&
+                             m_surfaceScale > 0.0f && m_viewport != nullptr;
+  if (useFractional) {
+    wl_surface_set_buffer_scale(m_wlSurface, 1);
+    if (m_width > 0 && m_height > 0) {
+      wp_viewport_set_destination(m_viewport, m_width, m_height);
+    }
+    m_bufferScale = 1;
+    return;
+  }
+
+  m_bufferScale = m_client.outputBufferScale(m_boundOutput);
   wl_surface_set_buffer_scale(m_wlSurface, m_bufferScale);
+}
+
+float GreeterWindow::effectiveSurfaceScale() const noexcept {
+  if (m_fractionalScale != nullptr && m_surfaceScale > 0.0f) {
+    return m_surfaceScale;
+  }
+  return static_cast<float>(std::max(1, m_bufferScale));
 }
 
 std::uint32_t
 GreeterWindow::bufferWidthForLogical(std::uint32_t logical) const noexcept {
   return std::max<std::uint32_t>(
-      1, static_cast<std::uint32_t>(std::lround(
-             static_cast<float>(logical) * static_cast<float>(m_bufferScale))));
+      1, static_cast<std::uint32_t>(std::lround(static_cast<float>(logical) *
+                                                effectiveSurfaceScale())));
 }
 
 std::uint32_t
 GreeterWindow::bufferHeightForLogical(std::uint32_t logical) const noexcept {
   return std::max<std::uint32_t>(
-      1, static_cast<std::uint32_t>(std::lround(
-             static_cast<float>(logical) * static_cast<float>(m_bufferScale))));
+      1, static_cast<std::uint32_t>(std::lround(static_cast<float>(logical) *
+                                                effectiveSurfaceScale())));
 }
 
 bool GreeterWindow::ensureRenderTarget() {
@@ -209,24 +272,19 @@ void GreeterWindow::paintFrame() {
     return;
   }
 
-  if (needsLayout) {
-    m_greeterSurface.prepareFrame(false, true);
-    m_layoutNeeded = false;
-  } else {
-    m_greeterSurface.prepareFrame(false, false);
-  }
+  m_greeterSurface.prepareFrame(m_width, m_height, needsLayout);
+  m_layoutNeeded = false;
+  m_redrawNeeded = false;
 
   m_renderContext.renderScene(m_renderTarget, m_greeterSurface.sceneRoot());
-
-  m_redrawNeeded = false;
   m_greeterSurface.sceneRoot()->clearDirty();
 
-  static bool loggedFirstFrame = false;
-  if (!loggedFirstFrame) {
-    kLog.info("presented first frame {}x{} logical ({}x{} buffer, scale={})",
-              m_width, m_height, m_renderTarget.bufferWidth(),
-              m_renderTarget.bufferHeight(), m_bufferScale);
-    loggedFirstFrame = true;
+  if (!m_loggedFirstFrame) {
+    kLog.info(
+        "presented first frame {}x{} logical ({}x{} buffer, scale={:.2f})",
+        m_width, m_height, m_renderTarget.bufferWidth(),
+        m_renderTarget.bufferHeight(), effectiveSurfaceScale());
+    m_loggedFirstFrame = true;
   }
 }
 
@@ -270,12 +328,11 @@ void GreeterWindow::applyConfigure(std::uint32_t width, std::uint32_t height) {
   width = std::max<std::uint32_t>(1, width);
   height = std::max<std::uint32_t>(1, height);
 
-  const int32_t nextScale = m_client.effectiveBufferScale();
+  const int32_t nextBufferScale = m_client.outputBufferScale(m_boundOutput);
   const bool sizeChanged =
       m_width != width || m_height != height || !m_configured;
-  const bool scaleChanged = m_bufferScale != nextScale;
-
-  applySurfaceScale();
+  const bool scaleChanged =
+      m_fractionalScale == nullptr && m_bufferScale != nextBufferScale;
 
   if (sizeChanged || scaleChanged) {
     m_renderTarget.destroy();
@@ -284,8 +341,11 @@ void GreeterWindow::applyConfigure(std::uint32_t width, std::uint32_t height) {
     m_configured = true;
     m_layoutNeeded = true;
     m_redrawNeeded = true;
-    kLog.info("configured {}x{} logical (scale={})", m_width, m_height,
-              m_bufferScale);
+    applySurfaceScale();
+    kLog.info("configured {}x{} logical (scale={:.2f})", m_width, m_height,
+              effectiveSurfaceScale());
+  } else {
+    applySurfaceScale();
   }
 
   if (m_sceneReady) {
@@ -293,10 +353,26 @@ void GreeterWindow::applyConfigure(std::uint32_t width, std::uint32_t height) {
   }
 }
 
+void GreeterWindow::acknowledgeConfigure(std::uint32_t width,
+                                         std::uint32_t height,
+                                         std::uint32_t serial) {
+  if (m_xdgSurface == nullptr) {
+    return;
+  }
+
+  xdg_surface_ack_configure(m_xdgSurface, serial);
+
+  if (m_frameCallback != nullptr) {
+    wl_callback_destroy(m_frameCallback);
+    m_frameCallback = nullptr;
+  }
+  m_redrawNeeded = true;
+  applyConfigure(width, height);
+}
+
 void GreeterWindow::handleXdgSurfaceConfigure(void *data, xdg_surface *surface,
                                               std::uint32_t serial) {
   auto *self = static_cast<GreeterWindow *>(data);
-  xdg_surface_ack_configure(surface, serial);
 
   std::uint32_t width = self->m_pendingWidth > 0
                             ? static_cast<std::uint32_t>(self->m_pendingWidth)
@@ -311,7 +387,8 @@ void GreeterWindow::handleXdgSurfaceConfigure(void *data, xdg_surface *surface,
     height = static_cast<std::uint32_t>(self->m_lastToplevelHeight);
   }
   if (width == 0 || height == 0) {
-    const auto logical = self->m_client.targetLogicalSize();
+    const auto logical =
+        self->m_client.logicalSizeForOutput(self->m_boundOutput);
     if (logical) {
       if (width == 0) {
         width = logical->first;
@@ -327,7 +404,16 @@ void GreeterWindow::handleXdgSurfaceConfigure(void *data, xdg_surface *surface,
   if (height == 0) {
     height = 720;
   }
-  self->applyConfigure(width, height);
+
+  if (!self->m_sceneReady) {
+    self->m_pendingConfigureSerial = serial;
+    self->m_pendingConfigureWidth = width;
+    self->m_pendingConfigureHeight = height;
+    return;
+  }
+
+  self->acknowledgeConfigure(width, height, serial);
+  (void)surface;
 }
 
 void GreeterWindow::handleToplevelConfigure(void *data,
@@ -364,6 +450,14 @@ void GreeterWindow::destroyRoleObjects() {
   if (m_frameCallback != nullptr) {
     wl_callback_destroy(m_frameCallback);
     m_frameCallback = nullptr;
+  }
+  if (m_fractionalScale != nullptr) {
+    wp_fractional_scale_v1_destroy(m_fractionalScale);
+    m_fractionalScale = nullptr;
+  }
+  if (m_viewport != nullptr) {
+    wp_viewport_destroy(m_viewport);
+    m_viewport = nullptr;
   }
   if (m_toplevel != nullptr) {
     xdg_toplevel_destroy(m_toplevel);
