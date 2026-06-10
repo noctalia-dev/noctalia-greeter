@@ -9,6 +9,7 @@
     self,
     nixpkgs,
   }: let
+    inherit (nixpkgs.lib) genAttrs;
 
     systems = [
       "x86_64-linux"
