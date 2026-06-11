@@ -149,6 +149,7 @@ _greeter_sources = files(
   'src/ui/palette.cpp',
   'src/theme/builtin_palettes.cpp',
   'src/ui/style.cpp',
+  'src/accounts/accounts_icon.cpp',
   'src/greetd/greetd_client.cpp',
   'src/greeter/appearance_sync.cpp',
   'src/greeter/appearance_config.cpp',

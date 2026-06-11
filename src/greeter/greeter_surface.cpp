@@ -1,5 +1,6 @@
 #include "greeter/greeter_surface.h"
 
+#include "accounts/accounts_icon.h"
 #include "core/key_modifiers.h"
 #include "core/key_symbols.h"
 #include "core/log.h"
@@ -9,6 +10,7 @@
 #include "greeter/greeter_preferences.h"
 #include "greeter/greeter_sessions.h"
 #include "greeter/greeter_window.h"
+#include "render/core/renderer.h"
 #include "render/core/texture_manager.h"
 #include "render/render_context.h"
 #include "render/scene/image_node.h"
@@ -41,6 +43,8 @@
 
 namespace {
 constexpr Logger kLog("greeter-surface");
+constexpr float kHeaderUserIconBase = 64.0f;
+constexpr float kHeaderAvatarBorderScale = 2.0f;
 
 Button::ButtonStateColors makePaletteState(ColorRole bg,
                                            std::optional<ColorRole> border,
@@ -149,12 +153,20 @@ void GreeterSurface::initialize(RenderContext *context) {
 
   auto headerGlyph = std::make_unique<Glyph>();
   headerGlyph->setGlyph("user");
-  headerGlyph->setGlyphSize(Style::scaled(48.0f));
+  headerGlyph->setGlyphSize(Style::scaled(kHeaderUserIconBase));
   headerGlyph->setColor(colorForRole(ColorRole::OnSurface));
   headerGlyph->setHitTestVisible(false);
   m_headerUserGlyph = headerGlyph.get();
   m_headerUserGlyph->setZIndex(7);
   m_root.addChild(std::move(headerGlyph));
+
+  auto headerAvatar = std::make_unique<ImageNode>();
+  headerAvatar->setFitMode(ImageFitMode::Cover);
+  headerAvatar->setHitTestVisible(false);
+  headerAvatar->setVisible(false);
+  m_headerUserAvatar = headerAvatar.get();
+  m_headerUserAvatar->setZIndex(7);
+  m_root.addChild(std::move(headerAvatar));
 
   auto brandTitle = std::make_unique<Label>();
   brandTitle->setText("");
@@ -681,7 +693,7 @@ void GreeterSurface::prepareFrame(std::uint32_t width, std::uint32_t height,
 
 void GreeterSurface::syncScaledTypography() {
   if (m_headerUserGlyph != nullptr) {
-    m_headerUserGlyph->setGlyphSize(Style::scaled(48.0f));
+    m_headerUserGlyph->setGlyphSize(Style::scaled(kHeaderUserIconBase));
   }
   m_formSubtitleLabel->setFontSize(Style::fontSizeTitle());
   m_brandTitleLabel->setFontSize(Style::scaled(30.0f));
@@ -796,7 +808,7 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
   const float userCount = static_cast<float>(m_userRowButtons.size());
   const float glyphScale =
       std::clamp(1.0f - (userCount - 2.0f) * 0.08f, 0.75f, 1.0f);
-  const float headerGlyphSize = Style::scaled(48.0f) * glyphScale;
+  const float headerGlyphSize = Style::scaled(kHeaderUserIconBase) * glyphScale;
 
   if (m_passwordVisible && !m_users.empty() &&
       m_selectedUser < m_users.size()) {
@@ -881,22 +893,8 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
                                 : colorForRole(ColorRole::OnSurfaceVariant));
   }
 
-  if (m_headerUserGlyph != nullptr) {
-    m_headerUserGlyph->setVisible(true);
-    m_headerUserGlyph->setGlyphSize(headerGlyphSize);
-    m_headerUserGlyph->setColor(colorForRole(ColorRole::OnSurface));
-    (void)m_headerUserGlyph->measure(*renderer);
-    const auto glyphMetrics = renderer->measureGlyph(
-        m_headerUserGlyph->codepoint(), m_headerUserGlyph->fontSize());
-    const float glyphY =
-        headerY + std::round(headerGlyphSize * 0.5f -
-                             (glyphMetrics.top + glyphMetrics.bottom) * 0.5f);
-    m_headerUserGlyph->setPosition(
-        std::round(panelX + panelWidth * 0.5f -
-                   (glyphMetrics.left + glyphMetrics.right) * 0.5f),
-        glyphY);
-    headerY += headerGlyphBlock;
-  }
+  syncHeaderUserAvatar(*renderer, headerGlyphSize, panelX, panelWidth, headerY);
+  headerY += headerGlyphBlock;
 
   if (m_formSubtitleLabel->visible()) {
     m_formSubtitleLabel->setPosition(
@@ -1225,6 +1223,8 @@ void GreeterSurface::updateStatus(const std::string &text, bool isError) {
 
 void GreeterSurface::loadUsers() {
   m_users.clear();
+  m_userUids.clear();
+  m_userIconPaths.clear();
   static const std::unordered_set<std::string> kHiddenSystemUsers = {
       "greeter", "greetd", "sddm", "lightdm", "gdm", "nobody",
   };
@@ -1256,6 +1256,7 @@ void GreeterSurface::loadUsers() {
       continue;
     }
     m_users.push_back(user);
+    m_userUids.push_back(uid);
   }
   ::endpwent();
 
@@ -1266,7 +1267,14 @@ void GreeterSurface::loadUsers() {
 
   if (m_users.empty()) {
     m_users.push_back("greeter");
+    m_userUids.push_back(0);
   }
+
+  m_userIconPaths.reserve(m_userUids.size());
+  for (const uid_t uid : m_userUids) {
+    m_userIconPaths.push_back(accounts::iconFileForUid(uid).value_or(""));
+  }
+
   m_selectedUser = 0;
   setUsername(m_users[m_selectedUser]);
 }
@@ -1384,6 +1392,70 @@ void GreeterSurface::applyScheme(const std::size_t schemeIndex) {
     setPalette(builtinPalette->dark.palette);
   }
   clearWallpaperDisplay();
+}
+
+void GreeterSurface::syncHeaderUserAvatar(Renderer &renderer, const float size,
+                                          const float panelX,
+                                          const float panelWidth,
+                                          const float headerY) {
+  const bool canShowAvatar =
+      !m_users.empty() && m_selectedUser < m_users.size() &&
+      m_selectedUser < m_userIconPaths.size() &&
+      m_headerUserAvatar != nullptr && m_renderContext != nullptr;
+  const std::string iconPath =
+      canShowAvatar ? m_userIconPaths[m_selectedUser] : std::string{};
+
+  if (canShowAvatar && !iconPath.empty() &&
+      iconPath != m_loadedHeaderAvatarPath) {
+    if (m_headerAvatarTexture.id != 0) {
+      m_renderContext->textureManager().unload(m_headerAvatarTexture);
+      m_headerAvatarTexture = {};
+    }
+    m_loadedHeaderAvatarPath = iconPath;
+    m_headerAvatarTexture = m_renderContext->textureManager().loadFromFile(
+        iconPath, static_cast<int>(std::lround(size)), true);
+  }
+
+  if (!canShowAvatar || iconPath.empty() || m_headerAvatarTexture.id == 0) {
+    if (m_headerUserAvatar != nullptr) {
+      m_headerUserAvatar->setVisible(false);
+    }
+    if (m_headerUserGlyph != nullptr) {
+      m_headerUserGlyph->setVisible(true);
+      m_headerUserGlyph->setGlyphSize(size);
+      m_headerUserGlyph->setColor(colorForRole(ColorRole::OnSurface));
+      (void)m_headerUserGlyph->measure(renderer);
+      const auto glyphMetrics = renderer.measureGlyph(
+          m_headerUserGlyph->codepoint(), m_headerUserGlyph->fontSize());
+      const float glyphY =
+          headerY + std::round(size * 0.5f -
+                               (glyphMetrics.top + glyphMetrics.bottom) * 0.5f);
+      m_headerUserGlyph->setPosition(
+          std::round(panelX + panelWidth * 0.5f -
+                     (glyphMetrics.left + glyphMetrics.right) * 0.5f),
+          glyphY);
+    }
+    return;
+  }
+
+  if (m_headerUserGlyph != nullptr) {
+    m_headerUserGlyph->setVisible(false);
+  }
+
+  const float avatarX = std::round(panelX + panelWidth * 0.5f - size * 0.5f);
+  const float avatarY = headerY;
+  m_headerUserAvatar->setTextureId(m_headerAvatarTexture.id);
+  m_headerUserAvatar->setTextureSize(m_headerAvatarTexture.width,
+                                     m_headerAvatarTexture.height);
+  m_headerUserAvatar->setTint({1.0f, 1.0f, 1.0f, 1.0f});
+  m_headerUserAvatar->setRadius(size * 0.5f);
+  m_headerUserAvatar->setBorder(colorForRole(ColorRole::Primary),
+                                Style::borderWidth() *
+                                    kHeaderAvatarBorderScale);
+  m_headerUserAvatar->setFitMode(ImageFitMode::Cover);
+  m_headerUserAvatar->setSize(size, size);
+  m_headerUserAvatar->setPosition(avatarX, avatarY);
+  m_headerUserAvatar->setVisible(true);
 }
 
 void GreeterSurface::syncWallpaperTexture() {

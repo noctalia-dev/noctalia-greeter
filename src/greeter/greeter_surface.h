@@ -20,6 +20,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <sys/types.h>
 #include <vector>
 
 class Box;
@@ -127,6 +128,8 @@ private:
   [[nodiscard]] std::optional<std::size_t>
   findSchemeIndex(std::string_view name) const;
   void syncWallpaperTexture();
+  void syncHeaderUserAvatar(class Renderer &renderer, float size, float panelX,
+                            float panelWidth, float headerY);
 
   Node m_root;
   AnimationManager m_animations;
@@ -147,6 +150,7 @@ private:
   Node *m_brandPane = nullptr;
   ImageNode *m_bottomBrandLogo = nullptr;
   Glyph *m_headerUserGlyph = nullptr;
+  ImageNode *m_headerUserAvatar = nullptr;
   Label *m_brandTitleLabel = nullptr;
   Label *m_brandSubtitleLabel = nullptr;
   Label *m_formSubtitleLabel = nullptr;
@@ -181,7 +185,9 @@ private:
   bool m_authSessionStarted = false;
   std::function<void()> m_onExitRequested;
   TextureHandle m_brandLogoTexture{};
+  TextureHandle m_headerAvatarTexture{};
   TextureHandle m_wallpaperTexture{};
+  std::string m_loadedHeaderAvatarPath;
   std::string m_wallpaperPath;
   WallpaperFillMode m_wallpaperFillMode = WallpaperFillMode::Crop;
   Color m_wallpaperFillColor = rgba(0.0f, 0.0f, 0.0f, 0.0f);
@@ -204,6 +210,8 @@ private:
   bool m_initialFocusDone = false;
 
   std::vector<std::string> m_users;
+  std::vector<uid_t> m_userUids;
+  std::vector<std::string> m_userIconPaths;
   std::vector<greeter::SessionOption> m_sessions;
   std::size_t m_selectedUser = 0;
   std::size_t m_selectedSession = 0;
