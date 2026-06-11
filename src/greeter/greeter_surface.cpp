@@ -25,17 +25,18 @@
 #include "ui/controls/label.h"
 #include "ui/palette.h"
 #include "ui/style.h"
+#include <pwd.h>
+#include <sys/types.h>
 
 #include <algorithm>
-#include <array>
+#include <cerrno>
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
-#include <fstream>
 #include <json.hpp>
 #include <linux/input-event-codes.h>
-#include <sstream>
 #include <unordered_set>
 
 namespace {
@@ -1227,33 +1228,26 @@ void GreeterSurface::loadUsers() {
   static const std::unordered_set<std::string> kHiddenSystemUsers = {
       "greeter", "greetd", "sddm", "lightdm", "gdm", "nobody",
   };
-  std::ifstream passwd("/etc/passwd");
-  std::string line;
-  while (std::getline(passwd, line)) {
-    if (line.empty() || line[0] == '#') {
+
+  int userEnumerationErrno = 0;
+
+  ::setpwent();
+  while (true) {
+    errno = 0;
+    struct passwd *pw = ::getpwent();
+    if (pw == nullptr) {
+      userEnumerationErrno = errno;
+      break;
+    }
+
+    if (pw->pw_name == nullptr || pw->pw_shell == nullptr) {
       continue;
     }
-    std::stringstream fields(line);
-    std::string user;
-    std::string ignored;
-    std::string uidText;
-    std::string shell;
-    std::getline(fields, user, ':');
-    std::getline(fields, ignored, ':');
-    std::getline(fields, uidText, ':');
-    std::getline(fields, ignored, ':');
-    std::getline(fields, ignored, ':');
-    std::getline(fields, ignored, ':');
-    std::getline(fields, shell, ':');
-    if (user.empty() || uidText.empty() || shell.empty()) {
-      continue;
-    }
-    int uid = 0;
-    try {
-      uid = std::stoi(uidText);
-    } catch (...) {
-      continue;
-    }
+
+    std::string user = pw->pw_name;
+    std::string shell = pw->pw_shell;
+    uid_t uid = pw->pw_uid;
+
     if (uid < 1000 || kHiddenSystemUsers.contains(user)) {
       continue;
     }
@@ -1262,6 +1256,12 @@ void GreeterSurface::loadUsers() {
       continue;
     }
     m_users.push_back(user);
+  }
+  ::endpwent();
+
+  if (userEnumerationErrno != 0) {
+    kLog.warn("failed to enumerate NSS users: {}",
+              std::strerror(userEnumerationErrno));
   }
 
   if (m_users.empty()) {
