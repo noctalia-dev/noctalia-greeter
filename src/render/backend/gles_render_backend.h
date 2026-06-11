@@ -63,7 +63,7 @@ public:
                      const Color& sourceColor2, float surfaceWidth, float surfaceHeight, float width, float height,
                      float imageWidth1, float imageHeight1, float imageWidth2, float imageHeight2, float progress,
                      float fillMode, const TransitionParams& params, const Color& fillColor,
-                     const Mat3& transform) override;
+                     const Mat3& transform, float blurRadius = 0.0f, const Color& tintColor = rgba(0.0f, 0.0f, 0.0f, 0.0f)) override;
   void drawFullscreenTexture(TextureId texture, bool flipY) override;
   void drawFullscreenTint(Color color) override;
   void drawFramebufferBlur(TextureId sourceTexture, std::uint32_t width, std::uint32_t height, float directionX,
@@ -80,6 +80,8 @@ private:
   EGLConfig m_config = nullptr;
   EGLContext m_context = EGL_NO_CONTEXT;
   int m_maxTextureSize = 0;
+  std::uint32_t m_bufferWidth = 0;
+  std::uint32_t m_bufferHeight = 0;
   GlesTextureManager m_textureManager;
   RectProgram m_rectProgram;
   ImageProgram m_imageProgram;
