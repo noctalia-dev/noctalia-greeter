@@ -25,6 +25,10 @@ std::string g_logPaths;
 bool g_syslogOpen = false;
 bool g_sessionMode = false;
 
+void emergencyWrite(int fd, const void *data, std::size_t size) {
+  [[maybe_unused]] const ssize_t written = ::write(fd, data, size);
+}
+
 bool isSessionMode() {
   if (std::getenv("GREETD_SOCK") != nullptr) {
     return true;
@@ -43,7 +47,7 @@ void emergencyAppend(const char *path, const char *text) {
   if (fd < 0) {
     return;
   }
-  (void)::write(fd, text, std::strlen(text));
+  emergencyWrite(fd, text, std::strlen(text));
   ::close(fd);
 }
 
@@ -174,7 +178,7 @@ void emergencyLogBootstrap(int argc, char *argv[]) {
   const std::string line = msg.str();
   const char *text = line.c_str();
 
-  (void)::write(STDERR_FILENO, text, line.size());
+  emergencyWrite(STDERR_FILENO, text, line.size());
 
   std::string uidLog =
       "/tmp/noctalia-greeter-" + std::to_string(::getuid()) + ".log";
