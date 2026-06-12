@@ -33,7 +33,18 @@
         default = pkgs.callPackage ./nix/package.nix {};
       }
     );
-    
+
+    devShells = forEachSystem (
+      {
+        pkgs,
+        system,
+      }: {
+        default = pkgs.callPackage ./nix/devshell.nix {
+          noctalia-greeter = self.packages.${system}.default;
+        };
+      }
+    );
+
     nixosModules.default = {
       pkgs,
       lib,
