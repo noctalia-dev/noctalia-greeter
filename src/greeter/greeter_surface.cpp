@@ -10,6 +10,7 @@
 #include "greeter/greeter_preferences.h"
 #include "greeter/greeter_sessions.h"
 #include "greeter/greeter_window.h"
+#include "greeter/power_actions.h"
 #include "render/core/renderer.h"
 #include "render/core/texture_manager.h"
 #include "render/render_context.h"
@@ -73,6 +74,19 @@ Button::ButtonPalette userRowPalette() {
                            ColorRole::OnSurface, kDisabledAlpha),
       .selected = makePaletteState(ColorRole::Primary, ColorRole::Primary,
                                    ColorRole::OnPrimary),
+  };
+}
+
+Button::ButtonPalette powerButtonPalette(ColorRole hover, ColorRole onHover) {
+  return Button::ButtonPalette{
+      .borderWidth = Style::borderWidth(),
+      .normal = makePaletteState(ColorRole::Surface, ColorRole::Outline,
+                                 ColorRole::OnSurface, 0.78f),
+      .hover = makePaletteState(hover, std::nullopt, onHover),
+      .pressed = makePaletteState(hover, hover, onHover),
+      .disabled = makePaletteState(ColorRole::Surface, ColorRole::Outline,
+                                   ColorRole::OnSurface, 0.40f),
+      .selected = std::nullopt,
   };
 }
 
@@ -379,7 +393,45 @@ void GreeterSurface::initialize(RenderContext *context) {
   m_statusLabel->setZIndex(6);
   m_root.addChild(std::move(status));
 
+  m_canRebootToFirmware = power::canRebootToFirmwareSetup();
+
+  const auto makePowerButton = [this](std::string_view icon, ColorRole hover,
+                                      ColorRole onHover,
+                                      std::function<void()> action) -> Button * {
+    auto btn = std::make_unique<Button>();
+    btn->setGlyph(icon);
+    btn->setGlyphSize(18.0f);
+    btn->setContentAlign(ButtonContentAlign::Center);
+    btn->setCustomPalette(powerButtonPalette(hover, onHover));
+    btn->setOnClick(std::move(action));
+    btn->setZIndex(8);
+    Button *ptr = btn.get();
+    m_root.addChild(std::move(btn));
+    return ptr;
+  };
+
+  m_shutdownButton =
+      makePowerButton("power", ColorRole::Error, ColorRole::OnError,
+                      []() { power::powerOff(); });
+  m_shutdownButton->setTooltip("Shut down");
+  m_rebootButton =
+      makePowerButton("reload", ColorRole::Secondary, ColorRole::OnSecondary,
+                      []() { power::reboot(); });
+  m_rebootButton->setTooltip("Restart");
+  if (m_canRebootToFirmware) {
+    m_firmwareButton =
+        makePowerButton("cpu", ColorRole::Secondary, ColorRole::OnSecondary,
+                        []() { power::rebootToFirmwareSetup(); });
+    m_firmwareButton->setTooltip("Restart to UEFI firmware setup");
+  }
+
   m_root.setAnimationManager(&m_animations);
+  // Keep state changes immediate to avoid hover flicker.
+  for (Button *btn : {m_shutdownButton, m_rebootButton, m_firmwareButton}) {
+    if (btn != nullptr) {
+      btn->setAnimationManager(nullptr);
+    }
+  }
   m_inputDispatcher.setSceneRoot(&m_root);
   m_inputDispatcher.setCursorShapeCallback(
       [](std::uint32_t serial, std::uint32_t shape) {
@@ -933,6 +985,8 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
   if (m_schemeSelectLabel != nullptr) {
     m_schemeSelectLabel->setVisible(false);
   }
+
+  layoutPowerButtons(ox, oy, sw, sh);
 
   m_userSelectBox->setVisible(false);
   m_userSelectLabel->setVisible(false);
@@ -1675,6 +1729,19 @@ void GreeterSurface::rebuildFocusRing() {
         {m_schemeSelectArea, [this]() { toggleSchemeMenu(); }});
   }
 
+  if (m_firmwareButton != nullptr && m_firmwareButton->inputArea() != nullptr) {
+    m_focusRing.push_back({m_firmwareButton->inputArea(),
+                           []() { power::rebootToFirmwareSetup(); }});
+  }
+  if (m_rebootButton != nullptr && m_rebootButton->inputArea() != nullptr) {
+    m_focusRing.push_back(
+        {m_rebootButton->inputArea(), []() { power::reboot(); }});
+  }
+  if (m_shutdownButton != nullptr && m_shutdownButton->inputArea() != nullptr) {
+    m_focusRing.push_back(
+        {m_shutdownButton->inputArea(), []() { power::powerOff(); }});
+  }
+
   // Keep focus on whatever was focused before the rebuild, if still present.
   m_focusIndex = -1;
   for (std::size_t i = 0; i < m_focusRing.size(); ++i) {
@@ -1895,6 +1962,50 @@ void GreeterSurface::syncFocusIndexFromFocused() {
       m_focusIndex = static_cast<std::ptrdiff_t>(i);
       return;
     }
+  }
+}
+
+void GreeterSurface::layoutPowerButtons(float ox, float oy, float sw,
+                                        float sh) {
+  auto *renderer = m_renderContext;
+  if (renderer == nullptr) {
+    return;
+  }
+
+  const float size = Style::controlHeight();
+  const float margin = Style::spaceLg();
+  const float gap = Style::spaceSm();
+  const float bottom = oy + sh - size - margin;
+
+  const auto place = [&](Button *btn, float x) {
+    if (btn == nullptr) {
+      return;
+    }
+    btn->setVisible(true);
+    btn->setRadius(size * 0.5f);
+    btn->setSize(size, size);
+    btn->setPosition(x, bottom);
+    btn->layout(*renderer);
+    if (Glyph *glyph = btn->glyph()) {
+      (void)glyph->measure(*renderer);
+      const auto metrics =
+          renderer->measureGlyph(glyph->codepoint(), glyph->fontSize());
+      const float glyphW = metrics.right - metrics.left;
+      const float glyphH = metrics.bottom - metrics.top;
+      glyph->setPosition(
+          std::round(size * 0.5f - (metrics.left + metrics.right) * 0.5f),
+          std::round(size * 0.5f - (metrics.top + metrics.bottom) * 0.5f));
+      glyph->setSize(std::max(glyphW, 1.0f), std::max(glyphH, 1.0f));
+    }
+  };
+
+  float x = ox + sw - size - margin;
+  place(m_shutdownButton, x);
+  x -= size + gap;
+  place(m_rebootButton, x);
+  if (m_firmwareButton != nullptr) {
+    x -= size + gap;
+    place(m_firmwareButton, x);
   }
 }
 

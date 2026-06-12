@@ -99,6 +99,7 @@ private:
   void layoutSelector(Box *box, Glyph *icon, Glyph *chevron, InputArea *area,
                       float x, float y, float w, float h);
   void layoutPanelSessionSelector(float x, float y, float w, float h);
+  void layoutPowerButtons(float ox, float oy, float sw, float sh);
   void commitImmediateFrame(bool layout);
   void setFocusIndex(std::ptrdiff_t index);
   void syncFocusIndexFromFocused();
@@ -176,6 +177,10 @@ private:
   Button *m_loginButton = nullptr;
   Button *m_backButton = nullptr;
   Label *m_statusLabel = nullptr;
+  Button *m_shutdownButton = nullptr;
+  Button *m_rebootButton = nullptr;
+  Button *m_firmwareButton = nullptr;
+  bool m_canRebootToFirmware = false;
   std::vector<Button *> m_userRowButtons;
   std::vector<Glyph *> m_userRowArrows;
 
