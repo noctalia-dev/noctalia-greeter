@@ -46,8 +46,9 @@ public:
     Mat3 out;
     for (int col = 0; col < 3; ++col) {
       for (int row = 0; row < 3; ++row) {
-        out.m[col * 3 + row] = m[0 * 3 + row] * other.m[col * 3 + 0] + m[1 * 3 + row] * other.m[col * 3 + 1] +
-                               m[2 * 3 + row] * other.m[col * 3 + 2];
+        out.m[col * 3 + row] = m[0 * 3 + row] * other.m[col * 3 + 0]
+            + m[1 * 3 + row] * other.m[col * 3 + 1]
+            + m[2 * 3 + row] * other.m[col * 3 + 2];
       }
     }
     return out;

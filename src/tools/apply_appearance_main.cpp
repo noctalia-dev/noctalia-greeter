@@ -10,27 +10,37 @@
 
 namespace {
 
-constexpr Logger kLog("apply-appearance");
+  constexpr Logger kLog("apply-appearance");
 
-void printUsage(const char *programName) {
-  std::cerr << "usage: " << programName << " <staging-directory>\n"
-            << "       " << programName << " --setup-system\n"
-            << "       " << programName << " --print-greeter-user\n\n"
-            << "Installs appearance into "
-            << greeter::appearance::syncedDataDirectory().string()
-            << " (root, world-readable).\n"
-            << "--setup-system creates greeter.conf and chowns it to the "
-               "greetd user.\n\n"
-            << "Environment:\n"
-            << "  " << greeter::appearance::kSyncedDataDirEnv
-            << "  synced data dir\n"
-            << "  " << greeter::kGreeterUserEnv << "  greeter user\n"
-            << "  GREETD_CONFIG  greetd config.toml path\n";
-}
+  void printUsage(const char* programName) {
+    std::cerr
+        << "usage: "
+        << programName
+        << " <staging-directory>\n"
+        << "       "
+        << programName
+        << " --setup-system\n"
+        << "       "
+        << programName
+        << " --print-greeter-user\n\n"
+        << "Installs appearance into "
+        << greeter::appearance::syncedDataDirectory().string()
+        << " (root, world-readable).\n"
+        << "--setup-system creates greeter.conf and chowns it to the "
+           "greetd user.\n\n"
+        << "Environment:\n"
+        << "  "
+        << greeter::appearance::kSyncedDataDirEnv
+        << "  synced data dir\n"
+        << "  "
+        << greeter::kGreeterUserEnv
+        << "  greeter user\n"
+        << "  GREETD_CONFIG  greetd config.toml path\n";
+  }
 
 } // namespace
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
   if (argc == 2 && std::string_view(argv[1]) == "--setup-system") {
     const auto greeterUser = greeter::resolveGreeterAccountName();
     if (!greeterUser.has_value()) {
@@ -42,8 +52,7 @@ int main(int argc, char *argv[]) {
       kLog.error("{}", error);
       return 1;
     }
-    kLog.info("system layout ready under '{}'",
-              greeter::appearance::syncedDataDirectory().string());
+    kLog.info("system layout ready under '{}'", greeter::appearance::syncedDataDirectory().string());
     return 0;
   }
 
@@ -58,8 +67,7 @@ int main(int argc, char *argv[]) {
   }
 
   if (argc != 2) {
-    printUsage(argv[0] != nullptr ? argv[0]
-                                  : "noctalia-greeter-apply-appearance");
+    printUsage(argv[0] != nullptr ? argv[0] : "noctalia-greeter-apply-appearance");
     return 2;
   }
 
@@ -77,7 +85,6 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  kLog.info("installed appearance into '{}'",
-            greeter::appearance::syncedDataDirectory().string());
+  kLog.info("installed appearance into '{}'", greeter::appearance::syncedDataDirectory().string());
   return 0;
 }

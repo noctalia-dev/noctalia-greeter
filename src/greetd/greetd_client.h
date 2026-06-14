@@ -48,31 +48,29 @@ public:
   GreetdClient();
   ~GreetdClient();
 
-  bool connect(const std::string &socketPath);
+  bool connect(const std::string& socketPath);
   void disconnect();
   [[nodiscard]] bool isConnected() const noexcept;
 
   // Create a new session for the given username.
   // Returns an auth prompt if PAM needs input, nullopt on success, nullopt +
   // lastError() on failure.
-  std::optional<GreetdAuthMessage> createSession(const std::string &username);
+  std::optional<GreetdAuthMessage> createSession(const std::string& username);
 
   // Post authentication data (password)
-  std::optional<GreetdAuthMessage> postAuthData(const std::string &data);
+  std::optional<GreetdAuthMessage> postAuthData(const std::string& data);
 
   // Start the session with the given command
-  bool startSession(const GreetdSessionCommand &command);
+  bool startSession(const GreetdSessionCommand& command);
 
   bool cancelSession();
 
   // Get the last error
-  [[nodiscard]] const std::optional<GreetdError> &lastError() const noexcept {
-    return m_lastError;
-  }
+  [[nodiscard]] const std::optional<GreetdError>& lastError() const noexcept { return m_lastError; }
 
 private:
   struct Response;
-  Response sendRequest(const std::string &request);
+  Response sendRequest(const std::string& request);
 
   int m_socketFd = -1;
   std::int64_t m_sessionId = -1;

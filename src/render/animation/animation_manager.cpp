@@ -2,10 +2,10 @@
 
 #include <algorithm>
 
-std::uint64_t AnimationManager::animate(float from, float to, float durationMs, Easing easing,
-                                         std::function<void(float)> onUpdate,
-                                         std::function<void()> onComplete,
-                                         void* owner) {
+std::uint64_t AnimationManager::animate(
+    float from, float to, float durationMs, Easing easing, std::function<void(float)> onUpdate,
+    std::function<void()> onComplete, void* owner
+) {
   Animation anim;
   anim.id = m_nextId++;
   anim.from = from;
@@ -21,16 +21,18 @@ std::uint64_t AnimationManager::animate(float from, float to, float durationMs, 
 
 void AnimationManager::cancel(std::uint64_t id) {
   m_animations.erase(
-    std::remove_if(m_animations.begin(), m_animations.end(),
-      [id](const Animation& a) { return a.id == id; }),
-    m_animations.end());
+      std::remove_if(m_animations.begin(), m_animations.end(), [id](const Animation& a) { return a.id == id; }),
+      m_animations.end()
+  );
 }
 
 void AnimationManager::cancelForOwner(void* owner) {
   m_animations.erase(
-    std::remove_if(m_animations.begin(), m_animations.end(),
-      [owner](const Animation& a) { return a.owner == owner; }),
-    m_animations.end());
+      std::remove_if(
+          m_animations.begin(), m_animations.end(), [owner](const Animation& a) { return a.owner == owner; }
+      ),
+      m_animations.end()
+  );
 }
 
 void AnimationManager::tick(float deltaMs) {
@@ -38,7 +40,7 @@ void AnimationManager::tick(float deltaMs) {
     anim.tick(deltaMs);
   }
   m_animations.erase(
-    std::remove_if(m_animations.begin(), m_animations.end(),
-      [](const Animation& a) { return a.finished; }),
-    m_animations.end());
+      std::remove_if(m_animations.begin(), m_animations.end(), [](const Animation& a) { return a.finished; }),
+      m_animations.end()
+  );
 }

@@ -3,6 +3,7 @@
 class ScrollView : public Node {
 public:
   ScrollView();
+
 private:
   LayoutSize doMeasure(Renderer& renderer, const LayoutConstraints& constraints) override;
   void doLayout(Renderer& renderer) override;

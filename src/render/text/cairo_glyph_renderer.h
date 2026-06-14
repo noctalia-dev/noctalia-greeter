@@ -10,8 +10,8 @@
 #include <unordered_map>
 
 // FreeType forwards
-typedef struct FT_LibraryRec_ *FT_Library;
-typedef struct FT_FaceRec_ *FT_Face;
+typedef struct FT_LibraryRec_* FT_Library;
+typedef struct FT_FaceRec_* FT_Face;
 
 // Cairo forwards
 typedef struct _cairo_font_face cairo_font_face_t;
@@ -34,20 +34,20 @@ public:
   CairoGlyphRenderer();
   ~CairoGlyphRenderer();
 
-  CairoGlyphRenderer(const CairoGlyphRenderer &) = delete;
-  CairoGlyphRenderer &operator=(const CairoGlyphRenderer &) = delete;
+  CairoGlyphRenderer(const CairoGlyphRenderer&) = delete;
+  CairoGlyphRenderer& operator=(const CairoGlyphRenderer&) = delete;
 
-  void initialize(const std::string &fontPath, RenderBackend *backend,
-                  TextureManager *textures);
+  void initialize(const std::string& fontPath, RenderBackend* backend, TextureManager* textures);
   void cleanup();
 
   void setContentScale(float scale);
 
   [[nodiscard]] TextMetrics measureGlyph(char32_t codepoint, float fontSize);
 
-  void drawGlyph(float surfaceWidth, float surfaceHeight, float x,
-                 float baselineY, char32_t codepoint, float fontSize,
-                 const Color &color, const Mat3 &transform);
+  void drawGlyph(
+      float surfaceWidth, float surfaceHeight, float x, float baselineY, char32_t codepoint, float fontSize,
+      const Color& color, const Mat3& transform
+  );
 
 private:
   struct CacheKey {
@@ -55,10 +55,10 @@ private:
     std::uint32_t sizeQ = 0;
     std::uint16_t scaleQ = 0;
 
-    bool operator==(const CacheKey &other) const noexcept;
+    bool operator==(const CacheKey& other) const noexcept;
   };
   struct CacheKeyHash {
-    std::size_t operator()(const CacheKey &k) const noexcept;
+    std::size_t operator()(const CacheKey& k) const noexcept;
   };
 
   using LruList = std::list<CacheKey>;
@@ -78,7 +78,7 @@ private:
 
   using CacheMap = std::unordered_map<CacheKey, CacheEntry, CacheKeyHash>;
 
-  CacheEntry *lookupOrRasterize(char32_t codepoint, float fontSize);
+  CacheEntry* lookupOrRasterize(char32_t codepoint, float fontSize);
   void touch(CacheMap::iterator it);
   void evict(CacheMap::iterator it);
   void evictIfNeeded();
@@ -87,10 +87,10 @@ private:
 
   FT_Library m_ftLibrary = nullptr;
   FT_Face m_face = nullptr;
-  cairo_font_face_t *m_cairoFace = nullptr;
-  cairo_font_options_t *m_fontOptions = nullptr;
-  RenderBackend *m_backend = nullptr;
-  TextureManager *m_textureManager = nullptr;
+  cairo_font_face_t* m_cairoFace = nullptr;
+  cairo_font_options_t* m_fontOptions = nullptr;
+  RenderBackend* m_backend = nullptr;
+  TextureManager* m_textureManager = nullptr;
 
   CacheMap m_cache;
   LruList m_lru;

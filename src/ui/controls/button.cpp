@@ -14,165 +14,166 @@
 
 namespace {
 
-Button::ButtonStateColors makeState(ColorSpec bg, ColorSpec border,
-                                    ColorSpec label) {
-  return Button::ButtonStateColors{
-      .bg = std::move(bg),
-      .border = std::move(border),
-      .label = std::move(label),
-  };
-}
-
-Button::ButtonStateColors selectedState() {
-  return makeState(colorSpecFromRole(ColorRole::Primary),
-                   colorSpecFromRole(ColorRole::Primary),
-                   colorSpecFromRole(ColorRole::OnPrimary));
-}
-
-Button::ButtonPalette paletteForVariant(ButtonVariant variant) {
-  constexpr float kDisabledAlpha = 0.55f;
-  switch (variant) {
-  case ButtonVariant::Default:
-    return Button::ButtonPalette{
-        .borderWidth = Style::borderWidth(),
-        .normal = makeState(colorSpecFromRole(ColorRole::SurfaceVariant),
-                            colorSpecFromRole(ColorRole::Outline),
-                            colorSpecFromRole(ColorRole::OnSurface)),
-        .hover =
-            makeState(colorSpecFromRole(ColorRole::Hover), clearColorSpec(),
-                      colorSpecFromRole(ColorRole::OnHover)),
-        .pressed = makeState(colorSpecFromRole(ColorRole::Primary),
-                             colorSpecFromRole(ColorRole::Primary),
-                             colorSpecFromRole(ColorRole::OnPrimary)),
-        .disabled = makeState(
-            colorSpecFromRole(ColorRole::SurfaceVariant, kDisabledAlpha),
-            colorSpecFromRole(ColorRole::Outline, kDisabledAlpha),
-            colorSpecFromRole(ColorRole::OnSurface, kDisabledAlpha)),
-        .selected = selectedState(),
-    };
-  case ButtonVariant::Primary:
-    return Button::ButtonPalette{
-        .borderWidth = 0.0f,
-        .normal =
-            makeState(colorSpecFromRole(ColorRole::Primary), clearColorSpec(),
-                      colorSpecFromRole(ColorRole::OnPrimary)),
-        .hover =
-            makeState(colorSpecFromRole(ColorRole::Hover), clearColorSpec(),
-                      colorSpecFromRole(ColorRole::OnHover)),
-        .pressed =
-            makeState(colorSpecFromRole(ColorRole::Primary), clearColorSpec(),
-                      colorSpecFromRole(ColorRole::OnPrimary)),
-        .disabled = makeState(
-            colorSpecFromRole(ColorRole::Primary, kDisabledAlpha),
-            clearColorSpec(), colorSpecFromRole(ColorRole::OnPrimary)),
-        .selected = selectedState(),
-    };
-  case ButtonVariant::Secondary:
-    return Button::ButtonPalette{
-        .borderWidth = Style::borderWidth(),
-        .normal = makeState(colorSpecFromRole(ColorRole::Secondary),
-                            colorSpecFromRole(ColorRole::Outline),
-                            colorSpecFromRole(ColorRole::OnSecondary)),
-        .hover =
-            makeState(colorSpecFromRole(ColorRole::Hover), clearColorSpec(),
-                      colorSpecFromRole(ColorRole::OnHover)),
-        .pressed = makeState(colorSpecFromRole(ColorRole::Primary),
-                             colorSpecFromRole(ColorRole::Primary),
-                             colorSpecFromRole(ColorRole::OnPrimary)),
-        .disabled =
-            makeState(colorSpecFromRole(ColorRole::Secondary, kDisabledAlpha),
-                      colorSpecFromRole(ColorRole::Outline, kDisabledAlpha),
-                      colorSpecFromRole(ColorRole::OnSecondary)),
-        .selected = selectedState(),
-    };
-  case ButtonVariant::Destructive:
-    return Button::ButtonPalette{
-        .borderWidth = Style::borderWidth(),
-        .normal = makeState(colorSpecFromRole(ColorRole::Error),
-                            colorSpecFromRole(ColorRole::Outline),
-                            colorSpecFromRole(ColorRole::OnError)),
-        .hover =
-            makeState(colorSpecFromRole(ColorRole::Hover), clearColorSpec(),
-                      colorSpecFromRole(ColorRole::OnHover)),
-        .pressed = makeState(colorSpecFromRole(ColorRole::Error),
-                             colorSpecFromRole(ColorRole::Error),
-                             colorSpecFromRole(ColorRole::OnError)),
-        .disabled =
-            makeState(colorSpecFromRole(ColorRole::Error, kDisabledAlpha),
-                      colorSpecFromRole(ColorRole::Outline, kDisabledAlpha),
-                      colorSpecFromRole(ColorRole::OnError)),
-        .selected = selectedState(),
-    };
-  case ButtonVariant::Outline:
-    return Button::ButtonPalette{
-        .borderWidth = Style::borderWidth(),
-        .normal = makeState(colorSpecFromRole(ColorRole::Surface),
-                            colorSpecFromRole(ColorRole::Outline),
-                            colorSpecFromRole(ColorRole::OnSurface)),
-        .hover =
-            makeState(colorSpecFromRole(ColorRole::Hover), clearColorSpec(),
-                      colorSpecFromRole(ColorRole::OnHover)),
-        .pressed = makeState(colorSpecFromRole(ColorRole::Primary),
-                             colorSpecFromRole(ColorRole::Primary),
-                             colorSpecFromRole(ColorRole::OnPrimary)),
-        .disabled =
-            makeState(colorSpecFromRole(ColorRole::Surface, kDisabledAlpha),
-                      colorSpecFromRole(ColorRole::Outline, kDisabledAlpha),
-                      colorSpecFromRole(ColorRole::OnSurface, kDisabledAlpha)),
-        .selected = selectedState(),
-    };
-  case ButtonVariant::Ghost:
-    return Button::ButtonPalette{
-        .borderWidth = 0.0f,
-        .normal = makeState(clearColorSpec(), clearColorSpec(),
-                            colorSpecFromRole(ColorRole::OnSurface)),
-        .hover =
-            makeState(colorSpecFromRole(ColorRole::Hover), clearColorSpec(),
-                      colorSpecFromRole(ColorRole::OnHover)),
-        .pressed = makeState(colorSpecFromRole(ColorRole::SurfaceVariant),
-                             clearColorSpec(),
-                             colorSpecFromRole(ColorRole::OnSurface)),
-        .disabled =
-            makeState(clearColorSpec(), clearColorSpec(),
-                      colorSpecFromRole(ColorRole::OnSurface, kDisabledAlpha)),
-        .selected = selectedState(),
-    };
-  case ButtonVariant::Tab:
-    return Button::ButtonPalette{
-        .borderWidth = 0.0f,
-        .normal = makeState(clearColorSpec(), clearColorSpec(),
-                            colorSpecFromRole(ColorRole::OnSurface)),
-        .hover =
-            makeState(colorSpecFromRole(ColorRole::Hover), clearColorSpec(),
-                      colorSpecFromRole(ColorRole::OnHover)),
-        .pressed = makeState(colorSpecFromRole(ColorRole::SurfaceVariant),
-                             clearColorSpec(),
-                             colorSpecFromRole(ColorRole::OnSurface)),
-        .disabled = makeState(clearColorSpec(), clearColorSpec(),
-                              colorSpecFromRole(ColorRole::OnSurface)),
-        .selected = std::nullopt,
-    };
-  case ButtonVariant::TabActive:
-    return Button::ButtonPalette{
-        .borderWidth = 0.0f,
-        .normal =
-            makeState(colorSpecFromRole(ColorRole::Primary), clearColorSpec(),
-                      colorSpecFromRole(ColorRole::OnPrimary)),
-        .hover =
-            makeState(colorSpecFromRole(ColorRole::Primary), clearColorSpec(),
-                      colorSpecFromRole(ColorRole::OnPrimary)),
-        .pressed =
-            makeState(colorSpecFromRole(ColorRole::Primary), clearColorSpec(),
-                      colorSpecFromRole(ColorRole::OnPrimary)),
-        .disabled = makeState(
-            colorSpecFromRole(ColorRole::Primary, kDisabledAlpha),
-            clearColorSpec(), colorSpecFromRole(ColorRole::OnPrimary)),
-        .selected = std::nullopt,
+  Button::ButtonStateColors makeState(ColorSpec bg, ColorSpec border, ColorSpec label) {
+    return Button::ButtonStateColors{
+        .bg = std::move(bg),
+        .border = std::move(border),
+        .label = std::move(label),
     };
   }
 
-  return {};
-}
+  Button::ButtonStateColors selectedState() {
+    return makeState(
+        colorSpecFromRole(ColorRole::Primary), colorSpecFromRole(ColorRole::Primary),
+        colorSpecFromRole(ColorRole::OnPrimary)
+    );
+  }
+
+  Button::ButtonPalette paletteForVariant(ButtonVariant variant) {
+    constexpr float kDisabledAlpha = 0.55f;
+    switch (variant) {
+    case ButtonVariant::Default:
+      return Button::ButtonPalette{
+          .borderWidth = Style::borderWidth(),
+          .normal = makeState(
+              colorSpecFromRole(ColorRole::SurfaceVariant), colorSpecFromRole(ColorRole::Outline),
+              colorSpecFromRole(ColorRole::OnSurface)
+          ),
+          .hover =
+              makeState(colorSpecFromRole(ColorRole::Hover), clearColorSpec(), colorSpecFromRole(ColorRole::OnHover)),
+          .pressed = makeState(
+              colorSpecFromRole(ColorRole::Primary), colorSpecFromRole(ColorRole::Primary),
+              colorSpecFromRole(ColorRole::OnPrimary)
+          ),
+          .disabled = makeState(
+              colorSpecFromRole(ColorRole::SurfaceVariant, kDisabledAlpha),
+              colorSpecFromRole(ColorRole::Outline, kDisabledAlpha),
+              colorSpecFromRole(ColorRole::OnSurface, kDisabledAlpha)
+          ),
+          .selected = selectedState(),
+      };
+    case ButtonVariant::Primary:
+      return Button::ButtonPalette{
+          .borderWidth = 0.0f,
+          .normal = makeState(
+              colorSpecFromRole(ColorRole::Primary), clearColorSpec(), colorSpecFromRole(ColorRole::OnPrimary)
+          ),
+          .hover =
+              makeState(colorSpecFromRole(ColorRole::Hover), clearColorSpec(), colorSpecFromRole(ColorRole::OnHover)),
+          .pressed = makeState(
+              colorSpecFromRole(ColorRole::Primary), clearColorSpec(), colorSpecFromRole(ColorRole::OnPrimary)
+          ),
+          .disabled = makeState(
+              colorSpecFromRole(ColorRole::Primary, kDisabledAlpha), clearColorSpec(),
+              colorSpecFromRole(ColorRole::OnPrimary)
+          ),
+          .selected = selectedState(),
+      };
+    case ButtonVariant::Secondary:
+      return Button::ButtonPalette{
+          .borderWidth = Style::borderWidth(),
+          .normal = makeState(
+              colorSpecFromRole(ColorRole::Secondary), colorSpecFromRole(ColorRole::Outline),
+              colorSpecFromRole(ColorRole::OnSecondary)
+          ),
+          .hover =
+              makeState(colorSpecFromRole(ColorRole::Hover), clearColorSpec(), colorSpecFromRole(ColorRole::OnHover)),
+          .pressed = makeState(
+              colorSpecFromRole(ColorRole::Primary), colorSpecFromRole(ColorRole::Primary),
+              colorSpecFromRole(ColorRole::OnPrimary)
+          ),
+          .disabled = makeState(
+              colorSpecFromRole(ColorRole::Secondary, kDisabledAlpha),
+              colorSpecFromRole(ColorRole::Outline, kDisabledAlpha), colorSpecFromRole(ColorRole::OnSecondary)
+          ),
+          .selected = selectedState(),
+      };
+    case ButtonVariant::Destructive:
+      return Button::ButtonPalette{
+          .borderWidth = Style::borderWidth(),
+          .normal = makeState(
+              colorSpecFromRole(ColorRole::Error), colorSpecFromRole(ColorRole::Outline),
+              colorSpecFromRole(ColorRole::OnError)
+          ),
+          .hover =
+              makeState(colorSpecFromRole(ColorRole::Hover), clearColorSpec(), colorSpecFromRole(ColorRole::OnHover)),
+          .pressed = makeState(
+              colorSpecFromRole(ColorRole::Error), colorSpecFromRole(ColorRole::Error),
+              colorSpecFromRole(ColorRole::OnError)
+          ),
+          .disabled = makeState(
+              colorSpecFromRole(ColorRole::Error, kDisabledAlpha),
+              colorSpecFromRole(ColorRole::Outline, kDisabledAlpha), colorSpecFromRole(ColorRole::OnError)
+          ),
+          .selected = selectedState(),
+      };
+    case ButtonVariant::Outline:
+      return Button::ButtonPalette{
+          .borderWidth = Style::borderWidth(),
+          .normal = makeState(
+              colorSpecFromRole(ColorRole::Surface), colorSpecFromRole(ColorRole::Outline),
+              colorSpecFromRole(ColorRole::OnSurface)
+          ),
+          .hover =
+              makeState(colorSpecFromRole(ColorRole::Hover), clearColorSpec(), colorSpecFromRole(ColorRole::OnHover)),
+          .pressed = makeState(
+              colorSpecFromRole(ColorRole::Primary), colorSpecFromRole(ColorRole::Primary),
+              colorSpecFromRole(ColorRole::OnPrimary)
+          ),
+          .disabled = makeState(
+              colorSpecFromRole(ColorRole::Surface, kDisabledAlpha),
+              colorSpecFromRole(ColorRole::Outline, kDisabledAlpha),
+              colorSpecFromRole(ColorRole::OnSurface, kDisabledAlpha)
+          ),
+          .selected = selectedState(),
+      };
+    case ButtonVariant::Ghost:
+      return Button::ButtonPalette{
+          .borderWidth = 0.0f,
+          .normal = makeState(clearColorSpec(), clearColorSpec(), colorSpecFromRole(ColorRole::OnSurface)),
+          .hover =
+              makeState(colorSpecFromRole(ColorRole::Hover), clearColorSpec(), colorSpecFromRole(ColorRole::OnHover)),
+          .pressed = makeState(
+              colorSpecFromRole(ColorRole::SurfaceVariant), clearColorSpec(), colorSpecFromRole(ColorRole::OnSurface)
+          ),
+          .disabled =
+              makeState(clearColorSpec(), clearColorSpec(), colorSpecFromRole(ColorRole::OnSurface, kDisabledAlpha)),
+          .selected = selectedState(),
+      };
+    case ButtonVariant::Tab:
+      return Button::ButtonPalette{
+          .borderWidth = 0.0f,
+          .normal = makeState(clearColorSpec(), clearColorSpec(), colorSpecFromRole(ColorRole::OnSurface)),
+          .hover =
+              makeState(colorSpecFromRole(ColorRole::Hover), clearColorSpec(), colorSpecFromRole(ColorRole::OnHover)),
+          .pressed = makeState(
+              colorSpecFromRole(ColorRole::SurfaceVariant), clearColorSpec(), colorSpecFromRole(ColorRole::OnSurface)
+          ),
+          .disabled = makeState(clearColorSpec(), clearColorSpec(), colorSpecFromRole(ColorRole::OnSurface)),
+          .selected = std::nullopt,
+      };
+    case ButtonVariant::TabActive:
+      return Button::ButtonPalette{
+          .borderWidth = 0.0f,
+          .normal = makeState(
+              colorSpecFromRole(ColorRole::Primary), clearColorSpec(), colorSpecFromRole(ColorRole::OnPrimary)
+          ),
+          .hover = makeState(
+              colorSpecFromRole(ColorRole::Primary), clearColorSpec(), colorSpecFromRole(ColorRole::OnPrimary)
+          ),
+          .pressed = makeState(
+              colorSpecFromRole(ColorRole::Primary), clearColorSpec(), colorSpecFromRole(ColorRole::OnPrimary)
+          ),
+          .disabled = makeState(
+              colorSpecFromRole(ColorRole::Primary, kDisabledAlpha), clearColorSpec(),
+              colorSpecFromRole(ColorRole::OnPrimary)
+          ),
+          .selected = std::nullopt,
+      };
+    }
+
+    return {};
+  }
 
 } // namespace
 
@@ -183,7 +184,7 @@ Button::Button() {
   setRadius(Style::scaledRadiusMd());
 
   auto area = std::make_unique<InputArea>();
-  area->setOnEnter([this](const InputArea::PointerData & /*data*/) {
+  area->setOnEnter([this](const InputArea::PointerData& /*data*/) {
     applyVisualState();
     if (m_onEnter) {
       m_onEnter();
@@ -195,13 +196,13 @@ Button::Button() {
       m_onLeave();
     }
   });
-  area->setOnPress([this](const InputArea::PointerData &data) {
+  area->setOnPress([this](const InputArea::PointerData& data) {
     applyVisualState();
     if (m_onPress) {
       m_onPress(data.localX, data.localY, data.pressed);
     }
   });
-  area->setOnMotion([this](const InputArea::PointerData &data) {
+  area->setOnMotion([this](const InputArea::PointerData& data) {
     if (m_onMotion) {
       m_onMotion();
     }
@@ -209,7 +210,7 @@ Button::Button() {
       m_onPointerMotion(data.localX, data.localY);
     }
   });
-  area->setOnClick([this](const InputArea::PointerData &data) {
+  area->setOnClick([this](const InputArea::PointerData& data) {
     if (!m_enabled) {
       return;
     }
@@ -222,7 +223,7 @@ Button::Button() {
   area->setFocusable(true);
   area->setOnFocusChange([this](bool /*focused*/) { applyVisualState(); });
   area->setEnabled(false);
-  m_inputArea = static_cast<InputArea *>(addChild(std::move(area)));
+  m_inputArea = static_cast<InputArea*>(addChild(std::move(area)));
   m_inputArea->setParticipatesInLayout(false);
   m_inputArea->setZIndex(1);
   m_inputArea->setPosition(0.0f, 0.0f);
@@ -330,13 +331,9 @@ void Button::updateInputArea() {
   }
 }
 
-bool Button::hovered() const noexcept {
-  return m_inputArea != nullptr && m_inputArea->hovered();
-}
+bool Button::hovered() const noexcept { return m_inputArea != nullptr && m_inputArea->hovered(); }
 
-bool Button::pressed() const noexcept {
-  return m_inputArea != nullptr && m_inputArea->pressed();
-}
+bool Button::pressed() const noexcept { return m_inputArea != nullptr && m_inputArea->pressed(); }
 
 void Button::setEnabled(bool enabled) {
   if (m_enabled == enabled) {
@@ -355,9 +352,7 @@ void Button::setSelected(bool selected) {
   applyVisualState();
 }
 
-void Button::setContentAlign(ButtonContentAlign align) {
-  m_contentAlign = align;
-}
+void Button::setContentAlign(ButtonContentAlign align) { m_contentAlign = align; }
 
 void Button::setVariant(ButtonVariant variant) {
   if (m_variant == variant) {
@@ -402,11 +397,15 @@ void Button::applyVariant() {
 void Button::refreshInputAreaEnabled() {
   if (m_inputArea != nullptr) {
     m_inputArea->setEnabled(
-        m_enabled &&
-        (static_cast<bool>(m_onClick) || static_cast<bool>(m_onMotion) ||
-         static_cast<bool>(m_onPointerMotion) || static_cast<bool>(m_onPress) ||
-         static_cast<bool>(m_onEnter) || static_cast<bool>(m_onLeave) ||
-         static_cast<bool>(m_onRightClick)));
+        m_enabled
+        && (static_cast<bool>(m_onClick)
+            || static_cast<bool>(m_onMotion)
+            || static_cast<bool>(m_onPointerMotion)
+            || static_cast<bool>(m_onPress)
+            || static_cast<bool>(m_onEnter)
+            || static_cast<bool>(m_onLeave)
+            || static_cast<bool>(m_onRightClick))
+    );
   }
 }
 
@@ -415,7 +414,7 @@ void Button::ensureLabel() {
     return;
   }
   auto label = std::make_unique<Label>();
-  m_label = static_cast<Label *>(addChild(std::move(label)));
+  m_label = static_cast<Label*>(addChild(std::move(label)));
   setMinHeight(Style::controlHeight());
   setPadding(Style::spaceSm(), Style::spaceMd());
   if (m_glyph != nullptr) {
@@ -432,7 +431,7 @@ void Button::ensureGlyph() {
   // insertChildAt so the glyph lands before the label in the children vector,
   // which is what Flex iterates to assign layout positions
   if (m_label != nullptr) {
-    auto &kids = children();
+    auto& kids = children();
     std::size_t labelIndex = 0;
     for (std::size_t i = 0; i < kids.size(); ++i) {
       if (kids[i].get() == m_label) {
@@ -441,10 +440,10 @@ void Button::ensureGlyph() {
       }
     }
     auto glyph = std::make_unique<Glyph>();
-    m_glyph = static_cast<Glyph *>(insertChildAt(labelIndex, std::move(glyph)));
+    m_glyph = static_cast<Glyph*>(insertChildAt(labelIndex, std::move(glyph)));
   } else {
     auto glyph = std::make_unique<Glyph>();
-    m_glyph = static_cast<Glyph *>(addChild(std::move(glyph)));
+    m_glyph = static_cast<Glyph*>(addChild(std::move(glyph)));
   }
   m_glyph->setHitTestVisible(false);
   if (m_label != nullptr) {
@@ -454,14 +453,11 @@ void Button::ensureGlyph() {
   applyColors(m_targetBg, m_targetBorder, m_targetLabel);
 }
 
-void Button::applyColors(const Color &bg, const Color &border,
-                         const Color &label) {
+void Button::applyColors(const Color& bg, const Color& border, const Color& label) {
   setFill(bg);
-  const bool isFocused = m_enabled && m_inputArea != nullptr &&
-                         m_inputArea->focused() && !(m_inputArea->pressed());
+  const bool isFocused = m_enabled && m_inputArea != nullptr && m_inputArea->focused() && !(m_inputArea->pressed());
   const float borderWidth =
-      isFocused ? std::max(m_palette.borderWidth, Style::borderWidth() * 2.0f)
-                : m_palette.borderWidth;
+      isFocused ? std::max(m_palette.borderWidth, Style::borderWidth() * 2.0f) : m_palette.borderWidth;
   setBorder(border, borderWidth);
   if (m_label != nullptr) {
     m_label->setColor(label);
@@ -469,14 +465,13 @@ void Button::applyColors(const Color &bg, const Color &border,
   if (m_glyph != nullptr) {
     m_glyph->setColor(label);
   }
-  for (auto &child : children()) {
-    if (child.get() == m_label || child.get() == m_glyph ||
-        child.get() == m_badge) {
+  for (auto& child : children()) {
+    if (child.get() == m_label || child.get() == m_glyph || child.get() == m_badge) {
       continue;
     }
-    if (auto *lbl = dynamic_cast<Label *>(child.get())) {
+    if (auto* lbl = dynamic_cast<Label*>(child.get())) {
       lbl->setColor(label);
-    } else if (auto *gl = dynamic_cast<Glyph *>(child.get())) {
+    } else if (auto* gl = dynamic_cast<Glyph*>(child.get())) {
       gl->setColor(label);
     }
   }
@@ -489,13 +484,11 @@ void Button::applyColors(const Color &bg, const Color &border,
   m_visualStateInitialized = true;
 }
 
-void Button::resolveVisualStateColors(Color &targetBg, Color &targetBorder,
-                                      Color &targetLabel) const {
+void Button::resolveVisualStateColors(Color& targetBg, Color& targetBorder, Color& targetLabel) const {
   bool isHovered = m_enabled && (!m_hoverSuppressed && hovered());
   bool isPressed = m_enabled && pressed();
   bool isSelected = m_enabled && m_selected;
-  bool isFocused =
-      m_enabled && m_inputArea != nullptr && m_inputArea->focused();
+  bool isFocused = m_enabled && m_inputArea != nullptr && m_inputArea->focused();
 
   if (!m_enabled) {
     targetBg = resolveColorSpec(m_palette.disabled.bg);
@@ -541,8 +534,7 @@ void Button::applyVisualState() {
     return;
   }
 
-  if (targetBg == m_targetBg && targetBorder == m_targetBorder &&
-      targetLabel == m_targetLabel) {
+  if (targetBg == m_targetBg && targetBorder == m_targetBorder && targetLabel == m_targetLabel) {
     return;
   }
 
@@ -569,15 +561,17 @@ void Button::applyVisualState() {
   m_animId = animationManager()->animate(
       0.0f, 1.0f, Style::animFast, Easing::EaseOutCubic,
       [this](float t) {
-        applyColors(lerpColor(m_fromBg, m_targetBg, t),
-                    lerpColor(m_fromBorder, m_targetBorder, t),
-                    lerpColor(m_fromLabel, m_targetLabel, t));
+        applyColors(
+            lerpColor(m_fromBg, m_targetBg, t), lerpColor(m_fromBorder, m_targetBorder, t),
+            lerpColor(m_fromLabel, m_targetLabel, t)
+        );
       },
-      [this]() { m_animId = 0; });
+      [this]() { m_animId = 0; }
+  );
   markPaintDirty();
 }
 
-void Button::doLayout(Renderer &renderer) {
+void Button::doLayout(Renderer& renderer) {
   const bool useCurrentSize = arrangingByLayout() || !sizeAssignedByLayout();
   const float assignedWidth = useCurrentSize ? width() : 0.0f;
   const float assignedHeight = useCurrentSize ? height() : 0.0f;
@@ -596,8 +590,7 @@ void Button::doLayout(Renderer &renderer) {
   // Buttons are often sized by a parent stretch pass. Preserve that assigned
   // box instead of collapsing back to intrinsic content width.
   if (assignedWidth > 0.0f || assignedHeight > 0.0f) {
-    setSize(std::max(width(), assignedWidth),
-            std::max(height(), assignedHeight));
+    setSize(std::max(width(), assignedWidth), std::max(height(), assignedHeight));
   }
 
   if (glyphOnly && m_contentAlign == ButtonContentAlign::Center) {
@@ -617,10 +610,9 @@ void Button::doLayout(Renderer &renderer) {
     float contentBottom = 0.0f;
     bool haveContent = false;
 
-    for (auto &child : children()) {
-      Node *node = child.get();
-      if (node == nullptr || !node->visible() ||
-          !node->participatesInLayout() || node->zIndex() < 0) {
+    for (auto& child : children()) {
+      Node* node = child.get();
+      if (node == nullptr || !node->visible() || !node->participatesInLayout() || node->zIndex() < 0) {
         continue;
       }
       const float left = node->x();
@@ -654,10 +646,9 @@ void Button::doLayout(Renderer &renderer) {
       const float targetTop = std::round((height() - contentHeight) * 0.5f);
       const float shiftY = targetTop - contentTop;
       if (std::abs(shiftX) > 0.01f || std::abs(shiftY) > 0.01f) {
-        for (auto &child : children()) {
-          Node *node = child.get();
-          if (node == nullptr || !node->visible() ||
-              !node->participatesInLayout() || node->zIndex() < 0) {
+        for (auto& child : children()) {
+          Node* node = child.get();
+          if (node == nullptr || !node->visible() || !node->participatesInLayout() || node->zIndex() < 0) {
             continue;
           }
           node->setPosition(node->x() + shiftX, node->y() + shiftY);
@@ -677,11 +668,8 @@ void Button::doLayout(Renderer &renderer) {
   }
 }
 
-LayoutSize Button::doMeasure(Renderer &renderer,
-                             const LayoutConstraints &constraints) {
+LayoutSize Button::doMeasure(Renderer& renderer, const LayoutConstraints& constraints) {
   return measureByLayout(renderer, constraints);
 }
 
-void Button::doArrange(Renderer &renderer, const LayoutRect &rect) {
-  arrangeByLayout(renderer, rect);
-}
+void Button::doArrange(Renderer& renderer, const LayoutRect& rect) { arrangeByLayout(renderer, rect); }

@@ -21,23 +21,30 @@ void InputArea::setOnRelease(std::function<void(const PointerData&)> callback) {
 void InputArea::setOnClick(std::function<void(const PointerData&)> callback) { m_onClick = std::move(callback); }
 void InputArea::setOnMotion(std::function<void(const PointerData&)> callback) { m_onMotion = std::move(callback); }
 void InputArea::setOnKeyDown(std::function<void(const KeyData&)> callback) { m_onKeyDown = std::move(callback); }
-void InputArea::setOnAxisHandler(std::function<bool(const PointerData&)> callback) { m_onAxisHandler = std::move(callback); }
+void InputArea::setOnAxisHandler(std::function<bool(const PointerData&)> callback) {
+  m_onAxisHandler = std::move(callback);
+}
 void InputArea::setOnFocusChange(std::function<void(bool)> callback) { m_onFocusChange = std::move(callback); }
 
 void InputArea::focus() {
-  if (m_focused) return;
+  if (m_focused)
+    return;
   m_focused = true;
   s_focused = this;
   markPaintDirty();
-  if (m_onFocusChange) m_onFocusChange(true);
+  if (m_onFocusChange)
+    m_onFocusChange(true);
 }
 
 void InputArea::blur() {
-  if (!m_focused) return;
+  if (!m_focused)
+    return;
   m_focused = false;
-  if (s_focused == this) s_focused = nullptr;
+  if (s_focused == this)
+    s_focused = nullptr;
   markPaintDirty();
-  if (m_onFocusChange) m_onFocusChange(false);
+  if (m_onFocusChange)
+    m_onFocusChange(false);
 }
 
 void InputArea::setFocused(InputArea* area) {

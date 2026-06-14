@@ -6,7 +6,7 @@
 
 namespace {
 
-constexpr char kVertexShader[] = R"(
+  constexpr char kVertexShader[] = R"(
 precision highp float;
 
 attribute vec2 a_position;
@@ -31,7 +31,7 @@ void main() {
 }
 )";
 
-constexpr char kCommonFragment[] = R"(
+  constexpr char kCommonFragment[] = R"(
 precision highp float;
 
 uniform vec2 u_rect_size;
@@ -58,8 +58,8 @@ float cornerMask() {
 }
 )";
 
-// --- Sun effect ---
-constexpr char kSunFragment[] = R"(
+  // --- Sun effect ---
+  constexpr char kSunFragment[] = R"(
 float efx_hash(vec2 p) {
     p = fract(p * vec2(234.34, 435.345));
     p += dot(p, p + 34.23);
@@ -152,8 +152,8 @@ void main() {
 }
 )";
 
-// --- Snow effect ---
-constexpr char kSnowFragment[] = R"(
+  // --- Snow effect ---
+  constexpr char kSnowFragment[] = R"(
 void main() {
     float aspect = u_item_width / u_item_height;
     vec2 uv = v_uv;
@@ -200,8 +200,8 @@ void main() {
 }
 )";
 
-// --- Rain effect (atmospheric haze + discrete falling drops) ---
-constexpr char kRainFragment[] = R"(
+  // --- Rain effect (atmospheric haze + discrete falling drops) ---
+  constexpr char kRainFragment[] = R"(
 float rain_hash(vec2 p) {
     p = fract(p * vec2(443.897, 441.423));
     p += dot(p, p + 19.19);
@@ -297,8 +297,8 @@ void main() {
 }
 )";
 
-// --- Cloud / Fog effect ---
-constexpr char kCloudFragment[] = R"(
+  // --- Cloud / Fog effect ---
+  constexpr char kCloudFragment[] = R"(
 float cloud_hash(vec2 p) {
     p = fract(p * vec2(234.34, 435.345));
     p += dot(p, p + 34.23);
@@ -389,8 +389,8 @@ void main() {
 }
 )";
 
-// --- Stars effect ---
-constexpr char kStarsFragment[] = R"(
+  // --- Stars effect ---
+  constexpr char kStarsFragment[] = R"(
 float star_hash(vec2 p) {
     p = fract(p * vec2(234.34, 435.345));
     p += dot(p, p + 34.23);
@@ -495,15 +495,15 @@ void EffectProgram::ensureInitialized() {
 }
 
 void EffectProgram::destroy() {
-  for (auto &pd : m_programs) {
+  for (auto& pd : m_programs) {
     pd.program.destroy();
   }
 }
 
-void EffectProgram::initProgram(std::size_t index, const char *fragSource) {
+void EffectProgram::initProgram(std::size_t index, const char* fragSource) {
   std::string fullFrag = std::string(kCommonFragment) + fragSource;
 
-  auto &pd = m_programs[index];
+  auto& pd = m_programs[index];
   pd.program.create(kVertexShader, fullFrag.c_str());
 
   auto id = pd.program.id();
@@ -525,9 +525,9 @@ void EffectProgram::initProgram(std::size_t index, const char *fragSource) {
   }
 }
 
-void EffectProgram::draw(float surfaceWidth, float surfaceHeight, float width,
-                         float height, const EffectStyle &style,
-                         const Mat3 &transform) const {
+void EffectProgram::draw(
+    float surfaceWidth, float surfaceHeight, float width, float height, const EffectStyle& style, const Mat3& transform
+) const {
   if (style.type == EffectType::None || width <= 0.0f || height <= 0.0f) {
     return;
   }
@@ -540,7 +540,7 @@ void EffectProgram::draw(float surfaceWidth, float surfaceHeight, float width,
     return;
   }
 
-  const auto &pd = m_programs[idx];
+  const auto& pd = m_programs[idx];
 
   static constexpr float kQuad[] = {
       0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, 1.0f,
@@ -566,8 +566,7 @@ void EffectProgram::draw(float surfaceWidth, float surfaceHeight, float width,
     glUniform1f(pd.itemHeightLoc, height);
   }
   if (pd.bgColorLoc >= 0) {
-    glUniform4f(pd.bgColorLoc, style.bgColor.r, style.bgColor.g,
-                style.bgColor.b, style.bgColor.a);
+    glUniform4f(pd.bgColorLoc, style.bgColor.r, style.bgColor.g, style.bgColor.b, style.bgColor.a);
   }
   if (pd.radiusLoc >= 0) {
     glUniform1f(pd.radiusLoc, style.radius);

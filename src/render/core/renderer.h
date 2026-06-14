@@ -25,14 +25,15 @@ class Renderer {
 public:
   virtual ~Renderer() = default;
 
-  [[nodiscard]] virtual TextMetrics measureText(std::string_view text, float fontSize, bool bold = false,
-                                                float maxWidth = 0.0f, int maxLines = 0,
-                                                TextAlign align = TextAlign::Start,
-                                                std::string_view fontFamily = {}) = 0;
+  [[nodiscard]] virtual TextMetrics measureText(
+      std::string_view text, float fontSize, bool bold = false, float maxWidth = 0.0f, int maxLines = 0,
+      TextAlign align = TextAlign::Start, std::string_view fontFamily = {}
+  ) = 0;
   [[nodiscard]] virtual TextMetrics measureFont(float fontSize, bool bold = false) = 0;
-  virtual void measureTextCursorStops(std::string_view text, float fontSize,
-                                      const std::vector<std::size_t>& byteOffsets, std::vector<float>& outStops,
-                                      bool bold = false) = 0;
+  virtual void measureTextCursorStops(
+      std::string_view text, float fontSize, const std::vector<std::size_t>& byteOffsets, std::vector<float>& outStops,
+      bool bold = false
+  ) = 0;
   [[nodiscard]] virtual TextMetrics measureGlyph(char32_t codepoint, float fontSize) = 0;
   [[nodiscard]] virtual TextureManager& textureManager() = 0;
   [[nodiscard]] virtual float renderScale() const noexcept = 0;

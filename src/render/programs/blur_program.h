@@ -12,8 +12,7 @@ public:
   void destroy();
 
   // Separable Gaussian blur; dirX/dirY pick axis, radius is kernel half-width.
-  void draw(TextureId srcTex, std::uint32_t width, std::uint32_t height,
-            float dirX, float dirY, float radius) const;
+  void draw(TextureId srcTex, std::uint32_t width, std::uint32_t height, float dirX, float dirY, float radius) const;
 
 private:
   ShaderProgram m_program;

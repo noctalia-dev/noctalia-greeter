@@ -15,33 +15,32 @@
 #include <wayland-client.h>
 
 namespace {
-constexpr Logger kLog("greeter-window");
+  constexpr Logger kLog("greeter-window");
 
-const xdg_surface_listener kXdgSurfaceListener = {
-    .configure = &GreeterWindow::handleXdgSurfaceConfigure,
-};
+  const xdg_surface_listener kXdgSurfaceListener = {
+      .configure = &GreeterWindow::handleXdgSurfaceConfigure,
+  };
 
-const xdg_toplevel_listener kToplevelListener = {
-    .configure = &GreeterWindow::handleToplevelConfigure,
-    .close = &GreeterWindow::handleToplevelClose,
-    .configure_bounds = &GreeterWindow::handleToplevelConfigureBounds,
-    .wm_capabilities = &GreeterWindow::handleToplevelWmCapabilities,
-};
+  const xdg_toplevel_listener kToplevelListener = {
+      .configure = &GreeterWindow::handleToplevelConfigure,
+      .close = &GreeterWindow::handleToplevelClose,
+      .configure_bounds = &GreeterWindow::handleToplevelConfigureBounds,
+      .wm_capabilities = &GreeterWindow::handleToplevelWmCapabilities,
+  };
 
-const wl_callback_listener kFrameListener = {
-    .done = &GreeterWindow::handleFrameDone,
-};
+  const wl_callback_listener kFrameListener = {
+      .done = &GreeterWindow::handleFrameDone,
+  };
 
-const wp_fractional_scale_v1_listener kFractionalScaleListener = {
-    .preferred_scale = &GreeterWindow::handleFractionalPreferredScale,
-};
+  const wp_fractional_scale_v1_listener kFractionalScaleListener = {
+      .preferred_scale = &GreeterWindow::handleFractionalPreferredScale,
+  };
 } // namespace
 
-GreeterWindow::GreeterWindow(WaylandClient &client, GlSharedContext &gl,
-                             RenderContext &renderContext,
-                             GreeterSurface &surface)
-    : m_client(client), m_gl(gl), m_renderContext(renderContext),
-      m_greeterSurface(surface) {}
+GreeterWindow::GreeterWindow(
+    WaylandClient& client, GlSharedContext& gl, RenderContext& renderContext, GreeterSurface& surface
+)
+    : m_client(client), m_gl(gl), m_renderContext(renderContext), m_greeterSurface(surface) {}
 
 GreeterWindow::~GreeterWindow() {
   destroyRoleObjects();
@@ -61,10 +60,9 @@ bool GreeterWindow::createSurface() {
   }
 
   if (m_client.fractionalScaleManager() != nullptr) {
-    m_fractionalScale = wp_fractional_scale_manager_v1_get_fractional_scale(
-        m_client.fractionalScaleManager(), m_wlSurface);
-    wp_fractional_scale_v1_add_listener(m_fractionalScale,
-                                        &kFractionalScaleListener, this);
+    m_fractionalScale =
+        wp_fractional_scale_manager_v1_get_fractional_scale(m_client.fractionalScaleManager(), m_wlSurface);
+    wp_fractional_scale_v1_add_listener(m_fractionalScale, &kFractionalScaleListener, this);
   }
   if (m_client.viewporter() != nullptr) {
     m_viewport = wp_viewporter_get_viewport(m_client.viewporter(), m_wlSurface);
@@ -134,17 +132,17 @@ void GreeterWindow::requestRedraw() {
   renderNow();
 }
 
-void GreeterWindow::bindOutput(wl_output *output) {
+void GreeterWindow::bindOutput(wl_output* output) {
   m_boundOutput = output;
   applySurfaceScale();
 }
 
 void GreeterWindow::handleFractionalPreferredScale(
-    void *data, struct wp_fractional_scale_v1 * /*fs*/, std::uint32_t scale) {
-  auto *self = static_cast<GreeterWindow *>(data);
+    void* data, struct wp_fractional_scale_v1* /*fs*/, std::uint32_t scale
+) {
+  auto* self = static_cast<GreeterWindow*>(data);
   self->m_surfaceScale = static_cast<float>(scale) / 120.0f;
-  self->m_client.setOutputPreferredScale(self->m_boundOutput,
-                                         self->m_surfaceScale);
+  self->m_client.setOutputPreferredScale(self->m_boundOutput, self->m_surfaceScale);
   self->applySurfaceScale();
 
   if (!self->m_configured || self->m_width == 0 || self->m_height == 0) {
@@ -169,15 +167,13 @@ void GreeterWindow::matchOutputLogicalSize() {
     return;
   }
 
-  if (m_width != logical->first || m_height != logical->second ||
-      !m_configured) {
+  if (m_width != logical->first || m_height != logical->second || !m_configured) {
     applyConfigure(logical->first, logical->second);
   }
 }
 
 void GreeterWindow::renderNow() {
-  if (!m_sceneReady || m_width == 0 || m_height == 0 ||
-      m_wlSurface == nullptr) {
+  if (!m_sceneReady || m_width == 0 || m_height == 0 || m_wlSurface == nullptr) {
     return;
   }
 
@@ -190,8 +186,7 @@ void GreeterWindow::applySurfaceScale() {
     return;
   }
 
-  const bool useFractional = m_fractionalScale != nullptr &&
-                             m_surfaceScale > 0.0f && m_viewport != nullptr;
+  const bool useFractional = m_fractionalScale != nullptr && m_surfaceScale > 0.0f && m_viewport != nullptr;
   if (useFractional) {
     wl_surface_set_buffer_scale(m_wlSurface, 1);
     if (m_width > 0 && m_height > 0) {
@@ -212,18 +207,16 @@ float GreeterWindow::effectiveSurfaceScale() const noexcept {
   return static_cast<float>(std::max(1, m_bufferScale));
 }
 
-std::uint32_t
-GreeterWindow::bufferWidthForLogical(std::uint32_t logical) const noexcept {
+std::uint32_t GreeterWindow::bufferWidthForLogical(std::uint32_t logical) const noexcept {
   return std::max<std::uint32_t>(
-      1, static_cast<std::uint32_t>(std::lround(static_cast<float>(logical) *
-                                                effectiveSurfaceScale())));
+      1, static_cast<std::uint32_t>(std::lround(static_cast<float>(logical) * effectiveSurfaceScale()))
+  );
 }
 
-std::uint32_t
-GreeterWindow::bufferHeightForLogical(std::uint32_t logical) const noexcept {
+std::uint32_t GreeterWindow::bufferHeightForLogical(std::uint32_t logical) const noexcept {
   return std::max<std::uint32_t>(
-      1, static_cast<std::uint32_t>(std::lround(static_cast<float>(logical) *
-                                                effectiveSurfaceScale())));
+      1, static_cast<std::uint32_t>(std::lround(static_cast<float>(logical) * effectiveSurfaceScale()))
+  );
 }
 
 bool GreeterWindow::ensureRenderTarget() {
@@ -231,8 +224,7 @@ bool GreeterWindow::ensureRenderTarget() {
   const std::uint32_t bufferHeight = bufferHeightForLogical(m_height);
 
   if (m_renderTarget.isReady()) {
-    if (m_renderTarget.bufferWidth() != bufferWidth ||
-        m_renderTarget.bufferHeight() != bufferHeight) {
+    if (m_renderTarget.bufferWidth() != bufferWidth || m_renderTarget.bufferHeight() != bufferHeight) {
       m_renderTarget.destroy();
     }
   }
@@ -250,8 +242,7 @@ bool GreeterWindow::ensureRenderTarget() {
   m_renderContext.syncContentScale(m_renderTarget);
 
   if (!m_renderTarget.isReady()) {
-    kLog.error("render target not ready ({}x{} logical, {}x{} buffer)", m_width,
-               m_height, bufferWidth, bufferHeight);
+    kLog.error("render target not ready ({}x{} logical, {}x{} buffer)", m_width, m_height, bufferWidth, bufferHeight);
     return false;
   }
 
@@ -263,10 +254,8 @@ void GreeterWindow::paintFrame() {
     return;
   }
 
-  const bool needsLayout =
-      m_layoutNeeded || m_greeterSurface.sceneRoot()->layoutDirty();
-  const bool needsRedraw = m_redrawNeeded || needsLayout ||
-                           m_greeterSurface.sceneRoot()->paintDirty();
+  const bool needsLayout = m_layoutNeeded || m_greeterSurface.sceneRoot()->layoutDirty();
+  const bool needsRedraw = m_redrawNeeded || needsLayout || m_greeterSurface.sceneRoot()->paintDirty();
 
   if (!needsRedraw) {
     return;
@@ -281,9 +270,9 @@ void GreeterWindow::paintFrame() {
 
   if (!m_loggedFirstFrame) {
     kLog.info(
-        "presented first frame {}x{} logical ({}x{} buffer, scale={:.2f})",
-        m_width, m_height, m_renderTarget.bufferWidth(),
-        m_renderTarget.bufferHeight(), effectiveSurfaceScale());
+        "presented first frame {}x{} logical ({}x{} buffer, scale={:.2f})", m_width, m_height,
+        m_renderTarget.bufferWidth(), m_renderTarget.bufferHeight(), effectiveSurfaceScale()
+    );
     m_loggedFirstFrame = true;
   }
 }
@@ -304,9 +293,8 @@ void GreeterWindow::requestNextFrame() {
   }
 }
 
-void GreeterWindow::handleFrameDone(void *data, wl_callback *callback,
-                                    std::uint32_t /*time*/) {
-  auto *self = static_cast<GreeterWindow *>(data);
+void GreeterWindow::handleFrameDone(void* data, wl_callback* callback, std::uint32_t /*time*/) {
+  auto* self = static_cast<GreeterWindow*>(data);
   wl_callback_destroy(callback);
   self->m_frameCallback = nullptr;
 
@@ -314,9 +302,10 @@ void GreeterWindow::handleFrameDone(void *data, wl_callback *callback,
     return;
   }
 
-  const bool dirty = self->m_redrawNeeded || self->m_layoutNeeded ||
-                     self->m_greeterSurface.sceneRoot()->paintDirty() ||
-                     self->m_greeterSurface.sceneRoot()->layoutDirty();
+  const bool dirty = self->m_redrawNeeded
+      || self->m_layoutNeeded
+      || self->m_greeterSurface.sceneRoot()->paintDirty()
+      || self->m_greeterSurface.sceneRoot()->layoutDirty();
   if (dirty) {
     self->paintFrame();
   }
@@ -329,10 +318,8 @@ void GreeterWindow::applyConfigure(std::uint32_t width, std::uint32_t height) {
   height = std::max<std::uint32_t>(1, height);
 
   const int32_t nextBufferScale = m_client.outputBufferScale(m_boundOutput);
-  const bool sizeChanged =
-      m_width != width || m_height != height || !m_configured;
-  const bool scaleChanged =
-      m_fractionalScale == nullptr && m_bufferScale != nextBufferScale;
+  const bool sizeChanged = m_width != width || m_height != height || !m_configured;
+  const bool scaleChanged = m_fractionalScale == nullptr && m_bufferScale != nextBufferScale;
 
   if (sizeChanged || scaleChanged) {
     m_renderTarget.destroy();
@@ -342,8 +329,7 @@ void GreeterWindow::applyConfigure(std::uint32_t width, std::uint32_t height) {
     m_layoutNeeded = true;
     m_redrawNeeded = true;
     applySurfaceScale();
-    kLog.info("configured {}x{} logical (scale={:.2f})", m_width, m_height,
-              effectiveSurfaceScale());
+    kLog.info("configured {}x{} logical (scale={:.2f})", m_width, m_height, effectiveSurfaceScale());
   } else {
     applySurfaceScale();
   }
@@ -353,9 +339,7 @@ void GreeterWindow::applyConfigure(std::uint32_t width, std::uint32_t height) {
   }
 }
 
-void GreeterWindow::acknowledgeConfigure(std::uint32_t width,
-                                         std::uint32_t height,
-                                         std::uint32_t serial) {
+void GreeterWindow::acknowledgeConfigure(std::uint32_t width, std::uint32_t height, std::uint32_t serial) {
   if (m_xdgSurface == nullptr) {
     return;
   }
@@ -370,16 +354,11 @@ void GreeterWindow::acknowledgeConfigure(std::uint32_t width,
   applyConfigure(width, height);
 }
 
-void GreeterWindow::handleXdgSurfaceConfigure(void *data, xdg_surface *surface,
-                                              std::uint32_t serial) {
-  auto *self = static_cast<GreeterWindow *>(data);
+void GreeterWindow::handleXdgSurfaceConfigure(void* data, xdg_surface* surface, std::uint32_t serial) {
+  auto* self = static_cast<GreeterWindow*>(data);
 
-  std::uint32_t width = self->m_pendingWidth > 0
-                            ? static_cast<std::uint32_t>(self->m_pendingWidth)
-                            : 0;
-  std::uint32_t height = self->m_pendingHeight > 0
-                             ? static_cast<std::uint32_t>(self->m_pendingHeight)
-                             : 0;
+  std::uint32_t width = self->m_pendingWidth > 0 ? static_cast<std::uint32_t>(self->m_pendingWidth) : 0;
+  std::uint32_t height = self->m_pendingHeight > 0 ? static_cast<std::uint32_t>(self->m_pendingHeight) : 0;
   if (self->m_lastToplevelWidth > 0) {
     width = static_cast<std::uint32_t>(self->m_lastToplevelWidth);
   }
@@ -387,8 +366,7 @@ void GreeterWindow::handleXdgSurfaceConfigure(void *data, xdg_surface *surface,
     height = static_cast<std::uint32_t>(self->m_lastToplevelHeight);
   }
   if (width == 0 || height == 0) {
-    const auto logical =
-        self->m_client.logicalSizeForOutput(self->m_boundOutput);
+    const auto logical = self->m_client.logicalSizeForOutput(self->m_boundOutput);
     if (logical) {
       if (width == 0) {
         width = logical->first;
@@ -416,12 +394,10 @@ void GreeterWindow::handleXdgSurfaceConfigure(void *data, xdg_surface *surface,
   (void)surface;
 }
 
-void GreeterWindow::handleToplevelConfigure(void *data,
-                                            xdg_toplevel * /*toplevel*/,
-                                            std::int32_t width,
-                                            std::int32_t height,
-                                            wl_array * /*states*/) {
-  auto *self = static_cast<GreeterWindow *>(data);
+void GreeterWindow::handleToplevelConfigure(
+    void* data, xdg_toplevel* /*toplevel*/, std::int32_t width, std::int32_t height, wl_array* /*states*/
+) {
+  auto* self = static_cast<GreeterWindow*>(data);
   if (width > 0) {
     self->m_lastToplevelWidth = width;
     self->m_pendingWidth = width;
@@ -432,19 +408,16 @@ void GreeterWindow::handleToplevelConfigure(void *data,
   }
 }
 
-void GreeterWindow::handleToplevelClose(void * /*data*/,
-                                        xdg_toplevel * /*toplevel*/) {
+void GreeterWindow::handleToplevelClose(void* /*data*/, xdg_toplevel* /*toplevel*/) {
   kLog.info("toplevel close requested");
 }
 
-void GreeterWindow::handleToplevelConfigureBounds(void * /*data*/,
-                                                  xdg_toplevel * /*toplevel*/,
-                                                  std::int32_t /*width*/,
-                                                  std::int32_t /*height*/) {}
+void GreeterWindow::handleToplevelConfigureBounds(
+    void* /*data*/, xdg_toplevel* /*toplevel*/, std::int32_t /*width*/, std::int32_t /*height*/
+) {}
 
-void GreeterWindow::handleToplevelWmCapabilities(void * /*data*/,
-                                                 xdg_toplevel * /*toplevel*/,
-                                                 wl_array * /*capabilities*/) {}
+void GreeterWindow::
+    handleToplevelWmCapabilities(void* /*data*/, xdg_toplevel* /*toplevel*/, wl_array* /*capabilities*/) {}
 
 void GreeterWindow::destroyRoleObjects() {
   if (m_frameCallback != nullptr) {

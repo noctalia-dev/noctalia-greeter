@@ -31,7 +31,7 @@ public:
     log("error", std::format(fmt, std::forward<Args>(args)...));
   }
 
-  template <typename... Args> void debug(std::format_string<Args...> fmt, Args &&...args) const {
+  template <typename... Args> void debug(std::format_string<Args...> fmt, Args&&... args) const {
     log("debug", std::format(fmt, std::forward<Args>(args)...));
   }
 

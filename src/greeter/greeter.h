@@ -22,19 +22,17 @@ public:
   Greeter();
   ~Greeter();
 
-  bool initialize(WaylandClient &client);
-  int run(WaylandClient &client, const std::atomic<bool> &shutdownRequested);
+  bool initialize(WaylandClient& client);
+  int run(WaylandClient& client, const std::atomic<bool>& shutdownRequested);
 
-  void onKeyboardEvent(std::uint32_t sym, std::uint32_t utf32,
-                       std::uint32_t modifiers, bool pressed, bool preedit);
-  void onPointerLeave(GreeterWindow &window);
-  void onPointerMotion(GreeterWindow &window, double x, double y);
-  void onPointerButton(GreeterWindow &window, double x, double y,
-                       std::uint32_t button, bool pressed);
+  void onKeyboardEvent(std::uint32_t sym, std::uint32_t utf32, std::uint32_t modifiers, bool pressed, bool preedit);
+  void onPointerLeave(GreeterWindow& window);
+  void onPointerMotion(GreeterWindow& window, double x, double y);
+  void onPointerButton(GreeterWindow& window, double x, double y, std::uint32_t button, bool pressed);
 
   void onThemeChanged();
 
-  bool startSession(const std::string &command);
+  bool startSession(const std::string& command);
 
 private:
   struct View {
@@ -43,18 +41,18 @@ private:
   };
 
   void connectGreetd();
-  void setupInputCallbacks(WaylandClient &client);
+  void setupInputCallbacks(WaylandClient& client);
   void syncOutputWindows();
-  void syncStateFrom(const GreeterSurface *source);
-  [[nodiscard]] View *viewForWindow(GreeterWindow &window) noexcept;
-  [[nodiscard]] View *viewForSurface(wl_surface *surface) noexcept;
+  void syncStateFrom(const GreeterSurface* source);
+  [[nodiscard]] View* viewForWindow(GreeterWindow& window) noexcept;
+  [[nodiscard]] View* viewForSurface(wl_surface* surface) noexcept;
 
-  WaylandClient *m_client = nullptr;
+  WaylandClient* m_client = nullptr;
   GlSharedContext m_glSharedContext;
   std::unique_ptr<RenderContext> m_renderContext;
   std::vector<View> m_views;
   GreetdClient m_greetdClient;
-  GreeterSurface *m_activeSurface = nullptr;
+  GreeterSurface* m_activeSurface = nullptr;
 
   std::string m_defaultUsername;
   bool m_sessionStarted = false;

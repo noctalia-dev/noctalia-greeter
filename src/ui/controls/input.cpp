@@ -16,25 +16,23 @@
 
 namespace {
 
-constexpr float kMinWidth = 48.0f;
-constexpr float kCursorWidth = 1.25f;
-constexpr float kCursorPadV = 4.0f;
-constexpr float kCursorMinHeight = 14.0f;
-constexpr float kCursorHeightRatio = 0.50f;
-constexpr float kCursorRevealPadding = 2.0f;
-constexpr float kTextInnerInset = 3.0f;
-constexpr float kPlaceholderAlpha = 0.68f;
-constexpr float kPasswordGlyphScale = 0.82f;
+  constexpr float kMinWidth = 48.0f;
+  constexpr float kCursorWidth = 1.25f;
+  constexpr float kCursorPadV = 4.0f;
+  constexpr float kCursorMinHeight = 14.0f;
+  constexpr float kCursorHeightRatio = 0.50f;
+  constexpr float kCursorRevealPadding = 2.0f;
+  constexpr float kTextInnerInset = 3.0f;
+  constexpr float kPlaceholderAlpha = 0.68f;
+  constexpr float kPasswordGlyphScale = 0.82f;
 
-char32_t passwordMaskCodepoint() {
-  return GlyphRegistry::lookup("circle-filled");
-}
+  char32_t passwordMaskCodepoint() { return GlyphRegistry::lookup("circle-filled"); }
 
 } // namespace
 
 Input::Input() : Node(NodeType::Container) {
   auto bg = std::make_unique<RectNode>();
-  m_background = static_cast<RectNode *>(addChild(std::move(bg)));
+  m_background = static_cast<RectNode*>(addChild(std::move(bg)));
 
   auto textViewport = std::make_unique<Node>();
   textViewport->setClipChildren(true);
@@ -42,38 +40,39 @@ Input::Input() : Node(NodeType::Container) {
   m_textViewport = addChild(std::move(textViewport));
 
   auto sel = std::make_unique<RectNode>();
-  sel->setStyle(RoundedRectStyle{
-      .fill = colorForRole(ColorRole::Primary),
-      .fillMode = FillMode::Solid,
-      .radius = 2.0f,
-  });
+  sel->setStyle(
+      RoundedRectStyle{
+          .fill = colorForRole(ColorRole::Primary),
+          .fillMode = FillMode::Solid,
+          .radius = 2.0f,
+      }
+  );
   sel->setOpacity(0.3f);
   sel->setVisible(false);
-  m_selectionRect =
-      static_cast<RectNode *>(m_textViewport->addChild(std::move(sel)));
+  m_selectionRect = static_cast<RectNode*>(m_textViewport->addChild(std::move(sel)));
 
   auto label = std::make_unique<Label>();
   label->setFontSize(m_fontSize);
   label->setMaxLines(1);
   label->setColor(colorForRole(ColorRole::OnSurface));
-  m_label = static_cast<Label *>(m_textViewport->addChild(std::move(label)));
+  m_label = static_cast<Label*>(m_textViewport->addChild(std::move(label)));
 
   auto cursor = std::make_unique<RectNode>();
-  cursor->setStyle(RoundedRectStyle{
-      .fill = colorForRole(ColorRole::Primary),
-      .fillMode = FillMode::Solid,
-      .radius = 1.0f,
-  });
+  cursor->setStyle(
+      RoundedRectStyle{
+          .fill = colorForRole(ColorRole::Primary),
+          .fillMode = FillMode::Solid,
+          .radius = 1.0f,
+      }
+  );
   cursor->setVisible(false);
-  m_cursor =
-      static_cast<RectNode *>(m_textViewport->addChild(std::move(cursor)));
+  m_cursor = static_cast<RectNode*>(m_textViewport->addChild(std::move(cursor)));
 
   auto area = std::make_unique<InputArea>();
   area->setFocusable(true);
-  area->setOnEnter(
-      [this](const InputArea::PointerData &) { applyVisualState(); });
+  area->setOnEnter([this](const InputArea::PointerData&) { applyVisualState(); });
   area->setOnLeave([this]() { applyVisualState(); });
-  area->setOnPress([this](const InputArea::PointerData &data) {
+  area->setOnPress([this](const InputArea::PointerData& data) {
     if (!data.pressed || data.button != BTN_LEFT) {
       return;
     }
@@ -84,9 +83,7 @@ Input::Input() : Node(NodeType::Container) {
     markLayoutDirty();
     markPaintDirty();
   });
-  area->setOnKeyDown([this](const InputArea::KeyData &k) {
-    handleKey(k.sym, k.utf32, k.modifiers, k.preedit);
-  });
+  area->setOnKeyDown([this](const InputArea::KeyData& k) { handleKey(k.sym, k.utf32, k.modifiers, k.preedit); });
   area->setOnFocusChange([this](bool focused) {
     applyVisualState();
     updateInteractiveGeometry();
@@ -94,7 +91,7 @@ Input::Input() : Node(NodeType::Container) {
       m_onFocusLoss();
     }
   });
-  m_inputArea = static_cast<InputArea *>(addChild(std::move(area)));
+  m_inputArea = static_cast<InputArea*>(addChild(std::move(area)));
 
   applyVisualState();
 }
@@ -123,9 +120,7 @@ void Input::setFontSize(float size) {
   markLayoutDirty();
 }
 
-void Input::setControlHeight(float height) {
-  m_controlHeight = std::max(1.0f, height);
-}
+void Input::setControlHeight(float height) { m_controlHeight = std::max(1.0f, height); }
 void Input::setPasswordMode(bool enabled) {
   if (m_passwordMode == enabled) {
     return;
@@ -150,15 +145,9 @@ void Input::setEnabled(bool enabled) {
 }
 void Input::setBold(bool) {}
 
-void Input::setOnChange(std::function<void(const std::string &)> callback) {
-  m_onChange = std::move(callback);
-}
-void Input::setOnSubmit(std::function<void(const std::string &)> callback) {
-  m_onSubmit = std::move(callback);
-}
-void Input::setOnFocusLoss(std::function<void()> callback) {
-  m_onFocusLoss = std::move(callback);
-}
+void Input::setOnChange(std::function<void(const std::string&)> callback) { m_onChange = std::move(callback); }
+void Input::setOnSubmit(std::function<void(const std::string&)> callback) { m_onSubmit = std::move(callback); }
+void Input::setOnFocusLoss(std::function<void()> callback) { m_onFocusLoss = std::move(callback); }
 
 void Input::selectAll() {
   m_selectionAnchor = 0;
@@ -178,8 +167,7 @@ void Input::updateDisplayText() {
   }
 }
 
-void Input::handleKey(std::uint32_t sym, std::uint32_t utf32,
-                      std::uint32_t modifiers, bool preedit) {
+void Input::handleKey(std::uint32_t sym, std::uint32_t utf32, std::uint32_t modifiers, bool preedit) {
   if (preedit) {
     return;
   }
@@ -188,11 +176,14 @@ void Input::handleKey(std::uint32_t sym, std::uint32_t utf32,
   const bool ctrl = (modifiers & KeyMod::Ctrl) != 0;
 
   if (utf32 == 0) {
-    const bool navigationOrEdit =
-        KeySymbol::isBackspace(sym) || KeySymbol::isDelete(sym) ||
-        KeySymbol::isLeft(sym) || KeySymbol::isRight(sym) ||
-        KeySymbol::isHome(sym) || KeySymbol::isEnd(sym) ||
-        KeySymbol::isEnter(sym) || (ctrl && (sym == 'a' || sym == 'A'));
+    const bool navigationOrEdit = KeySymbol::isBackspace(sym)
+        || KeySymbol::isDelete(sym)
+        || KeySymbol::isLeft(sym)
+        || KeySymbol::isRight(sym)
+        || KeySymbol::isHome(sym)
+        || KeySymbol::isEnd(sym)
+        || KeySymbol::isEnter(sym)
+        || (ctrl && (sym == 'a' || sym == 'A'));
     if (!navigationOrEdit) {
       return;
     }
@@ -286,7 +277,7 @@ void Input::handleKey(std::uint32_t sym, std::uint32_t utf32,
   }
 }
 
-void Input::doLayout(Renderer &renderer) {
+void Input::doLayout(Renderer& renderer) {
   const float w = width() > 0.0f ? width() : kMinWidth;
   const float h = m_controlHeight;
   setSize(w, h);
@@ -309,8 +300,7 @@ void Input::doLayout(Renderer &renderer) {
   float passwordGlyphSize = 0.0f;
   if (showPasswordGlyphs) {
     passwordGlyphSize = m_fontSize * kPasswordGlyphScale;
-    const auto metrics =
-        renderer.measureGlyph(passwordMaskCodepoint(), passwordGlyphSize);
+    const auto metrics = renderer.measureGlyph(passwordMaskCodepoint(), passwordGlyphSize);
     const float glyphInkCenter = (metrics.top + metrics.bottom) * 0.5f;
     maskGlyphY = std::round(h * 0.5f - glyphInkCenter);
   }
@@ -323,8 +313,7 @@ void Input::doLayout(Renderer &renderer) {
       ++charCount;
       m_stopByte.push_back(pos);
       if (showPasswordGlyphs) {
-        const auto metrics =
-            renderer.measureGlyph(passwordMaskCodepoint(), passwordGlyphSize);
+        const auto metrics = renderer.measureGlyph(passwordMaskCodepoint(), passwordGlyphSize);
         maskX += metrics.width;
         m_stopX.push_back(maskX);
       }
@@ -347,7 +336,7 @@ void Input::doLayout(Renderer &renderer) {
     syncPasswordGlyphNodes(charCount);
     float gx = -m_scrollOffset;
     for (std::size_t i = 0; i < m_passwordGlyphs.size(); ++i) {
-      auto *glyph = m_passwordGlyphs[i];
+      auto* glyph = m_passwordGlyphs[i];
       const char32_t codepoint = passwordMaskCodepoint();
       const auto metrics = renderer.measureGlyph(codepoint, passwordGlyphSize);
       glyph->setCodepoint(codepoint);
@@ -387,8 +376,7 @@ void Input::doLayout(Renderer &renderer) {
   applyVisualState();
 }
 
-LayoutSize Input::doMeasure(Renderer &renderer,
-                            const LayoutConstraints &constraints) {
+LayoutSize Input::doMeasure(Renderer& renderer, const LayoutConstraints& constraints) {
   doLayout(renderer);
   return constraints.constrain({width(), height()});
 }
@@ -400,32 +388,31 @@ void Input::applyVisualState() {
 
   const bool focused = m_inputArea != nullptr && m_inputArea->focused();
   const bool hovered = m_inputArea != nullptr && m_inputArea->hovered();
-  const Color fill = focused ? colorForRole(ColorRole::Surface)
-                             : colorForRole(ColorRole::SurfaceVariant);
+  const Color fill = focused ? colorForRole(ColorRole::Surface) : colorForRole(ColorRole::SurfaceVariant);
   const Color border = m_invalid ? colorForRole(ColorRole::Error)
-                       : focused ? colorForRole(ColorRole::Primary)
-                       : hovered ? colorForRole(ColorRole::Hover)
+      : focused                  ? colorForRole(ColorRole::Primary)
+      : hovered                  ? colorForRole(ColorRole::Hover)
                                  : colorForRole(ColorRole::Outline);
 
-  m_background->setStyle(RoundedRectStyle{
-      .fill = fill,
-      .border = border,
-      .fillMode = FillMode::Solid,
-      .radius = Style::scaledRadiusMd(),
-      .softness = 1.0f,
-      .borderWidth = Style::borderWidth(),
-  });
+  m_background->setStyle(
+      RoundedRectStyle{
+          .fill = fill,
+          .border = border,
+          .fillMode = FillMode::Solid,
+          .radius = Style::scaledRadiusMd(),
+          .softness = 1.0f,
+          .borderWidth = Style::borderWidth(),
+      }
+  );
 
   const bool showingPlaceholder = m_value.empty() && !m_placeholder.empty();
-  const Color textColor =
-      m_invalid ? colorForRole(ColorRole::Error)
-      : showingPlaceholder
-          ? colorForRole(ColorRole::OnSurfaceVariant, kPlaceholderAlpha)
-          : colorForRole(ColorRole::OnSurface);
+  const Color textColor = m_invalid ? colorForRole(ColorRole::Error)
+      : showingPlaceholder          ? colorForRole(ColorRole::OnSurfaceVariant, kPlaceholderAlpha)
+                                    : colorForRole(ColorRole::OnSurface);
   if (m_label != nullptr) {
     m_label->setColor(textColor);
   }
-  for (auto *glyph : m_passwordGlyphs) {
+  for (auto* glyph : m_passwordGlyphs) {
     glyph->setColor(textColor);
   }
 }
@@ -446,11 +433,9 @@ void Input::updateInteractiveGeometry() {
   }
 
   const float controlHeight = height() > 0.0f ? height() : m_controlHeight;
-  const float maxCursorHeight =
-      std::max(0.0f, controlHeight - kCursorPadV * 2.0f);
+  const float maxCursorHeight = std::max(0.0f, controlHeight - kCursorPadV * 2.0f);
   const float cursorHeight =
-      std::clamp(controlHeight * kCursorHeightRatio,
-                 std::min(kCursorMinHeight, maxCursorHeight), maxCursorHeight);
+      std::clamp(controlHeight * kCursorHeightRatio, std::min(kCursorMinHeight, maxCursorHeight), maxCursorHeight);
   const float cursorY = std::round((controlHeight - cursorHeight) * 0.5f);
   const float cursorX = stopXForByte(m_cursorPos) - m_scrollOffset;
   m_cursor->setPosition(cursorX, cursorY);
@@ -499,9 +484,7 @@ void Input::clampScrollOffset() {
     m_scrollOffset = 0.0f;
     return;
   }
-  const float maxOffset =
-      std::max(0.0f, m_stopX.back() - textViewportWidth() + kCursorWidth +
-                         kCursorRevealPadding);
+  const float maxOffset = std::max(0.0f, m_stopX.back() - textViewportWidth() + kCursorWidth + kCursorRevealPadding);
   m_scrollOffset = std::clamp(m_scrollOffset, 0.0f, maxOffset);
 }
 
@@ -510,14 +493,13 @@ void Input::syncPasswordGlyphNodes(std::size_t count) {
     return;
   }
   while (m_passwordGlyphs.size() > count) {
-    auto *node = m_passwordGlyphs.back();
+    auto* node = m_passwordGlyphs.back();
     (void)m_textViewport->removeChild(node);
     m_passwordGlyphs.pop_back();
   }
   while (m_passwordGlyphs.size() < count) {
     auto glyph = std::make_unique<GlyphNode>();
-    auto *glyphPtr = static_cast<GlyphNode *>(
-        m_textViewport->insertChildAt(2, std::move(glyph)));
+    auto* glyphPtr = static_cast<GlyphNode*>(m_textViewport->insertChildAt(2, std::move(glyph)));
     m_passwordGlyphs.push_back(glyphPtr);
   }
 }
@@ -530,17 +512,11 @@ void Input::deleteSelection() {
   m_selectionAnchor = start;
 }
 
-bool Input::hasSelection() const noexcept {
-  return m_selectionAnchor != m_cursorPos;
-}
+bool Input::hasSelection() const noexcept { return m_selectionAnchor != m_cursorPos; }
 
-std::size_t Input::selectionStart() const noexcept {
-  return std::min(m_selectionAnchor, m_cursorPos);
-}
+std::size_t Input::selectionStart() const noexcept { return std::min(m_selectionAnchor, m_cursorPos); }
 
-std::size_t Input::selectionEnd() const noexcept {
-  return std::max(m_selectionAnchor, m_cursorPos);
-}
+std::size_t Input::selectionEnd() const noexcept { return std::max(m_selectionAnchor, m_cursorPos); }
 
 float Input::textViewportWidth() const noexcept {
   const float w = width() > 0.0f ? width() : kMinWidth;
@@ -573,19 +549,18 @@ std::size_t Input::xToByteOffset(float localX) const {
   return m_stopByte.back();
 }
 
-std::size_t Input::nextCharPos(const std::string &s, std::size_t pos) {
+std::size_t Input::nextCharPos(const std::string& s, std::size_t pos) {
   if (pos >= s.size()) {
     return pos;
   }
   ++pos;
-  while (pos < s.size() &&
-         (static_cast<unsigned char>(s[pos]) & 0xC0U) == 0x80U) {
+  while (pos < s.size() && (static_cast<unsigned char>(s[pos]) & 0xC0U) == 0x80U) {
     ++pos;
   }
   return pos;
 }
 
-std::size_t Input::prevCharPos(const std::string &s, std::size_t pos) {
+std::size_t Input::prevCharPos(const std::string& s, std::size_t pos) {
   if (pos == 0) {
     return 0;
   }
