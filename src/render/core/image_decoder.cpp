@@ -23,8 +23,15 @@ namespace {
 
   // Returns true if the buffer starts with the RIFF....WEBP signature.
   bool isWebP(const std::uint8_t* data, std::size_t size) {
-    return size >= 12 && data[0] == 'R' && data[1] == 'I' && data[2] == 'F' && data[3] == 'F' && data[8] == 'W' &&
-           data[9] == 'E' && data[10] == 'B' && data[11] == 'P';
+    return size >= 12
+        && data[0] == 'R'
+        && data[1] == 'I'
+        && data[2] == 'F'
+        && data[3] == 'F'
+        && data[8] == 'W'
+        && data[9] == 'E'
+        && data[10] == 'B'
+        && data[11] == 'P';
   }
 
   std::optional<DecodedRasterImage> decodeWebP(const std::uint8_t* data, std::size_t size, std::string* errorMessage) {
@@ -48,8 +55,8 @@ namespace {
 
 } // namespace
 
-std::optional<DecodedRasterImage> decodeRasterImage(const std::uint8_t* data, std::size_t size,
-                                                    std::string* errorMessage) {
+std::optional<DecodedRasterImage>
+decodeRasterImage(const std::uint8_t* data, std::size_t size, std::string* errorMessage) {
   if ((data == nullptr) || (size == 0)) {
     if (errorMessage != nullptr) {
       *errorMessage = "empty image buffer";
@@ -89,14 +96,21 @@ std::optional<DecodedRasterImage> decodeRasterImage(const std::uint8_t* data, st
 namespace {
 
   bool isGif(const std::uint8_t* data, std::size_t size) {
-    return size >= 6 && data[0] == 'G' && data[1] == 'I' && data[2] == 'F' && data[3] == '8' &&
-           (data[4] == '7' || data[4] == '9') && data[5] == 'a';
+    return size >= 6
+        && data[0] == 'G'
+        && data[1] == 'I'
+        && data[2] == 'F'
+        && data[3] == '8'
+        && (data[4] == '7' || data[4] == '9')
+        && data[5] == 'a';
   }
 
   // GIF disposal applied to the persistent canvas BEFORE drawing the next
   // frame, given the previous frame's disposal code and bounds.
-  void applyDisposal(std::uint8_t* canvas, int canvasWidth, int canvasHeight, wuffs_base__animation_disposal disposal,
-                     wuffs_base__rect_ie_u32 bounds, const std::uint8_t* previous) {
+  void applyDisposal(
+      std::uint8_t* canvas, int canvasWidth, int canvasHeight, wuffs_base__animation_disposal disposal,
+      wuffs_base__rect_ie_u32 bounds, const std::uint8_t* previous
+  ) {
     if (disposal == WUFFS_BASE__ANIMATION_DISPOSAL__NONE) {
       return;
     }
@@ -131,8 +145,9 @@ namespace {
 
 } // namespace
 
-std::optional<DecodedRasterAnimation> decodeAnimatedGif(const std::uint8_t* data, std::size_t size, int maxFrames,
-                                                        std::size_t maxRgbaBytes, std::string* errorMessage) {
+std::optional<DecodedRasterAnimation> decodeAnimatedGif(
+    const std::uint8_t* data, std::size_t size, int maxFrames, std::size_t maxRgbaBytes, std::string* errorMessage
+) {
   auto fail = [&](const char* msg) -> std::optional<DecodedRasterAnimation> {
     if (errorMessage != nullptr) {
       *errorMessage = msg;
@@ -174,8 +189,9 @@ std::optional<DecodedRasterAnimation> decodeAnimatedGif(const std::uint8_t* data
   const std::size_t canvasBytes = static_cast<std::size_t>(canvasBytes64);
 
   wuffs_base__pixel_config pixcfg{};
-  wuffs_base__pixel_config__set(&pixcfg, WUFFS_BASE__PIXEL_FORMAT__RGBA_NONPREMUL, WUFFS_BASE__PIXEL_SUBSAMPLING__NONE,
-                                width, height);
+  wuffs_base__pixel_config__set(
+      &pixcfg, WUFFS_BASE__PIXEL_FORMAT__RGBA_NONPREMUL, WUFFS_BASE__PIXEL_SUBSAMPLING__NONE, width, height
+  );
 
   std::vector<std::uint8_t> canvas(canvasBytes, 0);
   std::vector<std::uint8_t> previous; // lazy-allocated only if a RESTORE_PREVIOUS frame appears
@@ -215,8 +231,10 @@ std::optional<DecodedRasterAnimation> decodeAnimatedGif(const std::uint8_t* data
       break;
     }
 
-    applyDisposal(canvas.data(), static_cast<int>(width), static_cast<int>(height), prevDisposal, prevBounds,
-                  previous.empty() ? nullptr : previous.data());
+    applyDisposal(
+        canvas.data(), static_cast<int>(width), static_cast<int>(height), prevDisposal, prevBounds,
+        previous.empty() ? nullptr : previous.data()
+    );
 
     const wuffs_base__animation_disposal currentDisposal = fc.disposal();
     if (currentDisposal == WUFFS_BASE__ANIMATION_DISPOSAL__RESTORE_PREVIOUS) {

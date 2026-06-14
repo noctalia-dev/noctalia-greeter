@@ -17,8 +17,7 @@ public:
   void pointerLeave();
   void pointerMotion(float x, float y, std::uint32_t serial);
   void pointerButton(float x, float y, std::uint32_t button, bool pressed);
-  void pointerAxis(float x, float y, std::uint32_t axis, std::uint32_t axisSource,
-                   double value, std::int32_t discrete);
+  void pointerAxis(float x, float y, std::uint32_t axis, std::uint32_t axisSource, double value, std::int32_t discrete);
   void keyEvent(std::uint32_t sym, std::uint32_t utf32, std::uint32_t modifiers, bool pressed, bool preedit);
 
   void setFocus(InputArea* area);

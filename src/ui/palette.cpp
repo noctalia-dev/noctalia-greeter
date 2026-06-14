@@ -11,44 +11,60 @@ namespace {
     static Signal<> s_signal;
     return s_signal;
   }
-}
+} // namespace
 
 const Color& colorForRole(ColorRole role) noexcept {
   switch (role) {
-  case ColorRole::Primary: return palette.primary;
-  case ColorRole::OnPrimary: return palette.onPrimary;
-  case ColorRole::Secondary: return palette.secondary;
-  case ColorRole::OnSecondary: return palette.onSecondary;
-  case ColorRole::Tertiary: return palette.tertiary;
-  case ColorRole::OnTertiary: return palette.onTertiary;
-  case ColorRole::Error: return palette.error;
-  case ColorRole::OnError: return palette.onError;
-  case ColorRole::Surface: return palette.surface;
-  case ColorRole::OnSurface: return palette.onSurface;
-  case ColorRole::SurfaceVariant: return palette.surfaceVariant;
-  case ColorRole::OnSurfaceVariant: return palette.onSurfaceVariant;
-  case ColorRole::Outline: return palette.outline;
-  case ColorRole::Shadow: return palette.shadow;
-  case ColorRole::Hover: return palette.hover;
-  case ColorRole::OnHover: return palette.onHover;
+  case ColorRole::Primary:
+    return palette.primary;
+  case ColorRole::OnPrimary:
+    return palette.onPrimary;
+  case ColorRole::Secondary:
+    return palette.secondary;
+  case ColorRole::OnSecondary:
+    return palette.onSecondary;
+  case ColorRole::Tertiary:
+    return palette.tertiary;
+  case ColorRole::OnTertiary:
+    return palette.onTertiary;
+  case ColorRole::Error:
+    return palette.error;
+  case ColorRole::OnError:
+    return palette.onError;
+  case ColorRole::Surface:
+    return palette.surface;
+  case ColorRole::OnSurface:
+    return palette.onSurface;
+  case ColorRole::SurfaceVariant:
+    return palette.surfaceVariant;
+  case ColorRole::OnSurfaceVariant:
+    return palette.onSurfaceVariant;
+  case ColorRole::Outline:
+    return palette.outline;
+  case ColorRole::Shadow:
+    return palette.shadow;
+  case ColorRole::Hover:
+    return palette.hover;
+  case ColorRole::OnHover:
+    return palette.onHover;
   }
   return palette.surface;
 }
 
-Color colorForRole(ColorRole role, float alpha) noexcept {
-  return colorWithAlpha(colorForRole(role), alpha);
-}
+Color colorForRole(ColorRole role, float alpha) noexcept { return colorWithAlpha(colorForRole(role), alpha); }
 
 std::optional<ColorRole> colorRoleFromToken(std::string_view token) {
   for (const auto& t : kColorRoleTokens) {
-    if (t.token == token) return t.role;
+    if (t.token == token)
+      return t.role;
   }
   return std::nullopt;
 }
 
 std::string_view colorRoleToken(ColorRole role) noexcept {
   for (const auto& t : kColorRoleTokens) {
-    if (t.role == role) return t.token;
+    if (t.role == role)
+      return t.token;
   }
   return "";
 }
@@ -67,9 +83,7 @@ Color resolveColorSpec(const ColorSpec& color) noexcept {
   return resolved;
 }
 
-Signal<>& paletteChanged() {
-  return paletteSignal();
-}
+Signal<>& paletteChanged() { return paletteSignal(); }
 
 void setPalette(const Palette& p) {
   if (palette == p) {

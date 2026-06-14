@@ -17,70 +17,59 @@
 
 namespace {
 
-constexpr Logger kLog("text");
+  constexpr Logger kLog("text");
 
-constexpr std::uint32_t kSizeQuant = 64;
-constexpr std::uint32_t kScaleQuant = 64;
-constexpr float kAxisAlignedEpsilon = 0.0001f;
+  constexpr std::uint32_t kSizeQuant = 64;
+  constexpr std::uint32_t kScaleQuant = 64;
+  constexpr float kAxisAlignedEpsilon = 0.0001f;
 
-inline std::uint32_t quantizeSize(float v) {
-  return static_cast<std::uint32_t>(
-      std::max(0.0f, v) * static_cast<float>(kSizeQuant) + 0.5f);
-}
+  inline std::uint32_t quantizeSize(float v) {
+    return static_cast<std::uint32_t>(std::max(0.0f, v) * static_cast<float>(kSizeQuant) + 0.5f);
+  }
 
-inline std::uint16_t quantizeScale(float v) {
-  return static_cast<std::uint16_t>(
-      std::max(0.0f, v) * static_cast<float>(kScaleQuant) + 0.5f);
-}
+  inline std::uint16_t quantizeScale(float v) {
+    return static_cast<std::uint16_t>(std::max(0.0f, v) * static_cast<float>(kScaleQuant) + 0.5f);
+  }
 
-bool isAxisAligned(const Mat3 &transform) {
-  return std::abs(transform.m[1]) <= kAxisAlignedEpsilon &&
-         std::abs(transform.m[3]) <= kAxisAlignedEpsilon;
-}
+  bool isAxisAligned(const Mat3& transform) {
+    return std::abs(transform.m[1]) <= kAxisAlignedEpsilon && std::abs(transform.m[3]) <= kAxisAlignedEpsilon;
+  }
 
-void hashCombine(std::size_t &seed, std::size_t v) {
-  seed ^= v + 0x9E3779B97F4A7C15ULL + (seed << 12) + (seed >> 4);
-}
+  void hashCombine(std::size_t& seed, std::size_t v) { seed ^= v + 0x9E3779B97F4A7C15ULL + (seed << 12) + (seed >> 4); }
 
-// Fixed salt mixed into the glyph cache key hash. std::hash<integral> is the
-// identity map on most libstdc++/libc++ builds, which clusters sequential
-// codepoints into adjacent buckets and degrades the open-addressing probe
-// sequence; seeding from a non-trivial constant decorrelates the low bits.
-constexpr std::size_t kGlyphHashSalt = 0x9B1BD603706C38A8ULL;
+  // Fixed salt mixed into the glyph cache key hash. std::hash<integral> is the
+  // identity map on most libstdc++/libc++ builds, which clusters sequential
+  // codepoints into adjacent buckets and degrades the open-addressing probe
+  // sequence; seeding from a non-trivial constant decorrelates the low bits.
+  constexpr std::size_t kGlyphHashSalt = 0x9B1BD603706C38A8ULL;
 
-// No hinting for icons; grayscale AA keeps tabler stroke weight.
-cairo_scaled_font_t *create_scaled_font(cairo_font_face_t *face,
-                                        cairo_font_options_t *fontOptions,
-                                        float rasterSize) {
-  cairo_matrix_t fontMatrix;
-  cairo_matrix_init_scale(&fontMatrix, rasterSize, rasterSize);
-  cairo_matrix_t ctm;
-  cairo_matrix_init_identity(&ctm);
-  return cairo_scaled_font_create(face, &fontMatrix, &ctm, fontOptions);
-}
+  // No hinting for icons; grayscale AA keeps tabler stroke weight.
+  cairo_scaled_font_t*
+  create_scaled_font(cairo_font_face_t* face, cairo_font_options_t* fontOptions, float rasterSize) {
+    cairo_matrix_t fontMatrix;
+    cairo_matrix_init_scale(&fontMatrix, rasterSize, rasterSize);
+    cairo_matrix_t ctm;
+    cairo_matrix_init_identity(&ctm);
+    return cairo_scaled_font_create(face, &fontMatrix, &ctm, fontOptions);
+  }
 
-CairoGlyphRenderer::TextMetrics
-metrics_from_extents(const cairo_text_extents_t &extents, float invScale) {
-  return CairoGlyphRenderer::TextMetrics{
-      .width = static_cast<float>(extents.x_advance) * invScale,
-      .left = static_cast<float>(extents.x_bearing) * invScale,
-      .right = static_cast<float>(extents.x_bearing + extents.width) * invScale,
-      .top = static_cast<float>(extents.y_bearing) * invScale,
-      .bottom =
-          static_cast<float>(extents.y_bearing + extents.height) * invScale,
-  };
-}
+  CairoGlyphRenderer::TextMetrics metrics_from_extents(const cairo_text_extents_t& extents, float invScale) {
+    return CairoGlyphRenderer::TextMetrics{
+        .width = static_cast<float>(extents.x_advance) * invScale,
+        .left = static_cast<float>(extents.x_bearing) * invScale,
+        .right = static_cast<float>(extents.x_bearing + extents.width) * invScale,
+        .top = static_cast<float>(extents.y_bearing) * invScale,
+        .bottom = static_cast<float>(extents.y_bearing + extents.height) * invScale,
+    };
+  }
 
 } // namespace
 
-bool CairoGlyphRenderer::CacheKey::operator==(
-    const CacheKey &other) const noexcept {
-  return codepoint == other.codepoint && sizeQ == other.sizeQ &&
-         scaleQ == other.scaleQ;
+bool CairoGlyphRenderer::CacheKey::operator==(const CacheKey& other) const noexcept {
+  return codepoint == other.codepoint && sizeQ == other.sizeQ && scaleQ == other.scaleQ;
 }
 
-std::size_t
-CairoGlyphRenderer::CacheKeyHash::operator()(const CacheKey &k) const noexcept {
+std::size_t CairoGlyphRenderer::CacheKeyHash::operator()(const CacheKey& k) const noexcept {
   std::size_t seed = kGlyphHashSalt;
   hashCombine(seed, std::hash<char32_t>{}(k.codepoint));
   hashCombine(seed, std::hash<std::uint32_t>{}(k.sizeQ));
@@ -91,9 +80,7 @@ CairoGlyphRenderer::CacheKeyHash::operator()(const CacheKey &k) const noexcept {
 CairoGlyphRenderer::CairoGlyphRenderer() = default;
 CairoGlyphRenderer::~CairoGlyphRenderer() { cleanup(); }
 
-void CairoGlyphRenderer::initialize(const std::string &fontPath,
-                                    RenderBackend *backend,
-                                    TextureManager *textures) {
+void CairoGlyphRenderer::initialize(const std::string& fontPath, RenderBackend* backend, TextureManager* textures) {
   m_backend = backend;
   m_textureManager = textures;
 
@@ -102,16 +89,13 @@ void CairoGlyphRenderer::initialize(const std::string &fontPath,
   }
   if (FT_New_Face(m_ftLibrary, fontPath.c_str(), 0, &m_face) != 0) {
     cleanup();
-    throw std::runtime_error("CairoGlyphRenderer: failed to load icon font: " +
-                             fontPath);
+    throw std::runtime_error("CairoGlyphRenderer: failed to load icon font: " + fontPath);
   }
 
   m_cairoFace = cairo_ft_font_face_create_for_ft_face(m_face, 0);
-  if (m_cairoFace == nullptr ||
-      cairo_font_face_status(m_cairoFace) != CAIRO_STATUS_SUCCESS) {
+  if (m_cairoFace == nullptr || cairo_font_face_status(m_cairoFace) != CAIRO_STATUS_SUCCESS) {
     cleanup();
-    throw std::runtime_error(
-        "CairoGlyphRenderer: cairo_ft_font_face_create_for_ft_face failed");
+    throw std::runtime_error("CairoGlyphRenderer: cairo_ft_font_face_create_for_ft_face failed");
   }
 
   m_fontOptions = cairo_font_options_create();
@@ -124,7 +108,7 @@ void CairoGlyphRenderer::initialize(const std::string &fontPath,
 }
 
 void CairoGlyphRenderer::cleanup() {
-  for (auto &[key, entry] : m_cache) {
+  for (auto& [key, entry] : m_cache) {
     if (m_textureManager != nullptr) {
       m_textureManager->unload(entry.texture);
     }
@@ -159,9 +143,7 @@ void CairoGlyphRenderer::setContentScale(float scale) {
   }
 }
 
-void CairoGlyphRenderer::touch(CacheMap::iterator it) {
-  m_lru.splice(m_lru.begin(), m_lru, it->second.lruIt);
-}
+void CairoGlyphRenderer::touch(CacheMap::iterator it) { m_lru.splice(m_lru.begin(), m_lru, it->second.lruIt); }
 
 void CairoGlyphRenderer::evict(CacheMap::iterator it) {
   if (m_textureManager != nullptr) {
@@ -173,9 +155,8 @@ void CairoGlyphRenderer::evict(CacheMap::iterator it) {
 }
 
 void CairoGlyphRenderer::evictIfNeeded() {
-  while (!m_lru.empty() &&
-         (m_cache.size() > kMaxCacheEntries || m_cacheBytes > kMaxCacheBytes)) {
-    auto &backKey = m_lru.back();
+  while (!m_lru.empty() && (m_cache.size() > kMaxCacheEntries || m_cacheBytes > kMaxCacheBytes)) {
+    auto& backKey = m_lru.back();
     auto mapIt = m_cache.find(backKey);
     if (mapIt == m_cache.end()) {
       m_lru.pop_back();
@@ -185,8 +166,7 @@ void CairoGlyphRenderer::evictIfNeeded() {
   }
 }
 
-CairoGlyphRenderer::TextMetrics
-CairoGlyphRenderer::measureGlyph(char32_t codepoint, float fontSize) {
+CairoGlyphRenderer::TextMetrics CairoGlyphRenderer::measureGlyph(char32_t codepoint, float fontSize) {
   if (m_face == nullptr || codepoint == 0 || fontSize <= 0.0f) {
     return {};
   }
@@ -199,10 +179,8 @@ CairoGlyphRenderer::measureGlyph(char32_t codepoint, float fontSize) {
     return {};
   }
 
-  cairo_scaled_font_t *scaledFont =
-      create_scaled_font(m_cairoFace, m_fontOptions, rasterSize);
-  if (scaledFont == nullptr ||
-      cairo_scaled_font_status(scaledFont) != CAIRO_STATUS_SUCCESS) {
+  cairo_scaled_font_t* scaledFont = create_scaled_font(m_cairoFace, m_fontOptions, rasterSize);
+  if (scaledFont == nullptr || cairo_scaled_font_status(scaledFont) != CAIRO_STATUS_SUCCESS) {
     if (scaledFont != nullptr) {
       cairo_scaled_font_destroy(scaledFont);
     }
@@ -221,8 +199,7 @@ CairoGlyphRenderer::measureGlyph(char32_t codepoint, float fontSize) {
   return out;
 }
 
-CairoGlyphRenderer::CacheEntry *
-CairoGlyphRenderer::lookupOrRasterize(char32_t codepoint, float fontSize) {
+CairoGlyphRenderer::CacheEntry* CairoGlyphRenderer::lookupOrRasterize(char32_t codepoint, float fontSize) {
   CacheKey key;
   key.codepoint = codepoint;
   key.sizeQ = quantizeSize(fontSize);
@@ -242,10 +219,8 @@ CairoGlyphRenderer::lookupOrRasterize(char32_t codepoint, float fontSize) {
     return nullptr;
   }
 
-  cairo_scaled_font_t *scaledFont =
-      create_scaled_font(m_cairoFace, m_fontOptions, rasterSize);
-  if (scaledFont == nullptr ||
-      cairo_scaled_font_status(scaledFont) != CAIRO_STATUS_SUCCESS) {
+  cairo_scaled_font_t* scaledFont = create_scaled_font(m_cairoFace, m_fontOptions, rasterSize);
+  if (scaledFont == nullptr || cairo_scaled_font_status(scaledFont) != CAIRO_STATUS_SUCCESS) {
     if (scaledFont != nullptr) {
       cairo_scaled_font_destroy(scaledFont);
     }
@@ -262,10 +237,8 @@ CairoGlyphRenderer::lookupOrRasterize(char32_t codepoint, float fontSize) {
 
   // Ceil ink rect plus 1px pad for AA.
   const int pad = 1;
-  const int pxWidth =
-      std::max(1, static_cast<int>(std::ceil(extents.width)) + pad * 2);
-  const int pxHeight =
-      std::max(1, static_cast<int>(std::ceil(extents.height)) + pad * 2);
+  const int pxWidth = std::max(1, static_cast<int>(std::ceil(extents.width)) + pad * 2);
+  const int pxHeight = std::max(1, static_cast<int>(std::ceil(extents.height)) + pad * 2);
 
   // Place glyph ink inside the surface with pad inset.
   glyph.x = -extents.x_bearing + pad;
@@ -281,9 +254,8 @@ CairoGlyphRenderer::lookupOrRasterize(char32_t codepoint, float fontSize) {
   entry.inkOffsetYPx = static_cast<float>(pad);
 
   // A8 coverage; tint in shader, cache is color-independent.
-  cairo_surface_t *surface =
-      cairo_image_surface_create(CAIRO_FORMAT_A8, pxWidth, pxHeight);
-  cairo_t *cr = cairo_create(surface);
+  cairo_surface_t* surface = cairo_image_surface_create(CAIRO_FORMAT_A8, pxWidth, pxHeight);
+  cairo_t* cr = cairo_create(surface);
   cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
   cairo_paint(cr);
   cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
@@ -294,14 +266,14 @@ CairoGlyphRenderer::lookupOrRasterize(char32_t codepoint, float fontSize) {
   cairo_surface_flush(surface);
 
   const int stride = cairo_image_surface_get_stride(surface);
-  unsigned char *data = cairo_image_surface_get_data(surface);
+  unsigned char* data = cairo_image_surface_get_data(surface);
 
   // Repack tightly to pxWidth bytes per row (cairo's stride is 4-byte aligned).
-  std::vector<unsigned char> tight(static_cast<std::size_t>(pxWidth) *
-                                   static_cast<std::size_t>(pxHeight));
+  std::vector<unsigned char> tight(static_cast<std::size_t>(pxWidth) * static_cast<std::size_t>(pxHeight));
   for (int y = 0; y < pxHeight; ++y) {
-    std::memcpy(tight.data() + static_cast<std::size_t>(y) * pxWidth,
-                data + y * stride, static_cast<std::size_t>(pxWidth));
+    std::memcpy(
+        tight.data() + static_cast<std::size_t>(y) * pxWidth, data + y * stride, static_cast<std::size_t>(pxWidth)
+    );
   }
   cairo_surface_destroy(surface);
   cairo_scaled_font_destroy(scaledFont);
@@ -311,13 +283,12 @@ CairoGlyphRenderer::lookupOrRasterize(char32_t codepoint, float fontSize) {
   }
 
   entry.texture = m_textureManager->loadFromPixels(
-      tight.data(), pxWidth, pxHeight, TextureDataFormat::Alpha,
-      TextureFilter::Linear);
+      tight.data(), pxWidth, pxHeight, TextureDataFormat::Alpha, TextureFilter::Linear
+  );
   if (entry.texture.id == 0) {
     return nullptr;
   }
-  entry.bytes =
-      static_cast<std::size_t>(pxWidth) * static_cast<std::size_t>(pxHeight);
+  entry.bytes = static_cast<std::size_t>(pxWidth) * static_cast<std::size_t>(pxHeight);
 
   const float invScale = 1.0f / m_contentScale;
   entry.metrics = metrics_from_extents(extents, invScale);
@@ -331,15 +302,15 @@ CairoGlyphRenderer::lookupOrRasterize(char32_t codepoint, float fontSize) {
   return &ins->second;
 }
 
-void CairoGlyphRenderer::drawGlyph(float surfaceWidth, float surfaceHeight,
-                                   float x, float baselineY, char32_t codepoint,
-                                   float fontSize, const Color &color,
-                                   const Mat3 &transform) {
+void CairoGlyphRenderer::drawGlyph(
+    float surfaceWidth, float surfaceHeight, float x, float baselineY, char32_t codepoint, float fontSize,
+    const Color& color, const Mat3& transform
+) {
   if (m_face == nullptr || m_backend == nullptr || codepoint == 0) {
     return;
   }
 
-  CacheEntry *entry = lookupOrRasterize(codepoint, fontSize);
+  CacheEntry* entry = lookupOrRasterize(codepoint, fontSize);
   if (entry == nullptr || entry->texture.id == 0) {
     return;
   }
@@ -350,8 +321,7 @@ void CairoGlyphRenderer::drawGlyph(float surfaceWidth, float surfaceHeight,
   const float baselineXLocal = entry->baselineXPx * invScale;
   const float baselineLocal = entry->baselinePx * invScale;
 
-  const Mat3 localTranslation =
-      Mat3::translation(x - baselineXLocal, baselineY - baselineLocal);
+  const Mat3 localTranslation = Mat3::translation(x - baselineXLocal, baselineY - baselineLocal);
   Mat3 world = transform * localTranslation;
 
   // Snap ink origin to buffer pixels when axis-aligned; skip under
@@ -359,23 +329,21 @@ void CairoGlyphRenderer::drawGlyph(float surfaceWidth, float surfaceHeight,
   if (isAxisAligned(world)) {
     const float inkOffsetX = entry->inkOffsetXPx * invScale;
     const float inkOffsetY = entry->inkOffsetYPx * invScale;
-    world.m[6] = std::round((world.m[6] + inkOffsetX) * m_contentScale) /
-                     m_contentScale -
-                 inkOffsetX;
-    world.m[7] = std::round((world.m[7] + inkOffsetY) * m_contentScale) /
-                     m_contentScale -
-                 inkOffsetY;
+    world.m[6] = std::round((world.m[6] + inkOffsetX) * m_contentScale) / m_contentScale - inkOffsetX;
+    world.m[7] = std::round((world.m[7] + inkOffsetY) * m_contentScale) / m_contentScale - inkOffsetY;
   }
 
-  m_backend->drawGlyph(RenderGlyphDraw{
-      .texture = entry->texture.id,
-      .surfaceWidth = surfaceWidth,
-      .surfaceHeight = surfaceHeight,
-      .width = quadW,
-      .height = quadH,
-      .opacity = 1.0f,
-      .tint = color,
-      .tinted = true,
-      .transform = world,
-  });
+  m_backend->drawGlyph(
+      RenderGlyphDraw{
+          .texture = entry->texture.id,
+          .surfaceWidth = surfaceWidth,
+          .surfaceHeight = surfaceHeight,
+          .width = quadW,
+          .height = quadH,
+          .opacity = 1.0f,
+          .tint = color,
+          .tinted = true,
+          .transform = world,
+      }
+  );
 }

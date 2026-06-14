@@ -15,6 +15,7 @@
 #include "render/scene/rect_node.h"
 #include "render/scene/text_node.h"
 #include "render/scene/wallpaper_node.h"
+
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -27,69 +28,60 @@
 
 namespace {
 
-constexpr Logger kLog("render");
-constexpr float kSlowRenderOperationDebugMs = 50.0f;
-constexpr float kSlowRenderOperationWarnMs = 1000.0f;
+  constexpr Logger kLog("render");
+  constexpr float kSlowRenderOperationDebugMs = 50.0f;
+  constexpr float kSlowRenderOperationWarnMs = 1000.0f;
 
 } // namespace
 
 namespace {
 
-float elapsedSince(std::chrono::steady_clock::time_point start) {
-  return std::chrono::duration<float, std::milli>(
-             std::chrono::steady_clock::now() - start)
-      .count();
-}
-
-template <typename... Args>
-void logSlowRenderOperation(float ms, std::format_string<Args...> fmt,
-                            Args &&...args) {
-  if (ms >= kSlowRenderOperationWarnMs) {
-    kLog.warn(fmt, std::forward<Args>(args)...);
-  } else if (ms >= kSlowRenderOperationDebugMs) {
-    kLog.debug(fmt, std::forward<Args>(args)...);
+  float elapsedSince(std::chrono::steady_clock::time_point start) {
+    return std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - start).count();
   }
-}
 
-RenderScissor scissorForClip(float sw, float sh, float bw, float bh, float left,
-                             float top, float right, float bottom) {
-  const float scaleX = sw > 0.0f ? bw / sw : 1.0f;
-  const float scaleY = sh > 0.0f ? bh / sh : 1.0f;
-  const auto clampX = [bw](std::int32_t value) {
-    return std::clamp(value, std::int32_t{0},
-                      static_cast<std::int32_t>(std::ceil(bw)));
-  };
-  const auto clampY = [bh](std::int32_t value) {
-    return std::clamp(value, std::int32_t{0},
-                      static_cast<std::int32_t>(std::ceil(bh)));
-  };
+  template <typename... Args> void logSlowRenderOperation(float ms, std::format_string<Args...> fmt, Args&&... args) {
+    if (ms >= kSlowRenderOperationWarnMs) {
+      kLog.warn(fmt, std::forward<Args>(args)...);
+    } else if (ms >= kSlowRenderOperationDebugMs) {
+      kLog.debug(fmt, std::forward<Args>(args)...);
+    }
+  }
 
-  // Round clip edges independently in buffer space. Rounding the size after
-  // flooring the origin can drop the final column/row for fractional origins.
-  const std::int32_t x0 =
-      clampX(static_cast<std::int32_t>(std::floor(left * scaleX)));
-  const std::int32_t x1 =
-      clampX(static_cast<std::int32_t>(std::ceil(right * scaleX)));
-  const std::int32_t y0 =
-      clampY(static_cast<std::int32_t>(std::floor((sh - bottom) * scaleY)));
-  const std::int32_t y1 =
-      clampY(static_cast<std::int32_t>(std::ceil((sh - top) * scaleY)));
-  return RenderScissor{
-      .x = x0,
-      .y = y0,
-      .width = std::max(std::int32_t{0}, x1 - x0),
-      .height = std::max(std::int32_t{0}, y1 - y0),
-  };
-}
+  RenderScissor
+  scissorForClip(float sw, float sh, float bw, float bh, float left, float top, float right, float bottom) {
+    const float scaleX = sw > 0.0f ? bw / sw : 1.0f;
+    const float scaleY = sh > 0.0f ? bh / sh : 1.0f;
+    const auto clampX = [bw](std::int32_t value) {
+      return std::clamp(value, std::int32_t{0}, static_cast<std::int32_t>(std::ceil(bw)));
+    };
+    const auto clampY = [bh](std::int32_t value) {
+      return std::clamp(value, std::int32_t{0}, static_cast<std::int32_t>(std::ceil(bh)));
+    };
 
-Mat3 nodeLocalTransform(const Node *node) {
-  const float cx = node->width() * 0.5f;
-  const float cy = node->height() * 0.5f;
-  return Mat3::translation(node->x(), node->y()) * Mat3::translation(cx, cy) *
-         Mat3::rotation(node->rotation()) *
-         Mat3::scale(node->scale(), node->scale()) *
-         Mat3::translation(-cx, -cy);
-}
+    // Round clip edges independently in buffer space. Rounding the size after
+    // flooring the origin can drop the final column/row for fractional origins.
+    const std::int32_t x0 = clampX(static_cast<std::int32_t>(std::floor(left * scaleX)));
+    const std::int32_t x1 = clampX(static_cast<std::int32_t>(std::ceil(right * scaleX)));
+    const std::int32_t y0 = clampY(static_cast<std::int32_t>(std::floor((sh - bottom) * scaleY)));
+    const std::int32_t y1 = clampY(static_cast<std::int32_t>(std::ceil((sh - top) * scaleY)));
+    return RenderScissor{
+        .x = x0,
+        .y = y0,
+        .width = std::max(std::int32_t{0}, x1 - x0),
+        .height = std::max(std::int32_t{0}, y1 - y0),
+    };
+  }
+
+  Mat3 nodeLocalTransform(const Node* node) {
+    const float cx = node->width() * 0.5f;
+    const float cy = node->height() * 0.5f;
+    return Mat3::translation(node->x(), node->y())
+        * Mat3::translation(cx, cy)
+        * Mat3::rotation(node->rotation())
+        * Mat3::scale(node->scale(), node->scale())
+        * Mat3::translation(-cx, -cy);
+  }
 
 } // namespace
 
@@ -97,7 +89,7 @@ RenderContext::RenderContext() = default;
 
 RenderContext::~RenderContext() { cleanup(); }
 
-void RenderContext::initialize(GlSharedContext &shared) {
+void RenderContext::initialize(GlSharedContext& shared) {
   cleanup();
   m_backend = createDefaultRenderBackend();
   m_backend->initialize(shared);
@@ -105,8 +97,9 @@ void RenderContext::initialize(GlSharedContext &shared) {
   // Fontconfig handles font fallback via Pango.
   m_backend->textureManager().probeExtensions();
   m_textRenderer.initialize(m_backend.get(), &m_backend->textureManager());
-  m_glyphRenderer.initialize(paths::assetPath("fonts/tabler.ttf").string(),
-                             m_backend.get(), &m_backend->textureManager());
+  m_glyphRenderer.initialize(
+      paths::assetPath("fonts/tabler.ttf").string(), m_backend.get(), &m_backend->textureManager()
+  );
   m_textFontFamily = "sans-serif";
   ++m_textMetricsGeneration;
 }
@@ -118,7 +111,7 @@ void RenderContext::makeCurrentNoSurface() {
   m_backend->makeCurrentNoSurface();
 }
 
-void RenderContext::makeCurrent(RenderTarget &target) {
+void RenderContext::makeCurrent(RenderTarget& target) {
   if (m_backend == nullptr) {
     throw std::runtime_error("RenderContext has no initialized backend");
   }
@@ -128,7 +121,7 @@ void RenderContext::makeCurrent(RenderTarget &target) {
   syncContentScale(target);
 }
 
-void RenderContext::syncContentScale(RenderTarget &target) {
+void RenderContext::syncContentScale(RenderTarget& target) {
   const auto sw = static_cast<float>(target.logicalWidth());
   const auto bw = static_cast<float>(target.bufferWidth());
   m_renderScale = sw > 0.0f ? std::max(1.0f, bw / sw) : 1.0f;
@@ -154,7 +147,7 @@ void RenderContext::notifyFontConfigChanged() {
   ++m_textMetricsGeneration;
 }
 
-void RenderContext::renderScene(RenderTarget &target, Node *sceneRoot) {
+void RenderContext::renderScene(RenderTarget& target, Node* sceneRoot) {
   UiPhaseScope renderPhase(UiPhase::Render);
   if (m_backend == nullptr) {
     return;
@@ -169,81 +162,83 @@ void RenderContext::renderScene(RenderTarget &target, Node *sceneRoot) {
     const auto sh = static_cast<float>(target.logicalHeight());
     const auto bw = static_cast<float>(target.bufferWidth());
     const auto bh = static_cast<float>(target.bufferHeight());
-    renderNode(sceneRoot, Mat3::identity(), 1.0f, sw, sh, bw, bh, 0.0f, 0.0f,
-               sw, sh, false);
+    renderNode(sceneRoot, Mat3::identity(), 1.0f, sw, sh, bw, bh, 0.0f, 0.0f, sw, sh, false);
   }
   float ms = elapsedSince(drawStart);
   logSlowRenderOperation(
-      ms, "scene draw took {:.1f}ms ({}x{} logical, {}x{} buffer)", ms,
-      target.logicalWidth(), target.logicalHeight(), target.bufferWidth(),
-      target.bufferHeight());
+      ms, "scene draw took {:.1f}ms ({}x{} logical, {}x{} buffer)", ms, target.logicalWidth(), target.logicalHeight(),
+      target.bufferWidth(), target.bufferHeight()
+  );
 
   m_backend->endFrame(target);
   ms = elapsedSince(totalStart);
   logSlowRenderOperation(ms, "renderScene took {:.1f}ms total", ms);
 }
 
-TextMetrics RenderContext::measureText(std::string_view text, float fontSize,
-                                       bool bold, float maxWidth, int maxLines,
-                                       TextAlign align,
-                                       std::string_view fontFamily) {
-  auto m = m_textRenderer.measure(text, fontSize, bold, maxWidth, maxLines,
-                                  align, fontFamily);
-  return TextMetrics{.width = m.width,
-                     .left = m.left,
-                     .right = m.right,
-                     .top = m.top,
-                     .bottom = m.bottom,
-                     .inkTop = m.inkTop,
-                     .inkBottom = m.inkBottom,
-                     .inkLeft = m.inkLeft,
-                     .inkRight = m.inkRight};
+TextMetrics RenderContext::measureText(
+    std::string_view text, float fontSize, bool bold, float maxWidth, int maxLines, TextAlign align,
+    std::string_view fontFamily
+) {
+  auto m = m_textRenderer.measure(text, fontSize, bold, maxWidth, maxLines, align, fontFamily);
+  return TextMetrics{
+      .width = m.width,
+      .left = m.left,
+      .right = m.right,
+      .top = m.top,
+      .bottom = m.bottom,
+      .inkTop = m.inkTop,
+      .inkBottom = m.inkBottom,
+      .inkLeft = m.inkLeft,
+      .inkRight = m.inkRight
+  };
 }
 
 TextMetrics RenderContext::measureFont(float fontSize, bool bold) {
   auto m = m_textRenderer.measureFont(fontSize, bold);
-  return TextMetrics{.width = m.width,
-                     .left = m.left,
-                     .right = m.right,
-                     .top = m.top,
-                     .bottom = m.bottom,
-                     .inkTop = m.inkTop,
-                     .inkBottom = m.inkBottom,
-                     .inkLeft = m.inkLeft,
-                     .inkRight = m.inkRight};
+  return TextMetrics{
+      .width = m.width,
+      .left = m.left,
+      .right = m.right,
+      .top = m.top,
+      .bottom = m.bottom,
+      .inkTop = m.inkTop,
+      .inkBottom = m.inkBottom,
+      .inkLeft = m.inkLeft,
+      .inkRight = m.inkRight
+  };
 }
 
 void RenderContext::measureTextCursorStops(
-    std::string_view text, float fontSize,
-    const std::vector<std::size_t> &byteOffsets, std::vector<float> &outStops,
-    bool bold) {
-  m_textRenderer.measureCursorStops(text, fontSize, byteOffsets, outStops,
-                                    bold);
+    std::string_view text, float fontSize, const std::vector<std::size_t>& byteOffsets, std::vector<float>& outStops,
+    bool bold
+) {
+  m_textRenderer.measureCursorStops(text, fontSize, byteOffsets, outStops, bold);
 }
 
 TextMetrics RenderContext::measureGlyph(char32_t codepoint, float fontSize) {
   auto m = m_glyphRenderer.measureGlyph(codepoint, fontSize);
-  return TextMetrics{.width = m.width,
-                     .left = m.left,
-                     .right = m.right,
-                     .top = m.top,
-                     .bottom = m.bottom,
-                     .inkTop = m.top,
-                     .inkBottom = m.bottom,
-                     .inkLeft = m.left,
-                     .inkRight = m.right};
+  return TextMetrics{
+      .width = m.width,
+      .left = m.left,
+      .right = m.right,
+      .top = m.top,
+      .bottom = m.bottom,
+      .inkTop = m.top,
+      .inkBottom = m.bottom,
+      .inkLeft = m.left,
+      .inkRight = m.right
+  };
 }
 
-TextureManager &RenderContext::textureManager() {
+TextureManager& RenderContext::textureManager() {
   makeCurrentNoSurface();
   return m_backend->textureManager();
 }
 
-void RenderContext::renderNode(const Node *node, const Mat3 &parentTransform,
-                               float parentOpacity, float sw, float sh,
-                               float bw, float bh, float clipLeft,
-                               float clipTop, float clipRight, float clipBottom,
-                               bool hasClip) {
+void RenderContext::renderNode(
+    const Node* node, const Mat3& parentTransform, float parentOpacity, float sw, float sh, float bw, float bh,
+    float clipLeft, float clipTop, float clipRight, float clipBottom, bool hasClip
+) {
   if (!node->visible()) {
     return;
   }
@@ -254,124 +249,108 @@ void RenderContext::renderNode(const Node *node, const Mat3 &parentTransform,
   float boundsTop = 0.0f;
   float boundsRight = 0.0f;
   float boundsBottom = 0.0f;
-  Node::transformedBounds(node, worldTransform, boundsLeft, boundsTop,
-                          boundsRight, boundsBottom);
+  Node::transformedBounds(node, worldTransform, boundsLeft, boundsTop, boundsRight, boundsBottom);
 
   if (hasClip) {
-    m_backend->setScissor(scissorForClip(sw, sh, bw, bh, clipLeft, clipTop,
-                                         clipRight, clipBottom));
+    m_backend->setScissor(scissorForClip(sw, sh, bw, bh, clipLeft, clipTop, clipRight, clipBottom));
   } else {
     m_backend->disableScissor();
   }
 
   switch (node->type()) {
   case NodeType::Rect: {
-    const auto *rect = static_cast<const RectNode *>(node);
+    const auto* rect = static_cast<const RectNode*>(node);
     auto style = rect->style();
     style.fill.a *= effectiveOpacity;
     style.border.a *= effectiveOpacity;
-    for (auto &stop : style.gradientStops) {
+    for (auto& stop : style.gradientStops) {
       stop.color.a *= effectiveOpacity;
     }
-    m_backend->drawRect(sw, sh, node->width(), node->height(), style,
-                        worldTransform);
+    m_backend->drawRect(sw, sh, node->width(), node->height(), style, worldTransform);
     break;
   }
   case NodeType::Text: {
-    const auto *text = static_cast<const TextNode *>(node);
+    const auto* text = static_cast<const TextNode*>(node);
     if (!text->text().empty()) {
-      const auto &font = text->fontFamily();
+      const auto& font = text->fontFamily();
       if (text->hasShadow()) {
         auto shadowColor = text->shadowColor();
         shadowColor.a *= effectiveOpacity;
-        const Mat3 shadowTransform =
-            worldTransform *
-            Mat3::translation(text->shadowOffsetX(), text->shadowOffsetY());
-        m_textRenderer.draw(sw, sh, 0.0f, 0.0f, text->text(), text->fontSize(),
-                            shadowColor, shadowTransform, text->bold(),
-                            text->maxWidth(), text->maxLines(),
-                            text->textAlign(), font);
+        const Mat3 shadowTransform = worldTransform * Mat3::translation(text->shadowOffsetX(), text->shadowOffsetY());
+        m_textRenderer.draw(
+            sw, sh, 0.0f, 0.0f, text->text(), text->fontSize(), shadowColor, shadowTransform, text->bold(),
+            text->maxWidth(), text->maxLines(), text->textAlign(), font
+        );
       }
       auto color = text->color();
       color.a *= effectiveOpacity;
-      m_textRenderer.draw(sw, sh, 0.0f, 0.0f, text->text(), text->fontSize(),
-                          color, worldTransform, text->bold(), text->maxWidth(),
-                          text->maxLines(), text->textAlign(), font);
+      m_textRenderer.draw(
+          sw, sh, 0.0f, 0.0f, text->text(), text->fontSize(), color, worldTransform, text->bold(), text->maxWidth(),
+          text->maxLines(), text->textAlign(), font
+      );
     }
     break;
   }
   case NodeType::Image: {
-    const auto *img = static_cast<const ImageNode *>(node);
+    const auto* img = static_cast<const ImageNode*>(node);
     if (img->textureId() != 0) {
       auto tint = img->tint();
       tint.a *= effectiveOpacity;
-      m_backend->drawImage(RenderImageDraw{
-          .texture = img->textureId(),
-          .surfaceWidth = sw,
-          .surfaceHeight = sh,
-          .width = node->width(),
-          .height = node->height(),
-          .tint = tint,
-          .opacity = effectiveOpacity,
-          .radius = img->radius(),
-          .borderColor = img->borderColor(),
-          .borderWidth = img->borderWidth(),
-          .fitMode = static_cast<RenderImageFitMode>(img->fitMode()),
-          .textureWidth = static_cast<float>(img->textureWidth()),
-          .textureHeight = static_cast<float>(img->textureHeight()),
-          .transform = worldTransform,
-      });
+      m_backend->drawImage(
+          RenderImageDraw{
+              .texture = img->textureId(),
+              .surfaceWidth = sw,
+              .surfaceHeight = sh,
+              .width = node->width(),
+              .height = node->height(),
+              .tint = tint,
+              .opacity = effectiveOpacity,
+              .radius = img->radius(),
+              .borderColor = img->borderColor(),
+              .borderWidth = img->borderWidth(),
+              .fitMode = static_cast<RenderImageFitMode>(img->fitMode()),
+              .textureWidth = static_cast<float>(img->textureWidth()),
+              .textureHeight = static_cast<float>(img->textureHeight()),
+              .transform = worldTransform,
+          }
+      );
     }
     break;
   }
   case NodeType::Glyph: {
-    const auto *icon = static_cast<const GlyphNode *>(node);
+    const auto* icon = static_cast<const GlyphNode*>(node);
     if (icon->codepoint() != 0) {
       if (icon->hasShadow()) {
         auto shadowColor = icon->shadowColor();
         shadowColor.a *= effectiveOpacity;
-        const Mat3 shadowTransform =
-            worldTransform *
-            Mat3::translation(icon->shadowOffsetX(), icon->shadowOffsetY());
-        m_glyphRenderer.drawGlyph(sw, sh, 0.0f, 0.0f, icon->codepoint(),
-                                  icon->fontSize(), shadowColor,
-                                  shadowTransform);
+        const Mat3 shadowTransform = worldTransform * Mat3::translation(icon->shadowOffsetX(), icon->shadowOffsetY());
+        m_glyphRenderer.drawGlyph(
+            sw, sh, 0.0f, 0.0f, icon->codepoint(), icon->fontSize(), shadowColor, shadowTransform
+        );
       }
       auto color = icon->color();
       color.a *= effectiveOpacity;
-      m_glyphRenderer.drawGlyph(sw, sh, 0.0f, 0.0f, icon->codepoint(),
-                                icon->fontSize(), color, worldTransform);
+      m_glyphRenderer.drawGlyph(sw, sh, 0.0f, 0.0f, icon->codepoint(), icon->fontSize(), color, worldTransform);
     }
     break;
   }
   case NodeType::Wallpaper: {
-    const auto *wallpaper = static_cast<const WallpaperNode *>(node);
-    const bool hasSource1 =
-        wallpaper->sourceKind1() == WallpaperSourceKind::Color ||
-        wallpaper->texture1() != 0;
+    const auto* wallpaper = static_cast<const WallpaperNode*>(node);
+    const bool hasSource1 = wallpaper->sourceKind1() == WallpaperSourceKind::Color || wallpaper->texture1() != 0;
     if (hasSource1) {
-      const bool hasSource2 =
-          wallpaper->sourceKind2() == WallpaperSourceKind::Color ||
-          wallpaper->texture2() != 0;
-      const WallpaperSourceKind sourceKind2 =
-          hasSource2 ? wallpaper->sourceKind2() : wallpaper->sourceKind1();
-      const TextureId texture2 =
-          hasSource2 ? wallpaper->texture2() : wallpaper->texture1();
-      const Color &sourceColor2 =
-          hasSource2 ? wallpaper->sourceColor2() : wallpaper->sourceColor1();
-      const float imageWidth2 =
-          hasSource2 ? wallpaper->imageWidth2() : wallpaper->imageWidth1();
-      const float imageHeight2 =
-          hasSource2 ? wallpaper->imageHeight2() : wallpaper->imageHeight1();
+      const bool hasSource2 = wallpaper->sourceKind2() == WallpaperSourceKind::Color || wallpaper->texture2() != 0;
+      const WallpaperSourceKind sourceKind2 = hasSource2 ? wallpaper->sourceKind2() : wallpaper->sourceKind1();
+      const TextureId texture2 = hasSource2 ? wallpaper->texture2() : wallpaper->texture1();
+      const Color& sourceColor2 = hasSource2 ? wallpaper->sourceColor2() : wallpaper->sourceColor1();
+      const float imageWidth2 = hasSource2 ? wallpaper->imageWidth2() : wallpaper->imageWidth1();
+      const float imageHeight2 = hasSource2 ? wallpaper->imageHeight2() : wallpaper->imageHeight1();
       const float progress = hasSource2 ? wallpaper->progress() : 0.0f;
       m_backend->drawWallpaper(
-          wallpaper->transition(), wallpaper->sourceKind1(),
-          wallpaper->texture1(), wallpaper->sourceColor1(), sourceKind2,
-          texture2, sourceColor2, sw, sh, node->width(), node->height(),
-          wallpaper->imageWidth1(), wallpaper->imageHeight1(), imageWidth2,
-          imageHeight2, progress, static_cast<float>(wallpaper->fillMode()),
-          wallpaper->transitionParams(), wallpaper->fillColor(),
-          worldTransform);
+          wallpaper->transition(), wallpaper->sourceKind1(), wallpaper->texture1(), wallpaper->sourceColor1(),
+          sourceKind2, texture2, sourceColor2, sw, sh, node->width(), node->height(), wallpaper->imageWidth1(),
+          wallpaper->imageHeight1(), imageWidth2, imageHeight2, progress, static_cast<float>(wallpaper->fillMode()),
+          wallpaper->transitionParams(), wallpaper->fillColor(), worldTransform
+      );
     }
     break;
   }
@@ -382,7 +361,7 @@ void RenderContext::renderNode(const Node *node, const Mat3 &parentTransform,
   }
 
   // Iterate children in z-order when already sorted; else stable_sort once.
-  const auto &children = node->children();
+  const auto& children = node->children();
   bool childrenSorted = true;
   for (std::size_t i = 1; i < children.size(); ++i) {
     if (children[i]->zIndex() < children[i - 1]->zIndex()) {
@@ -391,15 +370,15 @@ void RenderContext::renderNode(const Node *node, const Mat3 &parentTransform,
     }
   }
 
-  std::vector<const Node *> orderedChildren;
+  std::vector<const Node*> orderedChildren;
   if (!childrenSorted) {
     orderedChildren.reserve(children.size());
-    for (const auto &child : children) {
+    for (const auto& child : children) {
       orderedChildren.push_back(child.get());
     }
-    std::stable_sort(
-        orderedChildren.begin(), orderedChildren.end(),
-        [](const Node *a, const Node *b) { return a->zIndex() < b->zIndex(); });
+    std::stable_sort(orderedChildren.begin(), orderedChildren.end(), [](const Node* a, const Node* b) {
+      return a->zIndex() < b->zIndex();
+    });
   }
 
   float childClipLeft = clipLeft;
@@ -411,29 +390,28 @@ void RenderContext::renderNode(const Node *node, const Mat3 &parentTransform,
   if (node->clipChildren()) {
     childClipLeft = hasClip ? std::max(childClipLeft, boundsLeft) : boundsLeft;
     childClipTop = hasClip ? std::max(childClipTop, boundsTop) : boundsTop;
-    childClipRight =
-        hasClip ? std::min(childClipRight, boundsRight) : boundsRight;
-    childClipBottom =
-        hasClip ? std::min(childClipBottom, boundsBottom) : boundsBottom;
+    childClipRight = hasClip ? std::min(childClipRight, boundsRight) : boundsRight;
+    childClipBottom = hasClip ? std::min(childClipBottom, boundsBottom) : boundsBottom;
     childHasClip = true;
   }
 
-  if (childHasClip &&
-      (childClipRight <= childClipLeft || childClipBottom <= childClipTop)) {
+  if (childHasClip && (childClipRight <= childClipLeft || childClipBottom <= childClipTop)) {
     return;
   }
 
   if (childrenSorted) {
-    for (const auto &child : children) {
-      renderNode(child.get(), worldTransform, effectiveOpacity, sw, sh, bw, bh,
-                 childClipLeft, childClipTop, childClipRight, childClipBottom,
-                 childHasClip);
+    for (const auto& child : children) {
+      renderNode(
+          child.get(), worldTransform, effectiveOpacity, sw, sh, bw, bh, childClipLeft, childClipTop, childClipRight,
+          childClipBottom, childHasClip
+      );
     }
   } else {
-    for (const auto *child : orderedChildren) {
-      renderNode(child, worldTransform, effectiveOpacity, sw, sh, bw, bh,
-                 childClipLeft, childClipTop, childClipRight, childClipBottom,
-                 childHasClip);
+    for (const auto* child : orderedChildren) {
+      renderNode(
+          child, worldTransform, effectiveOpacity, sw, sh, bw, bh, childClipLeft, childClipTop, childClipRight,
+          childClipBottom, childHasClip
+      );
     }
   }
 }

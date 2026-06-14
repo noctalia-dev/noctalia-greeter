@@ -1,2 +1,5 @@
 #pragma once
-class CachedLayer { public: CachedLayer() = default; };
+class CachedLayer {
+public:
+  CachedLayer() = default;
+};

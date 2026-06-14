@@ -28,10 +28,8 @@ struct CornerShapes {
   CornerShape bl = CornerShape::Convex;
 };
 
-constexpr bool operator==(const CornerShapes &lhs,
-                          const CornerShapes &rhs) noexcept {
-  return lhs.tl == rhs.tl && lhs.tr == rhs.tr && lhs.br == rhs.br &&
-         lhs.bl == rhs.bl;
+constexpr bool operator==(const CornerShapes& lhs, const CornerShapes& rhs) noexcept {
+  return lhs.tl == rhs.tl && lhs.tr == rhs.tr && lhs.br == rhs.br && lhs.bl == rhs.bl;
 }
 
 struct RectInsets {
@@ -41,10 +39,8 @@ struct RectInsets {
   float bottom = 0.0f;
 };
 
-constexpr bool operator==(const RectInsets &lhs,
-                          const RectInsets &rhs) noexcept {
-  return lhs.left == rhs.left && lhs.top == rhs.top && lhs.right == rhs.right &&
-         lhs.bottom == rhs.bottom;
+constexpr bool operator==(const RectInsets& lhs, const RectInsets& rhs) noexcept {
+  return lhs.left == rhs.left && lhs.top == rhs.top && lhs.right == rhs.right && lhs.bottom == rhs.bottom;
 }
 
 // Per-corner radii; a single float sets all four corners.
@@ -55,15 +51,12 @@ struct Radii {
   float bl = 0.0f;
 
   Radii() = default;
-  /* implicit */ Radii(float r)
-      : tl(r), tr(r), br(r), bl(r) {} // NOLINT(google-explicit-constructor)
-  Radii(float tlv, float trv, float brv, float blv)
-      : tl(tlv), tr(trv), br(brv), bl(blv) {}
+  /* implicit */ Radii(float r) : tl(r), tr(r), br(r), bl(r) {} // NOLINT(google-explicit-constructor)
+  Radii(float tlv, float trv, float brv, float blv) : tl(tlv), tr(trv), br(brv), bl(blv) {}
 };
 
-constexpr bool operator==(const Radii &lhs, const Radii &rhs) noexcept {
-  return lhs.tl == rhs.tl && lhs.tr == rhs.tr && lhs.br == rhs.br &&
-         lhs.bl == rhs.bl;
+constexpr bool operator==(const Radii& lhs, const Radii& rhs) noexcept {
+  return lhs.tl == rhs.tl && lhs.tr == rhs.tr && lhs.br == rhs.br && lhs.bl == rhs.bl;
 }
 
 struct GradientStop {
@@ -71,8 +64,7 @@ struct GradientStop {
   Color color{};
 };
 
-constexpr bool operator==(const GradientStop &lhs,
-                          const GradientStop &rhs) noexcept {
+constexpr bool operator==(const GradientStop& lhs, const GradientStop& rhs) noexcept {
   return lhs.position == rhs.position && lhs.color == rhs.color;
 }
 
@@ -102,27 +94,30 @@ struct RoundedRectStyle {
   Radii shadowExclusionRadius{};
 };
 
-constexpr bool operator==(const RoundedRectStyle &lhs,
-                          const RoundedRectStyle &rhs) noexcept {
-  return lhs.fill == rhs.fill && lhs.border == rhs.border &&
-         lhs.fillMode == rhs.fillMode &&
-         lhs.gradientDirection == rhs.gradientDirection &&
-         lhs.corners == rhs.corners && lhs.gradientStops == rhs.gradientStops &&
-         lhs.logicalInset == rhs.logicalInset && lhs.radius == rhs.radius &&
-         lhs.softness == rhs.softness && lhs.noAa == rhs.noAa &&
-         lhs.invertFill == rhs.invertFill &&
-         lhs.borderWidth == rhs.borderWidth &&
-         lhs.outerShadow == rhs.outerShadow &&
-         lhs.shadowCutoutOffsetX == rhs.shadowCutoutOffsetX &&
-         lhs.shadowCutoutOffsetY == rhs.shadowCutoutOffsetY &&
-         lhs.shadowExclusion == rhs.shadowExclusion &&
-         lhs.shadowExclusionOffsetX == rhs.shadowExclusionOffsetX &&
-         lhs.shadowExclusionOffsetY == rhs.shadowExclusionOffsetY &&
-         lhs.shadowExclusionWidth == rhs.shadowExclusionWidth &&
-         lhs.shadowExclusionHeight == rhs.shadowExclusionHeight &&
-         lhs.shadowExclusionCorners == rhs.shadowExclusionCorners &&
-         lhs.shadowExclusionLogicalInset == rhs.shadowExclusionLogicalInset &&
-         lhs.shadowExclusionRadius == rhs.shadowExclusionRadius;
+constexpr bool operator==(const RoundedRectStyle& lhs, const RoundedRectStyle& rhs) noexcept {
+  return lhs.fill == rhs.fill
+      && lhs.border == rhs.border
+      && lhs.fillMode == rhs.fillMode
+      && lhs.gradientDirection == rhs.gradientDirection
+      && lhs.corners == rhs.corners
+      && lhs.gradientStops == rhs.gradientStops
+      && lhs.logicalInset == rhs.logicalInset
+      && lhs.radius == rhs.radius
+      && lhs.softness == rhs.softness
+      && lhs.noAa == rhs.noAa
+      && lhs.invertFill == rhs.invertFill
+      && lhs.borderWidth == rhs.borderWidth
+      && lhs.outerShadow == rhs.outerShadow
+      && lhs.shadowCutoutOffsetX == rhs.shadowCutoutOffsetX
+      && lhs.shadowCutoutOffsetY == rhs.shadowCutoutOffsetY
+      && lhs.shadowExclusion == rhs.shadowExclusion
+      && lhs.shadowExclusionOffsetX == rhs.shadowExclusionOffsetX
+      && lhs.shadowExclusionOffsetY == rhs.shadowExclusionOffsetY
+      && lhs.shadowExclusionWidth == rhs.shadowExclusionWidth
+      && lhs.shadowExclusionHeight == rhs.shadowExclusionHeight
+      && lhs.shadowExclusionCorners == rhs.shadowExclusionCorners
+      && lhs.shadowExclusionLogicalInset == rhs.shadowExclusionLogicalInset
+      && lhs.shadowExclusionRadius == rhs.shadowExclusionRadius;
 }
 
 struct SpinnerStyle {
@@ -144,10 +139,11 @@ struct ScreenCornerStyle {
   float softness = 1.0f;
 };
 
-constexpr bool operator==(const ScreenCornerStyle &lhs,
-                          const ScreenCornerStyle &rhs) noexcept {
-  return lhs.color == rhs.color && lhs.position == rhs.position &&
-         lhs.exponent == rhs.exponent && lhs.softness == rhs.softness;
+constexpr bool operator==(const ScreenCornerStyle& lhs, const ScreenCornerStyle& rhs) noexcept {
+  return lhs.color == rhs.color
+      && lhs.position == rhs.position
+      && lhs.exponent == rhs.exponent
+      && lhs.softness == rhs.softness;
 }
 
 enum class AudioSpectrumOrientation : std::uint8_t {
@@ -163,22 +159,15 @@ struct AudioSpectrumStyle {
   bool centered = false;
 };
 
-constexpr bool operator==(const AudioSpectrumStyle &lhs,
-                          const AudioSpectrumStyle &rhs) noexcept {
-  return lhs.lowColor == rhs.lowColor && lhs.highColor == rhs.highColor &&
-         lhs.orientation == rhs.orientation && lhs.mirrored == rhs.mirrored &&
-         lhs.centered == rhs.centered;
+constexpr bool operator==(const AudioSpectrumStyle& lhs, const AudioSpectrumStyle& rhs) noexcept {
+  return lhs.lowColor == rhs.lowColor
+      && lhs.highColor == rhs.highColor
+      && lhs.orientation == rhs.orientation
+      && lhs.mirrored == rhs.mirrored
+      && lhs.centered == rhs.centered;
 }
 
-enum class EffectType : std::uint8_t {
-  None,
-  Sun,
-  Snow,
-  Rain,
-  Cloud,
-  Fog,
-  Stars
-};
+enum class EffectType : std::uint8_t { None, Sun, Snow, Rain, Cloud, Fog, Stars };
 
 struct EffectStyle {
   EffectType type = EffectType::None;

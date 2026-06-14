@@ -13,27 +13,29 @@ public:
   GlyphProgram() = default;
   ~GlyphProgram() = default;
 
-  GlyphProgram(const GlyphProgram &) = delete;
-  GlyphProgram &operator=(const GlyphProgram &) = delete;
+  GlyphProgram(const GlyphProgram&) = delete;
+  GlyphProgram& operator=(const GlyphProgram&) = delete;
 
   void ensureInitialized();
   void destroy();
 
   // RGBA path: sample the texture as premultiplied RGBA, scale by opacity.
-  void draw(TextureId texture, float surfaceWidth, float surfaceHeight,
-            float width, float height, float u0, float v0, float u1, float v1,
-            float opacity, const Mat3 &transform = Mat3::identity()) const;
+  void draw(
+      TextureId texture, float surfaceWidth, float surfaceHeight, float width, float height, float u0, float v0,
+      float u1, float v1, float opacity, const Mat3& transform = Mat3::identity()
+  ) const;
 
   // Alpha coverage tinted by u_tint in the shader.
-  void drawTinted(TextureId texture, float surfaceWidth, float surfaceHeight,
-                  float width, float height, float u0, float v0, float u1,
-                  float v1, float opacity, const Color &tint,
-                  const Mat3 &transform = Mat3::identity()) const;
+  void drawTinted(
+      TextureId texture, float surfaceWidth, float surfaceHeight, float width, float height, float u0, float v0,
+      float u1, float v1, float opacity, const Color& tint, const Mat3& transform = Mat3::identity()
+  ) const;
 
 private:
-  void bindCommon(TextureId texture, float surfaceWidth, float surfaceHeight,
-                  float width, float height, float u0, float v0, float u1,
-                  float v1, float opacity, const Mat3 &transform) const;
+  void bindCommon(
+      TextureId texture, float surfaceWidth, float surfaceHeight, float width, float height, float u0, float v0,
+      float u1, float v1, float opacity, const Mat3& transform
+  ) const;
 
   ShaderProgram m_program;
   GLint m_positionLocation = -1;

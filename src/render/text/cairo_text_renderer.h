@@ -40,10 +40,10 @@ public:
   CairoTextRenderer();
   ~CairoTextRenderer();
 
-  CairoTextRenderer(const CairoTextRenderer &) = delete;
-  CairoTextRenderer &operator=(const CairoTextRenderer &) = delete;
+  CairoTextRenderer(const CairoTextRenderer&) = delete;
+  CairoTextRenderer& operator=(const CairoTextRenderer&) = delete;
 
-  void initialize(RenderBackend *backend, TextureManager *textures);
+  void initialize(RenderBackend* backend, TextureManager* textures);
   void cleanup();
 
   // HiDPI: raster at `scale × fontSize` pixels and shrink the quad by 1/scale.
@@ -51,22 +51,21 @@ public:
   void setFontFamily(std::string family);
   void notifyFontConfigChanged();
 
-  [[nodiscard]] TextMetrics measure(std::string_view text, float fontSize,
-                                    bool bold = false, float maxWidth = 0.0f,
-                                    int maxLines = 0,
-                                    TextAlign align = TextAlign::Start,
-                                    std::string_view fontFamily = {});
-  [[nodiscard]] TextMetrics measureFont(float fontSize,
-                                        bool bold = false) const;
-  void measureCursorStops(std::string_view text, float fontSize,
-                          const std::vector<std::size_t> &byteOffsets,
-                          std::vector<float> &outStops, bool bold = false);
+  [[nodiscard]] TextMetrics measure(
+      std::string_view text, float fontSize, bool bold = false, float maxWidth = 0.0f, int maxLines = 0,
+      TextAlign align = TextAlign::Start, std::string_view fontFamily = {}
+  );
+  [[nodiscard]] TextMetrics measureFont(float fontSize, bool bold = false) const;
+  void measureCursorStops(
+      std::string_view text, float fontSize, const std::vector<std::size_t>& byteOffsets, std::vector<float>& outStops,
+      bool bold = false
+  );
 
-  void draw(float surfaceWidth, float surfaceHeight, float x, float baselineY,
-            std::string_view text, float fontSize, const Color &color,
-            const Mat3 &transform, bool bold = false, float maxWidth = 0.0f,
-            int maxLines = 0, TextAlign align = TextAlign::Start,
-            std::string_view fontFamily = {});
+  void draw(
+      float surfaceWidth, float surfaceHeight, float x, float baselineY, std::string_view text, float fontSize,
+      const Color& color, const Mat3& transform, bool bold = false, float maxWidth = 0.0f, int maxLines = 0,
+      TextAlign align = TextAlign::Start, std::string_view fontFamily = {}
+  );
 
 private:
   struct CacheKey {
@@ -76,15 +75,14 @@ private:
     std::uint32_t colorRgba = 0; // packed r<<24|g<<16|b<<8|a
     std::uint32_t maxWidthQ = 0; // maxWidth * 64 + 0.5, 0 = no limit
     std::uint16_t scaleQ = 0;    // contentScale * 64 + 0.5
-    std::uint16_t maxLines =
-        0; // 0 = no explicit limit (use '\n'-count fallback)
+    std::uint16_t maxLines = 0;  // 0 = no explicit limit (use '\n'-count fallback)
     TextAlign align = TextAlign::Start;
     bool bold = false;
 
-    bool operator==(const CacheKey &other) const noexcept;
+    bool operator==(const CacheKey& other) const noexcept;
   };
   struct CacheKeyHash {
-    std::size_t operator()(const CacheKey &k) const noexcept;
+    std::size_t operator()(const CacheKey& k) const noexcept;
   };
 
   // Color-independent metrics cache (layout calls measure every frame).
@@ -98,14 +96,14 @@ private:
     TextAlign align = TextAlign::Start;
     bool bold = false;
 
-    bool operator==(const MetricsKey &other) const noexcept;
+    bool operator==(const MetricsKey& other) const noexcept;
   };
   struct MetricsKeyHash {
-    std::size_t operator()(const MetricsKey &k) const noexcept;
+    std::size_t operator()(const MetricsKey& k) const noexcept;
   };
 
   // LRU holds stable pointers into unordered_map keys.
-  using LruList = std::list<const CacheKey *>;
+  using LruList = std::list<const CacheKey*>;
 
   // Tall text is split into stacked tiles within the GL texture size limit.
   struct Tile {
@@ -122,30 +120,27 @@ private:
     float inkOffsetX = 0; // raster px from surface left to logical text origin
     TextMetrics metrics;  // logical metrics in logical (unscaled) pixels
     std::size_t bytes = 0;
-    bool tinted =
-        false; // true: alpha coverage, tint in shader; false: premul RGBA
+    bool tinted = false; // true: alpha coverage, tint in shader; false: premul RGBA
     LruList::iterator lruIt;
   };
 
   using CacheMap = std::unordered_map<CacheKey, CacheEntry, CacheKeyHash>;
-  using MetricsMap =
-      std::unordered_map<MetricsKey, TextMetrics, MetricsKeyHash>;
+  using MetricsMap = std::unordered_map<MetricsKey, TextMetrics, MetricsKeyHash>;
 
   // Caller owns the returned layout (g_object_unref).
-  PangoLayout *buildLayout(std::string_view text, float fontSize, bool bold,
-                           float maxWidthPxScaled, int maxLines,
-                           TextAlign align,
-                           std::string_view fontFamily = {}) const;
+  PangoLayout* buildLayout(
+      std::string_view text, float fontSize, bool bold, float maxWidthPxScaled, int maxLines, TextAlign align,
+      std::string_view fontFamily = {}
+  ) const;
   // tinted: A8 coverage for shader tint; else ARGB32 with color baked in.
-  void rasterizeLayout(PangoLayout *layout, const Color &color, bool tinted,
-                       CacheEntry &entry);
+  void rasterizeLayout(PangoLayout* layout, const Color& color, bool tinted, CacheEntry& entry);
   // Logical metrics from a laid-out PangoLayout.
-  TextMetrics metricsFromLayout(PangoLayout *layout) const;
+  TextMetrics metricsFromLayout(PangoLayout* layout) const;
 
-  CacheEntry *lookupOrRasterize(std::string_view text, float fontSize,
-                                bool bold, float maxWidth, int maxLines,
-                                TextAlign align, const Color &color,
-                                std::string_view fontFamily = {});
+  CacheEntry* lookupOrRasterize(
+      std::string_view text, float fontSize, bool bold, float maxWidth, int maxLines, TextAlign align,
+      const Color& color, std::string_view fontFamily = {}
+  );
   void touch(CacheMap::iterator it);
   void evict(CacheMap::iterator it);
   void evictIfNeeded();
@@ -155,10 +150,10 @@ private:
   bool m_fontConfigInitialized = false;
   std::string m_fontFamily = "sans-serif";
 
-  PangoFontMap *m_fontMap = nullptr;      // owned
-  PangoContext *m_pangoContext = nullptr; // owned
-  RenderBackend *m_backend = nullptr;
-  TextureManager *m_textureManager = nullptr;
+  PangoFontMap* m_fontMap = nullptr;      // owned
+  PangoContext* m_pangoContext = nullptr; // owned
+  RenderBackend* m_backend = nullptr;
+  TextureManager* m_textureManager = nullptr;
 
   CacheMap m_cache;
   LruList m_lru;

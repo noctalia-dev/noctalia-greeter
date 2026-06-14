@@ -62,8 +62,7 @@ public:
   static void setCornerRadiusScale(float scale) noexcept;
   [[nodiscard]] static float cornerRadiusScale() noexcept;
 
-  [[nodiscard]] static float scaledRadius(float radius,
-                                          float factor = 1.0f) noexcept;
+  [[nodiscard]] static float scaledRadius(float radius, float factor = 1.0f) noexcept;
   [[nodiscard]] static float radiusSm() noexcept;
   [[nodiscard]] static float radiusMd() noexcept;
   [[nodiscard]] static float radiusLg() noexcept;

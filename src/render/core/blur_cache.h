@@ -1,2 +1,5 @@
 #pragma once
-class BlurCache { public: void initialize() {} };
+class BlurCache {
+public:
+  void initialize() {}
+};

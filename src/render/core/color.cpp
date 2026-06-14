@@ -16,7 +16,8 @@ Color lerpColor(const Color& a, const Color& b, float t) noexcept {
 }
 
 bool tryParseHexColor(std::string_view hex, Color& out) noexcept {
-  if (hex.empty()) return false;
+  if (hex.empty())
+    return false;
 
   if (hex[0] == '#') {
     hex = hex.substr(1);
@@ -27,7 +28,8 @@ bool tryParseHexColor(std::string_view hex, Color& out) noexcept {
   switch (hex.size()) {
   case 3: {
     std::uint32_t r = 0, g = 0, b = 0;
-    if (sscanf(hex.data(), "%1x%1x%1x", &r, &g, &b) != 3) return false;
+    if (sscanf(hex.data(), "%1x%1x%1x", &r, &g, &b) != 3)
+      return false;
     out.r = static_cast<float>(r) / 15.0f;
     out.g = static_cast<float>(g) / 15.0f;
     out.b = static_cast<float>(b) / 15.0f;
@@ -36,7 +38,8 @@ bool tryParseHexColor(std::string_view hex, Color& out) noexcept {
   }
   case 4: {
     std::uint32_t r = 0, g = 0, b = 0, a = 0;
-    if (sscanf(hex.data(), "%1x%1x%1x%1x", &r, &g, &b, &a) != 4) return false;
+    if (sscanf(hex.data(), "%1x%1x%1x%1x", &r, &g, &b, &a) != 4)
+      return false;
     out.r = static_cast<float>(r) / 15.0f;
     out.g = static_cast<float>(g) / 15.0f;
     out.b = static_cast<float>(b) / 15.0f;
@@ -44,7 +47,8 @@ bool tryParseHexColor(std::string_view hex, Color& out) noexcept {
     return true;
   }
   case 6: {
-    if (sscanf(hex.data(), "%6x", &value) != 1) return false;
+    if (sscanf(hex.data(), "%6x", &value) != 1)
+      return false;
     out.r = static_cast<float>((value >> 16) & 0xFF) / 255.0f;
     out.g = static_cast<float>((value >> 8) & 0xFF) / 255.0f;
     out.b = static_cast<float>(value & 0xFF) / 255.0f;
@@ -52,7 +56,8 @@ bool tryParseHexColor(std::string_view hex, Color& out) noexcept {
     return true;
   }
   case 8: {
-    if (sscanf(hex.data(), "%8x", &value) != 1) return false;
+    if (sscanf(hex.data(), "%8x", &value) != 1)
+      return false;
     out.r = static_cast<float>((value >> 24) & 0xFF) / 255.0f;
     out.g = static_cast<float>((value >> 16) & 0xFF) / 255.0f;
     out.b = static_cast<float>((value >> 8) & 0xFF) / 255.0f;
