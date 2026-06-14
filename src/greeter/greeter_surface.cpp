@@ -40,8 +40,6 @@
 #include <json.hpp>
 #include <linux/input-event-codes.h>
 #include <unordered_set>
-#include <utility>
-#include <vector>
 
 namespace {
 constexpr Logger kLog("greeter-surface");
@@ -1230,11 +1228,6 @@ void GreeterSurface::loadUsers() {
   static const std::unordered_set<std::string> kHiddenSystemUsers = {
       "greeter", "greetd", "sddm", "lightdm", "gdm", "nobody",
   };
-  struct UserEntry {
-    std::string name;
-    uid_t uid;
-  };
-  std::vector<UserEntry> users;
 
   int userEnumerationErrno = 0;
 
@@ -1262,25 +1255,14 @@ void GreeterSurface::loadUsers() {
         shell.find("false") != std::string::npos) {
       continue;
     }
-    users.push_back({std::move(user), uid});
+    m_users.push_back(user);
+    m_userUids.push_back(uid);
   }
   ::endpwent();
 
   if (userEnumerationErrno != 0) {
     kLog.warn("failed to enumerate NSS users: {}",
               std::strerror(userEnumerationErrno));
-  }
-
-  std::sort(users.begin(), users.end(),
-            [](const UserEntry &lhs, const UserEntry &rhs) {
-              return lhs.name < rhs.name;
-            });
-
-  m_users.reserve(users.size());
-  m_userUids.reserve(users.size());
-  for (UserEntry &user : users) {
-    m_users.push_back(std::move(user.name));
-    m_userUids.push_back(user.uid);
   }
 
   if (m_users.empty()) {

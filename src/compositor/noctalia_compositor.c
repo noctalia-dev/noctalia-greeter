@@ -374,23 +374,23 @@ static void disable_output(struct greeter_output *output) {
   }
 }
 
-static struct wlr_output_mode *get_best_mode(struct wlr_output *wlr_output) {
-  struct wlr_output_mode *best = NULL;
+static struct wlr_output_mode *
+select_output_mode(struct wlr_output *wlr_output) {
+  struct wlr_output_mode *preferred = wlr_output_preferred_mode(wlr_output);
+  if (preferred == NULL) {
+    return NULL;
+  }
+
+  // EDID may list several refresh rates at the preferred resolution; pick the
+  // highest among those matching the preferred mode's size.
+  struct wlr_output_mode *best = preferred;
   struct wlr_output_mode *mode;
   wl_list_for_each(mode, &wlr_output->modes, link) {
-    if (best == NULL) {
-      best = mode;
+    if (mode->width != preferred->width || mode->height != preferred->height) {
       continue;
     }
-    // Prefer higher resolution
-    if (mode->width * mode->height > best->width * best->height) {
+    if (mode->refresh > best->refresh) {
       best = mode;
-    } 
-    // If resolution is identical, prefer the higher refresh rate
-    else if (mode->width == best->width && mode->height == best->height) {
-      if (mode->refresh > best->refresh) {
-        best = mode;
-      }
     }
   }
   return best;
@@ -411,11 +411,11 @@ static bool commit_output_enabled(struct greeter_output *output) {
   struct wlr_output_state state;
   wlr_output_state_init(&state);
   wlr_output_state_set_enabled(&state, true);
-  struct wlr_output_mode *mode = get_best_mode(output->wlr_output);
+  struct wlr_output_mode *mode = select_output_mode(output->wlr_output);
   if (mode != NULL) {
     wlr_output_state_set_mode(&state, mode);
-    wlr_log(WLR_INFO, "Selected best mode: %dx%d @ %.3f Hz", 
-            mode->width, mode->height, mode->refresh / 1000.0);
+    wlr_log(WLR_INFO, "selected output mode: %dx%d @ %.3f Hz", mode->width,
+            mode->height, mode->refresh / 1000.0);
   }
   const float scale =
       output_ui_scale(output->wlr_output, output->server->manual_scale);
