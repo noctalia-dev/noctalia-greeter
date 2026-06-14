@@ -1311,6 +1311,8 @@ void GreeterSurface::refreshSelectionLabels() {
   if (m_schemeSelectIcon != nullptr) {
     m_schemeSelectIcon->setColor(colorForRole(ColorRole::OnSurfaceVariant));
   }
+  applySelectorBoxStyle(m_userSelectBox, m_userSelectArea);
+  applySelectorBoxStyle(m_schemeSelectBox, m_schemeSelectArea);
 }
 
 void GreeterSurface::buildSchemeNames() {
@@ -1756,18 +1758,20 @@ void GreeterSurface::applySelectorBoxStyle(Box *box, const InputArea *area) {
   if (box == nullptr) {
     return;
   }
-  const bool focused = area != nullptr && area->focused();
+  const bool menuOpen = (box == m_schemeSelectBox && m_schemeMenuOpen) ||
+                        (box == m_userSelectBox && m_userMenuOpen);
+  const bool active = menuOpen || (area != nullptr && area->focused());
   box->setStyle(RoundedRectStyle{
-      .fill = focused ? colorForRole(ColorRole::Surface)
-                      : colorForRole(ColorRole::SurfaceVariant),
-      .border = focused ? colorForRole(ColorRole::Primary)
-                        : colorForRole(ColorRole::Outline),
+      .fill = active ? colorForRole(ColorRole::Surface)
+                     : colorForRole(ColorRole::SurfaceVariant),
+      .border = active ? colorForRole(ColorRole::Primary)
+                       : colorForRole(ColorRole::Outline),
       .fillMode = FillMode::Solid,
       .radius = Style::scaledRadiusLg(),
       .softness = 1.0f,
       .borderWidth =
-          focused ? std::max(Style::borderWidth(), Style::borderWidth() * 2.0f)
-                  : Style::borderWidth(),
+          active ? std::max(Style::borderWidth(), Style::borderWidth() * 2.0f)
+                 : Style::borderWidth(),
   });
 }
 
@@ -1982,11 +1986,22 @@ void GreeterSurface::applyMenuHighlight() {
 
     const bool highlighted = i == m_menuHighlight;
     const bool isSelected = index == selected;
+    const float borderWidth = Style::borderWidth();
+    const float panelRadius = m_userMenuOpen ? Style::scaledRadiusMd() : Style::scaledRadiusLg();
+    Radii rowRadius(0.0f);
+    if (count == 1) {
+      rowRadius = Radii(panelRadius - borderWidth);
+    } else if (i == 0) {
+      rowRadius = Radii(panelRadius - borderWidth, panelRadius - borderWidth, 0.0f, 0.0f);
+    } else if (i == count - 1) {
+      rowRadius = Radii(0.0f, 0.0f, panelRadius - borderWidth, panelRadius - borderWidth);
+    }
+
     row->setStyle(RoundedRectStyle{
         .fill = highlighted ? colorForRole(ColorRole::Secondary)
                             : colorForRole(ColorRole::SurfaceVariant),
         .fillMode = FillMode::Solid,
-        .radius = Style::scaledRadiusSm(),
+        .radius = rowRadius,
     });
 
     if (labels != nullptr && index < labels->size()) {
@@ -2203,37 +2218,57 @@ void GreeterSurface::rebuildUserMenu() {
   }
 
   const float x = m_userSelectBox->x();
-  const float y =
-      m_userSelectBox->y() + m_userSelectBox->height() + Style::spaceXs();
-  const float w = m_userSelectBox->width();
   const float rowH = Style::controlHeightSm();
   const std::size_t count = m_users.size();
   const float h = rowH * static_cast<float>(count);
+
+  const float borderWidth = Style::borderWidth();
+  const float panelH = h + 2.0f * borderWidth;
+  const float y =
+      m_userSelectBox->y() + m_userSelectBox->height() + Style::spaceXs();
+  const float w = m_userSelectBox->width();
 
   auto panel = std::make_unique<Box>();
   m_userMenuPanel = panel.get();
   m_userMenuPanel->setZIndex(50);
   m_root.addChild(std::move(panel));
   m_userMenuPanel->setPosition(x, y);
-  m_userMenuPanel->setSize(w, h);
+  m_userMenuPanel->setSize(w, panelH);
   m_userMenuPanel->setStyle(RoundedRectStyle{
       .fill = colorForRole(ColorRole::SurfaceVariant),
       .border = colorForRole(ColorRole::Outline),
       .fillMode = FillMode::Solid,
       .radius = Style::scaledRadiusMd(),
       .softness = 1.0f,
-      .borderWidth = Style::borderWidth(),
+      .borderWidth = borderWidth,
   });
 
+  const float panelRadius = Style::scaledRadiusMd();
+
   for (std::size_t i = 0; i < count; ++i) {
+    const float rowX = x + borderWidth;
+    const float rowY = y + borderWidth + rowH * static_cast<float>(i);
+    const float rowW = w - 2.0f * borderWidth;
+
     auto row = std::make_unique<Box>();
     auto *rowPtr = row.get();
     rowPtr->setZIndex(51);
-    rowPtr->setPosition(x, y + rowH * static_cast<float>(i));
-    rowPtr->setSize(w, rowH);
+    rowPtr->setPosition(rowX, rowY);
+    rowPtr->setSize(rowW, rowH);
+
+    Radii rowRadius(0.0f);
+    if (count == 1) {
+      rowRadius = Radii(panelRadius - borderWidth);
+    } else if (i == 0) {
+      rowRadius = Radii(panelRadius - borderWidth, panelRadius - borderWidth, 0.0f, 0.0f);
+    } else if (i == count - 1) {
+      rowRadius = Radii(0.0f, 0.0f, panelRadius - borderWidth, panelRadius - borderWidth);
+    }
+
     rowPtr->setStyle(RoundedRectStyle{
         .fill = colorForRole(ColorRole::SurfaceVariant, 0.01f),
         .fillMode = FillMode::Solid,
+        .radius = rowRadius,
     });
     m_root.addChild(std::move(row));
     m_userMenuRows.push_back(rowPtr);
@@ -2248,8 +2283,8 @@ void GreeterSurface::rebuildUserMenu() {
     labelPtr->setZIndex(52);
     m_root.addChild(std::move(label));
     labelPtr->measure(*m_renderContext);
-    labelPtr->setPosition(x + Style::spaceMd(),
-                          y + rowH * static_cast<float>(i) +
+    labelPtr->setPosition(rowX + Style::spaceMd(),
+                          rowY +
                               std::round((rowH - labelPtr->height()) * 0.5f));
     m_userMenuLabels.push_back(labelPtr);
 
@@ -2257,19 +2292,21 @@ void GreeterSurface::rebuildUserMenu() {
     auto *areaPtr = area.get();
     areaPtr->setFocusable(true);
     areaPtr->setZIndex(53);
-    areaPtr->setOnEnter([this, i](const InputArea::PointerData &) {
+    areaPtr->setOnEnter([this, i, rowRadius](const InputArea::PointerData &) {
       if (i < m_userMenuRows.size() && m_userMenuRows[i] != nullptr) {
         m_userMenuRows[i]->setStyle(RoundedRectStyle{
             .fill = colorForRole(ColorRole::Hover, 0.35f),
             .fillMode = FillMode::Solid,
+            .radius = rowRadius,
         });
       }
     });
-    areaPtr->setOnLeave([this, i]() {
+    areaPtr->setOnLeave([this, i, rowRadius]() {
       if (i < m_userMenuRows.size() && m_userMenuRows[i] != nullptr) {
         m_userMenuRows[i]->setStyle(RoundedRectStyle{
             .fill = colorForRole(ColorRole::SurfaceVariant, 0.01f),
             .fillMode = FillMode::Solid,
+            .radius = rowRadius,
         });
       }
     });
@@ -2284,8 +2321,8 @@ void GreeterSurface::rebuildUserMenu() {
       requestLayout();
     });
     m_root.addChild(std::move(area));
-    areaPtr->setPosition(x, y + rowH * static_cast<float>(i));
-    areaPtr->setSize(w, rowH);
+    areaPtr->setPosition(rowX, rowY);
+    areaPtr->setSize(rowW, rowH);
     m_userMenuAreas.push_back(areaPtr);
   }
 }
@@ -2333,7 +2370,9 @@ void GreeterSurface::buildMenu(const std::vector<std::string> &names,
   float x = rightAlign ? (anchorX + anchorW - w) : anchorX;
   x = std::clamp(x, Style::spaceLg(), maxX);
 
-  const float y = upward ? (anchor->y() - h - Style::spaceXs())
+  const float borderWidth = Style::borderWidth();
+  const float panelH = h + 2.0f * borderWidth;
+  const float y = upward ? (anchor->y() - panelH - Style::spaceXs())
                          : (anchor->y() + anchor->height() + Style::spaceXs());
 
   auto panel = std::make_unique<Box>();
@@ -2341,34 +2380,48 @@ void GreeterSurface::buildMenu(const std::vector<std::string> &names,
   panelOut->setZIndex(zBase);
   m_root.addChild(std::move(panel));
   panelOut->setPosition(x, y);
-  panelOut->setSize(w, h);
+  panelOut->setSize(w, panelH);
   panelOut->setStyle(RoundedRectStyle{
       .fill = colorForRole(ColorRole::SurfaceVariant),
       .border = colorForRole(ColorRole::Outline),
       .fillMode = FillMode::Solid,
       .radius = Style::scaledRadiusLg(),
       .softness = 1.0f,
-      .borderWidth = Style::borderWidth(),
+      .borderWidth = borderWidth,
   });
 
+  const float panelRadius = Style::scaledRadiusLg();
+
   for (std::size_t i = 0; i < count; ++i) {
-    const float rowY = y + rowH * static_cast<float>(i);
+    const float rowX = x + borderWidth;
+    const float rowY = y + borderWidth + rowH * static_cast<float>(i);
+    const float rowW = w - 2.0f * borderWidth;
 
     auto row = std::make_unique<Box>();
     auto *rowPtr = row.get();
     rowPtr->setZIndex(zBase + 1);
-    rowPtr->setPosition(x, rowY);
-    rowPtr->setSize(w, rowH);
+    rowPtr->setPosition(rowX, rowY);
+    rowPtr->setSize(rowW, rowH);
+
+    Radii rowRadius(0.0f);
+    if (count == 1) {
+      rowRadius = Radii(panelRadius - borderWidth);
+    } else if (i == 0) {
+      rowRadius = Radii(panelRadius - borderWidth, panelRadius - borderWidth, 0.0f, 0.0f);
+    } else if (i == count - 1) {
+      rowRadius = Radii(0.0f, 0.0f, panelRadius - borderWidth, panelRadius - borderWidth);
+    }
+
     rowPtr->setStyle(RoundedRectStyle{
         .fill = colorForRole(ColorRole::SurfaceVariant),
         .fillMode = FillMode::Solid,
-        .radius = Style::scaledRadiusSm(),
+        .radius = rowRadius,
     });
     m_root.addChild(std::move(row));
     rows.push_back(rowPtr);
 
     Label *labelPtr = labels[i];
-    labelPtr->setPosition(x + Style::spaceMd(),
+    labelPtr->setPosition(rowX + Style::spaceMd(),
                           rowY +
                               std::round((rowH - labelPtr->height()) * 0.5f));
 
@@ -2388,8 +2441,8 @@ void GreeterSurface::buildMenu(const std::vector<std::string> &names,
       onSelect(i);
     });
     m_root.addChild(std::move(area));
-    areaPtr->setPosition(x, rowY);
-    areaPtr->setSize(w, rowH);
+    areaPtr->setPosition(rowX, rowY);
+    areaPtr->setSize(rowW, rowH);
     areas.push_back(areaPtr);
   }
 }
