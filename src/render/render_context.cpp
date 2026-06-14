@@ -371,7 +371,7 @@ void RenderContext::renderNode(const Node *node, const Mat3 &parentTransform,
           wallpaper->imageWidth1(), wallpaper->imageHeight1(), imageWidth2,
           imageHeight2, progress, static_cast<float>(wallpaper->fillMode()),
           wallpaper->transitionParams(), wallpaper->fillColor(),
-          worldTransform);
+          worldTransform, wallpaper->blurRadius(), wallpaper->tintColor());
     }
     break;
   }
