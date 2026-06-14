@@ -440,7 +440,7 @@ void GreeterSurface::initialize(RenderContext* context) {
   }
   applyScheme(m_selectedScheme);
   refreshSelectionLabels();
-  m_passwordVisible = false;
+  applyInitialUserSelection();
 
   const auto rowPalette = userRowPalette();
   m_userRowButtons.clear();
@@ -484,6 +484,67 @@ void GreeterSurface::initialize(RenderContext* context) {
   }
 
   requestLayout();
+}
+
+void GreeterSurface::applyInitialUserSelection() {
+  const auto initialUser = greeter::resolveInitialUserName(greeter::loadGreeterPreferences());
+  if (!initialUser.has_value()) {
+    m_passwordVisible = false;
+    return;
+  }
+
+  for (std::size_t i = 0; i < m_users.size(); ++i) {
+    if (m_users[i] == *initialUser) {
+      m_selectedUser = i;
+      setUsername(m_users[i]);
+      m_passwordVisible = true;
+      m_password.clear();
+      if (m_passwordField != nullptr) {
+        m_passwordField->setValue("");
+      }
+      return;
+    }
+  }
+
+  m_passwordVisible = false;
+  kLog.warn("default_user '{}' is not in the greeter user list", *initialUser);
+}
+
+void GreeterSurface::setKeyboardOwner(const bool owner) noexcept {
+  m_isKeyboardOwner = owner;
+  if (owner) {
+    reconcileKeyboardFocus();
+  }
+}
+
+bool GreeterSurface::ownsInputArea(const InputArea* area) const {
+  if (area == nullptr) {
+    return false;
+  }
+  for (const Node* node = area; node != nullptr; node = node->parent()) {
+    if (node == &m_root) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void GreeterSurface::reconcileKeyboardFocus() {
+  InputArea* focused = InputArea::getFocused();
+  if (focused != nullptr && ownsInputArea(focused)) {
+    syncFocusIndexFromFocused();
+    return;
+  }
+
+  if (m_passwordVisible && m_passwordField != nullptr && m_passwordField->inputArea() != nullptr) {
+    m_inputDispatcher.setFocus(m_passwordField->inputArea());
+    syncFocusIndexFromFocused();
+    return;
+  }
+
+  if (!m_focusRing.empty()) {
+    setFocusIndex(defaultFocusIndex());
+  }
 }
 
 void GreeterSurface::setWindow(GreeterWindow* window) { m_window = window; }
@@ -616,6 +677,7 @@ void GreeterSurface::onKeyEvent(
 ) {
   if (!pressed)
     return;
+  reconcileKeyboardFocus();
   m_inInputDispatch = true;
   if (!handleNavigationKey(sym, modifiers)) {
     m_inputDispatcher.keyEvent(sym, utf32, modifiers, pressed, preedit);
@@ -1044,13 +1106,26 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
   rebuildFocusRing();
   applyMenuHighlight();
 
-  // Keyboard focus is applied once the user rows have valid layout targets.
-  if (!m_initialFocusDone && !m_focusRing.empty()) {
+  if (!m_isKeyboardOwner) {
+    return;
+  }
+
+  // Keyboard focus is applied once interactive targets have valid layout.
+  const bool applyingInitialFocus = !m_initialFocusDone && !m_focusRing.empty();
+  if (applyingInitialFocus) {
     setFocusIndex(defaultFocusIndex());
     m_initialFocusDone = true;
   } else if (m_focusIndex < 0 && !m_focusRing.empty()) {
     setFocusIndex(defaultFocusIndex());
   } else {
+    syncFocusIndexFromFocused();
+  }
+
+  if (applyingInitialFocus
+      && m_passwordVisible
+      && m_passwordField != nullptr
+      && m_passwordField->inputArea() != nullptr) {
+    m_inputDispatcher.setFocus(m_passwordField->inputArea());
     syncFocusIndexFromFocused();
   }
 }
@@ -1814,6 +1889,14 @@ void GreeterSurface::layoutPanelSessionSelector(float x, float y, float w, float
 std::ptrdiff_t GreeterSurface::defaultFocusIndex() const {
   if (m_focusRing.empty()) {
     return 0;
+  }
+
+  if (m_passwordVisible && m_passwordField != nullptr && m_passwordField->inputArea() != nullptr) {
+    for (std::size_t i = 0; i < m_focusRing.size(); ++i) {
+      if (m_focusRing[i].area == m_passwordField->inputArea()) {
+        return static_cast<std::ptrdiff_t>(i);
+      }
+    }
   }
 
   if (!m_passwordVisible) {

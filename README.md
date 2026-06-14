@@ -231,6 +231,7 @@ The greeter adds a **Synced** color scheme when sync data is present. Session an
 Admin-only keys in `greeter.conf` (set by you, not the UI):
 
 - `default_session` - session selected when the greeter opens (overrides last-used unless you pass `--session` on the command line)
+- `default_user` - username to select on startup; opens the password step immediately (overrides user picker unless you go back; `--user` on the command line wins)
 - `greeter_user` - greetd account name (setup/logging)
 - `output` - Wayland connector name (see Multi-monitor)
 - `scale` - manual compositor scale factor (e.g. `1.5`); invalid or missing → auto scale

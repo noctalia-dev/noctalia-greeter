@@ -132,13 +132,15 @@ namespace {
 
     out << "# noctalia-greeter greeter.conf\n";
     out << "# default_session: admin default (Wayland session Name=)\n";
+    out << "# default_user: skip user picker, open password for this account\n";
     out << "# session: last used (UI); scheme: color scheme name\n";
     out << "# output: Wayland connector; scale: UI scale; admin-only\n";
     out << "# cursor_theme/cursor_size/cursor_path: cursor appearance; admin-only\n";
 
-    static constexpr const char* kPreferredOrder[] = {"greeter_user", "default_session", "session",
-                                                      "scheme",       "output",          "scale",
-                                                      "cursor_theme", "cursor_size",     "cursor_path"};
+    static constexpr const char* kPreferredOrder[] = {
+        "greeter_user", "default_session", "default_user", "session",     "scheme",
+        "output",       "scale",           "cursor_theme", "cursor_size", "cursor_path",
+    };
     for (const char* key : kPreferredOrder) {
       const auto it = map.find(key);
       if (it != map.end()) {
@@ -220,12 +222,15 @@ namespace greeter {
   namespace {
 
     std::optional<std::string> g_cliDefaultSession;
+    std::optional<std::string> g_cliDefaultUser;
 
   } // namespace
 
   std::filesystem::path greeterConfPath() { return appearance::packageConfPath(); }
 
   void setCliDefaultSession(std::optional<std::string> session) { g_cliDefaultSession = std::move(session); }
+
+  void setCliDefaultUser(std::optional<std::string> user) { g_cliDefaultUser = std::move(user); }
 
   std::optional<std::string> resolveInitialSessionName(const GreeterPreferences& prefs) {
     if (g_cliDefaultSession.has_value() && !g_cliDefaultSession->empty()) {
@@ -240,14 +245,25 @@ namespace greeter {
     return std::nullopt;
   }
 
+  std::optional<std::string> resolveInitialUserName(const GreeterPreferences& prefs) {
+    if (g_cliDefaultUser.has_value() && !g_cliDefaultUser->empty()) {
+      return g_cliDefaultUser;
+    }
+    if (prefs.defaultUser.has_value() && !prefs.defaultUser->empty()) {
+      return prefs.defaultUser;
+    }
+    return std::nullopt;
+  }
+
   GreeterPreferences loadGreeterPreferences() {
     GreeterPreferences prefs;
     const auto path = greeterConfPath();
     const KeyValueMap map = loadKeyValues(path);
 
-    static constexpr std::array<std::string_view, 9> kKnownKeys = {"greeter_user", "default_session", "session",
-                                                                   "scheme",       "output",          "scale",
-                                                                   "cursor_theme", "cursor_size",     "cursor_path"};
+    static constexpr std::array<std::string_view, 10> kKnownKeys = {
+        "greeter_user", "default_session", "default_user", "session",     "scheme",
+        "output",       "scale",           "cursor_theme", "cursor_size", "cursor_path",
+    };
     for (const auto& [key, value] : map) {
       if (std::find(kKnownKeys.begin(), kKnownKeys.end(), std::string_view(key)) == kKnownKeys.end()) {
         kLog.warn("{}: unrecognized key '{}' (ignored)", path.string(), key);
@@ -255,6 +271,7 @@ namespace greeter {
     }
 
     prefs.defaultSession = mapValue(map, {"default_session"});
+    prefs.defaultUser = mapValue(map, {"default_user"});
     prefs.session = mapValue(map, {"session"});
     prefs.scheme = mapValue(map, {"scheme"});
     prefs.output = mapValue(map, {"output"});

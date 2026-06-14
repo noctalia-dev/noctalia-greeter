@@ -264,7 +264,20 @@ void Greeter::syncOutputWindows() {
     m_activeSurface = m_views.front().surface.get();
   }
 
+  GreeterSurface* keyboardSurface = m_activeSurface;
+  if (keyboardSurface == nullptr && !m_views.empty()) {
+    keyboardSurface = m_views.front().surface.get();
+  }
+  setActiveSurface(keyboardSurface);
+
   m_syncingOutputWindows = false;
+}
+
+void Greeter::setActiveSurface(GreeterSurface* surface) {
+  m_activeSurface = surface;
+  for (auto& view : m_views) {
+    view.surface->setKeyboardOwner(view.surface.get() == surface);
+  }
 }
 
 void Greeter::syncStateFrom(const GreeterSurface* source) {
@@ -317,18 +330,18 @@ void Greeter::setupInputCallbacks(WaylandClient& client) {
 
     switch (event.type) {
     case PointerEvent::Type::Enter:
-      m_activeSurface = view->surface.get();
+      setActiveSurface(view->surface.get());
       onPointerMotion(*view->window, event.sx, event.sy);
       break;
     case PointerEvent::Type::Leave:
       onPointerLeave(*view->window);
       break;
     case PointerEvent::Type::Motion:
-      m_activeSurface = view->surface.get();
+      setActiveSurface(view->surface.get());
       onPointerMotion(*view->window, event.sx, event.sy);
       break;
     case PointerEvent::Type::Button:
-      m_activeSurface = view->surface.get();
+      setActiveSurface(view->surface.get());
       onPointerMotion(*view->window, event.sx, event.sy);
       onPointerButton(*view->window, event.sx, event.sy, event.button, event.state != 0);
       break;

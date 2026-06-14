@@ -120,6 +120,14 @@ int main(int argc, char* argv[]) {
       greeter::setCliDefaultSession(argv[++i]);
       continue;
     }
+    if (std::strcmp(argv[i], "--user") == 0) {
+      if (i + 1 >= argc) {
+        std::fputs("error: --user requires a username\n", stderr);
+        return 1;
+      }
+      greeter::setCliDefaultUser(argv[++i]);
+      continue;
+    }
     if (std::strcmp(argv[i], "--version") == 0 || std::strcmp(argv[i], "-v") == 0) {
       std::printf("noctalia-greeter %s\n", NOCTALIA_GREETER_VERSION);
       return 0;
@@ -154,6 +162,7 @@ int main(int argc, char* argv[]) {
           "  -v, --version         Show version information\n"
           "  --log-test            Write test lines to all log paths and exit\n"
           "  --session, --cmd NAME Default session (Wayland .desktop Name=)\n"
+          "  --user NAME           Default user (skip user picker, open password)\n"
           "\n"
           "Environment:\n"
           "  GREETD_SOCK           Path to greetd Unix socket\n"
@@ -162,7 +171,7 @@ int main(int argc, char* argv[]) {
           "\n"
           "Greetd example:\n"
           "  command = \"/usr/local/bin/noctalia-greeter-session -- --session "
-          "niri\"\n"
+          "niri --user lysec\"\n"
           "  user = \"greeter\"\n"
           "\n"
           "For more information, visit https://noctalia.dev"

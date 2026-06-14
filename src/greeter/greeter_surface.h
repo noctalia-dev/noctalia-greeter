@@ -45,6 +45,7 @@ public:
   void setUsername(const std::string& username);
   void setOnExitRequested(std::function<void()> callback);
   void setOnStateChanged(std::function<void(GreeterSurface*)> callback);
+  void setKeyboardOwner(bool owner) noexcept;
 
   void mirrorStateFrom(const GreeterSurface& other);
 
@@ -115,7 +116,10 @@ private:
   void clearSessionMenu();
   void clearSchemeMenu();
   void enterPasswordStep(std::size_t userIndex);
+  void applyInitialUserSelection();
   void loadPreferences();
+  void reconcileKeyboardFocus();
+  [[nodiscard]] bool ownsInputArea(const InputArea* area) const;
   void savePreferences() const;
   void buildSchemeNames();
   void applyScheme(std::size_t schemeIndex);
@@ -206,6 +210,7 @@ private:
   std::ptrdiff_t m_focusIndex = -1;
   std::ptrdiff_t m_menuHighlight = -1;
   bool m_initialFocusDone = false;
+  bool m_isKeyboardOwner = false;
 
   std::vector<std::string> m_users;
   std::vector<uid_t> m_userUids;

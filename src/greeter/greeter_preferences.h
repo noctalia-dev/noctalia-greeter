@@ -9,6 +9,7 @@ namespace greeter {
 
   struct GreeterPreferences {
     std::optional<std::string> defaultSession;
+    std::optional<std::string> defaultUser;
     std::optional<std::string> session;
     std::optional<std::string> scheme;
     std::optional<std::string> output;
@@ -25,8 +26,14 @@ namespace greeter {
   // default_session.
   void setCliDefaultSession(std::optional<std::string> session);
 
+  // greetd/CLI default (--user); overrides greeter.conf default_user.
+  void setCliDefaultUser(std::optional<std::string> user);
+
   // CLI default → default_session → session (last used).
   [[nodiscard]] std::optional<std::string> resolveInitialSessionName(const GreeterPreferences& prefs);
+
+  // CLI default → default_user.
+  [[nodiscard]] std::optional<std::string> resolveInitialUserName(const GreeterPreferences& prefs);
 
   // Root only: synced data dir, greeter.conf, chown conf to greeterUser.
   [[nodiscard]] bool installGreeterSystemLayout(std::string_view greeterUser, std::string& errorOut);

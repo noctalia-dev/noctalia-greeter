@@ -44,6 +44,7 @@ private:
   void setupInputCallbacks(WaylandClient& client);
   void syncOutputWindows();
   void syncStateFrom(const GreeterSurface* source);
+  void setActiveSurface(GreeterSurface* surface);
   [[nodiscard]] View* viewForWindow(GreeterWindow& window) noexcept;
   [[nodiscard]] View* viewForSurface(wl_surface* surface) noexcept;
 
