@@ -469,7 +469,6 @@ void GlesRenderBackend::drawWallpaper(
     }
   }
 
->>>>>>> b798c8b (feat: add Synced (Blur) theme option with background blur and tint)
   m_wallpaperProgram.ensureInitialized();
   m_wallpaperProgram.draw(
       transition, sourceKind1, texture1, sourceColor1, sourceKind2, texture2, sourceColor2, surfaceWidth, surfaceHeight,
