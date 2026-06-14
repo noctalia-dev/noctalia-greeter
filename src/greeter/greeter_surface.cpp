@@ -1716,8 +1716,7 @@ void GreeterSurface::applySelectorBoxStyle(Box* box, const InputArea* area) {
   if (box == nullptr) {
     return;
   }
-  const bool menuOpen = (box == m_schemeSelectBox && m_schemeMenuOpen) ||
-                        (box == m_userSelectBox && m_userMenuOpen);
+  const bool menuOpen = (box == m_schemeSelectBox && m_schemeMenuOpen) || (box == m_userSelectBox && m_userMenuOpen);
   const bool active = menuOpen || (area != nullptr && area->focused());
   box->setStyle(
       RoundedRectStyle{
@@ -2206,8 +2205,7 @@ void GreeterSurface::rebuildUserMenu() {
 
   const float borderWidth = Style::borderWidth();
   const float panelH = h + 2.0f * borderWidth;
-  const float y =
-      m_userSelectBox->y() + m_userSelectBox->height() + Style::spaceXs();
+  const float y = m_userSelectBox->y() + m_userSelectBox->height() + Style::spaceXs();
   const float w = m_userSelectBox->width();
 
   auto panel = std::make_unique<Box>();
@@ -2296,8 +2294,6 @@ void GreeterSurface::rebuildUserMenu() {
         );
       }
     });
-      }
-    });
     areaPtr->setOnClick([this, i](const InputArea::PointerData& data) {
       if (data.button != BTN_LEFT) {
         return;
@@ -2358,8 +2354,8 @@ void GreeterSurface::buildMenu(
 
   const float borderWidth = Style::borderWidth();
   const float panelH = h + 2.0f * borderWidth;
-  const float y = upward ? (anchor->y() - panelH - Style::spaceXs())
-                         : (anchor->y() + anchor->height() + Style::spaceXs());
+  const float y =
+      upward ? (anchor->y() - panelH - Style::spaceXs()) : (anchor->y() + anchor->height() + Style::spaceXs());
 
   auto panel = std::make_unique<Box>();
   panelOut = panel.get();
