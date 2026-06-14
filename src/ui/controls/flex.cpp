@@ -11,15 +11,16 @@ Flex::Flex() : Node(NodeType::Container) {}
 void Flex::setDirection(FlexDirection direction) { m_direction = direction; }
 void Flex::setAlign(FlexAlign align) { m_align = align; }
 void Flex::setGap(float gap) { m_gap = std::max(0.0f, gap); }
-void Flex::setPadding(float padding) {
-  m_paddingLeft = m_paddingRight = m_paddingTop = m_paddingBottom = padding;
-}
+void Flex::setPadding(float padding) { m_paddingLeft = m_paddingRight = m_paddingTop = m_paddingBottom = padding; }
 void Flex::setPadding(float horizontal, float vertical) {
   m_paddingLeft = m_paddingRight = horizontal;
   m_paddingTop = m_paddingBottom = vertical;
 }
 void Flex::setPadding(float left, float top, float right, float bottom) {
-  m_paddingLeft = left; m_paddingTop = top; m_paddingRight = right; m_paddingBottom = bottom;
+  m_paddingLeft = left;
+  m_paddingTop = top;
+  m_paddingRight = right;
+  m_paddingBottom = bottom;
 }
 void Flex::setRadius(float radius) {
   m_radius = std::max(0.0f, radius);
@@ -53,14 +54,16 @@ void Flex::syncBackgroundStyle() {
   if (m_background == nullptr) {
     return;
   }
-  m_background->setStyle(RoundedRectStyle{
-      .fill = m_fill,
-      .border = m_border,
-      .fillMode = FillMode::Solid,
-      .radius = m_radius,
-      .softness = 1.0f,
-      .borderWidth = m_borderWidth,
-  });
+  m_background->setStyle(
+      RoundedRectStyle{
+          .fill = m_fill,
+          .border = m_border,
+          .fillMode = FillMode::Solid,
+          .radius = m_radius,
+          .softness = 1.0f,
+          .borderWidth = m_borderWidth,
+      }
+  );
 }
 void Flex::setMinWidth(float width) { m_minWidth = std::max(0.0f, width); }
 void Flex::setMinHeight(float height) { m_minHeight = std::max(0.0f, height); }
@@ -72,7 +75,8 @@ LayoutSize Flex::doMeasure(Renderer& renderer, const LayoutConstraints& constrai
   int visibleCount = 0;
 
   for (const auto& child : m_children) {
-    if (!child->visible() || !child->participatesInLayout() || child.get() == m_background) continue;
+    if (!child->visible() || !child->participatesInLayout() || child.get() == m_background)
+      continue;
     ++visibleCount;
 
     if (m_direction == FlexDirection::Horizontal) {
@@ -87,7 +91,9 @@ LayoutSize Flex::doMeasure(Renderer& renderer, const LayoutConstraints& constrai
     } else {
       LayoutConstraints childConstraints;
       if (constraints.hasMaxHeight) {
-        childConstraints.setMaxHeight(std::max(0.0f, constraints.maxHeight - m_paddingTop - m_paddingBottom - totalGap));
+        childConstraints.setMaxHeight(
+            std::max(0.0f, constraints.maxHeight - m_paddingTop - m_paddingBottom - totalGap)
+        );
       }
       LayoutSize childSize = child->measure(renderer, childConstraints);
       contentWidth = std::max(contentWidth, childSize.width);
@@ -130,14 +136,16 @@ void Flex::doLayout(Renderer& renderer) {
   float totalContentSize = 0;
   int visibleCount = 0;
   for (const auto& child : m_children) {
-    if (!child->visible() || !child->participatesInLayout() || child.get() == m_background) continue;
+    if (!child->visible() || !child->participatesInLayout() || child.get() == m_background)
+      continue;
     ++visibleCount;
     if (m_direction == FlexDirection::Horizontal) {
       totalContentSize += child->width();
     } else {
       totalContentSize += child->height();
     }
-    if (visibleCount > 1) totalContentSize += m_gap;
+    if (visibleCount > 1)
+      totalContentSize += m_gap;
   }
 
   // Apply alignment
@@ -153,7 +161,8 @@ void Flex::doLayout(Renderer& renderer) {
   pos += offset;
 
   for (const auto& child : m_children) {
-    if (!child->visible() || !child->participatesInLayout() || child.get() == m_background) continue;
+    if (!child->visible() || !child->participatesInLayout() || child.get() == m_background)
+      continue;
 
     float childMain = (m_direction == FlexDirection::Horizontal) ? child->width() : child->height();
     float childCross = (m_direction == FlexDirection::Horizontal) ? child->height() : child->width();

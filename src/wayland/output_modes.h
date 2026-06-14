@@ -13,5 +13,4 @@ struct WaylandOutputMode {
 [[nodiscard]] std::string formatRefreshRateMHz(int32_t refreshMHz);
 
 [[nodiscard]] std::vector<int32_t>
-uniqueRefreshRatesAtResolution(const std::vector<WaylandOutputMode> &modes,
-                               int32_t width, int32_t height);
+uniqueRefreshRatesAtResolution(const std::vector<WaylandOutputMode>& modes, int32_t width, int32_t height);

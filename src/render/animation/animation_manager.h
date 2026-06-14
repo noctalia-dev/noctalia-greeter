@@ -8,10 +8,10 @@
 
 class AnimationManager {
 public:
-  std::uint64_t animate(float from, float to, float durationMs, Easing easing,
-                         std::function<void(float)> onUpdate,
-                         std::function<void()> onComplete = nullptr,
-                         void* owner = nullptr);
+  std::uint64_t animate(
+      float from, float to, float durationMs, Easing easing, std::function<void(float)> onUpdate,
+      std::function<void()> onComplete = nullptr, void* owner = nullptr
+  );
   void cancel(std::uint64_t id);
   void cancelForOwner(void* owner);
   void tick(float deltaMs);

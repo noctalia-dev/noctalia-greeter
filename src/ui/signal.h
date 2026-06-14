@@ -28,18 +28,16 @@ public:
   class ScopedConnection {
   public:
     ScopedConnection() = default;
-    ScopedConnection(std::weak_ptr<State> state, std::uint64_t id)
-        : m_state(std::move(state)), m_id(id) {}
+    ScopedConnection(std::weak_ptr<State> state, std::uint64_t id) : m_state(std::move(state)), m_id(id) {}
     ~ScopedConnection() { disconnect(); }
 
-    ScopedConnection(const ScopedConnection &) = delete;
-    ScopedConnection &operator=(const ScopedConnection &) = delete;
+    ScopedConnection(const ScopedConnection&) = delete;
+    ScopedConnection& operator=(const ScopedConnection&) = delete;
 
-    ScopedConnection(ScopedConnection &&other) noexcept
-        : m_state(std::move(other.m_state)), m_id(other.m_id) {
+    ScopedConnection(ScopedConnection&& other) noexcept : m_state(std::move(other.m_state)), m_id(other.m_id) {
       other.m_id = 0;
     }
-    ScopedConnection &operator=(ScopedConnection &&other) noexcept {
+    ScopedConnection& operator=(ScopedConnection&& other) noexcept {
       if (this != &other) {
         disconnect();
         m_state = std::move(other.m_state);
@@ -54,12 +52,11 @@ public:
         return;
       }
       if (auto state = m_state.lock()) {
-        auto &slots = state->slots;
-        slots.erase(std::remove_if(slots.begin(), slots.end(),
-                                   [id = m_id](const Slot &slot) {
-                                     return slot.id == id;
-                                   }),
-                    slots.end());
+        auto& slots = state->slots;
+        slots.erase(
+            std::remove_if(slots.begin(), slots.end(), [id = m_id](const Slot& slot) { return slot.id == id; }),
+            slots.end()
+        );
       }
       m_id = 0;
     }
@@ -71,10 +68,10 @@ public:
 
   Signal() : m_state(std::make_shared<State>()) {}
 
-  Signal(const Signal &) = delete;
-  Signal &operator=(const Signal &) = delete;
-  Signal(Signal &&) = delete;
-  Signal &operator=(Signal &&) = delete;
+  Signal(const Signal&) = delete;
+  Signal& operator=(const Signal&) = delete;
+  Signal(Signal&&) = delete;
+  Signal& operator=(Signal&&) = delete;
 
   [[nodiscard]] ScopedConnection connect(Callback callback) {
     const auto id = ++m_state->nextId;
@@ -85,16 +82,14 @@ public:
   void emit(Args... args) {
     // Snapshot live slots so connects/disconnects during dispatch are safe.
     auto snapshot = m_state->slots;
-    for (auto &slot : snapshot) {
+    for (auto& slot : snapshot) {
       if (slot.callback) {
         slot.callback(args...);
       }
     }
     // Reap tombstones from the canonical list.
-    auto &slots = m_state->slots;
-    slots.erase(std::remove_if(slots.begin(), slots.end(),
-                               [](const Slot &s) { return !s.callback; }),
-                slots.end());
+    auto& slots = m_state->slots;
+    slots.erase(std::remove_if(slots.begin(), slots.end(), [](const Slot& s) { return !s.callback; }), slots.end());
   }
 
 private:

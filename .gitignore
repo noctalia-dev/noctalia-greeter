@@ -1,0 +1,29 @@
+# Build
+build*/
+cmake-build-*/
+compile_commands.json
+
+# Python cache
+__pycache__
+
+# Compiled binary
+noctalia
+
+# Editor / IDE
+.vscode/
+.idea/
+.cache/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Nix
+.envrc
+.direnv/
+result/
+result
+result-*

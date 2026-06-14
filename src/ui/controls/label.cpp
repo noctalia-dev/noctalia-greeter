@@ -8,7 +8,7 @@ Label::Label() : InputArea() {
   auto textNode = std::make_unique<TextNode>();
   textNode->setFontSize(Style::fontSizeBody());
   textNode->setColor(colorForRole(ColorRole::OnSurface));
-  m_textNode = static_cast<TextNode *>(addChild(std::move(textNode)));
+  m_textNode = static_cast<TextNode*>(addChild(std::move(textNode)));
   setHitTestVisible(false);
 }
 
@@ -35,7 +35,7 @@ void Label::setFontFamily(std::string family) {
   m_measureCached = false;
 }
 
-void Label::setColor(const Color &color) {
+void Label::setColor(const Color& color) {
   m_color = color;
   m_textNode->setColor(m_color);
 }
@@ -78,43 +78,39 @@ void Label::setTextAlign(TextAlign align) {
 }
 
 float Label::fontSize() const noexcept { return m_textNode->fontSize(); }
-const Color &Label::color() const noexcept { return m_textNode->color(); }
+const Color& Label::color() const noexcept { return m_textNode->color(); }
 bool Label::bold() const noexcept { return m_textNode->bold(); }
 TextAlign Label::textAlign() const noexcept { return m_textNode->textAlign(); }
 
-void Label::measure(Renderer &renderer) {
+void Label::measure(Renderer& renderer) {
   LayoutConstraints c;
   measureWithConstraints(renderer, c);
 }
 
-LayoutSize Label::measureWithConstraints(Renderer &renderer,
-                                         const LayoutConstraints &constraints) {
+LayoutSize Label::measureWithConstraints(Renderer& renderer, const LayoutConstraints& constraints) {
   float measureMaxWidth = m_userMaxWidth;
   if (constraints.hasMaxWidth) {
-    measureMaxWidth = measureMaxWidth > 0
-                          ? std::min(measureMaxWidth, constraints.maxWidth)
-                          : constraints.maxWidth;
+    measureMaxWidth = measureMaxWidth > 0 ? std::min(measureMaxWidth, constraints.maxWidth) : constraints.maxWidth;
   }
 
-  const bool singleLine =
-      m_userMaxLines == 1 || (m_userMaxLines == 0 && measureMaxWidth <= 0 &&
-                              m_plainText.find('\n') == std::string::npos);
+  const bool singleLine = m_userMaxLines == 1
+      || (m_userMaxLines == 0 && measureMaxWidth <= 0 && m_plainText.find('\n') == std::string::npos);
 
-  if (m_measureCached && m_cachedText == m_plainText &&
-      m_cachedFontSize == m_textNode->fontSize() &&
-      m_cachedBold == m_textNode->bold() &&
-      m_cachedMaxWidth == m_userMaxWidth &&
-      m_cachedMaxLines == m_userMaxLines) {
+  if (m_measureCached
+      && m_cachedText == m_plainText
+      && m_cachedFontSize == m_textNode->fontSize()
+      && m_cachedBold == m_textNode->bold()
+      && m_cachedMaxWidth == m_userMaxWidth
+      && m_cachedMaxLines == m_userMaxLines) {
     return {width(), height()};
   }
 
   auto metrics = renderer.measureText(
-      m_plainText, m_textNode->fontSize(), m_textNode->bold(), measureMaxWidth,
-      m_userMaxLines, m_textNode->textAlign(), m_textNode->fontFamily());
+      m_plainText, m_textNode->fontSize(), m_textNode->bold(), measureMaxWidth, m_userMaxLines, m_textNode->textAlign(),
+      m_textNode->fontFamily()
+  );
 
-  float measuredWidth = measureMaxWidth > 0
-                            ? std::min(metrics.width, measureMaxWidth)
-                            : metrics.width;
+  float measuredWidth = measureMaxWidth > 0 ? std::min(metrics.width, measureMaxWidth) : metrics.width;
   float actualHeight = metrics.bottom - metrics.top;
   float inkHeight = std::max(0.0f, metrics.inkBottom - metrics.inkTop);
 
@@ -125,17 +121,15 @@ LayoutSize Label::measureWithConstraints(Renderer &renderer,
     h = std::round(actualHeight);
   }
 
-  float w = constraints.hasExactWidth()
-                ? std::max(constraints.maxWidth, m_minWidth)
-                : std::max(measuredWidth, m_minWidth);
+  float w =
+      constraints.hasExactWidth() ? std::max(constraints.maxWidth, m_minWidth) : std::max(measuredWidth, m_minWidth);
   setSize(std::round(w), h);
 
   // Position text node
   float textX = 0;
   if (m_textNode->textAlign() == TextAlign::Center && measuredWidth < width()) {
     textX = (width() - measuredWidth) * 0.5f;
-  } else if (m_textNode->textAlign() == TextAlign::End &&
-             measuredWidth < width()) {
+  } else if (m_textNode->textAlign() == TextAlign::End && measuredWidth < width()) {
     textX = width() - measuredWidth;
   }
   m_textNode->setPosition(textX, -metrics.top);
@@ -150,9 +144,8 @@ LayoutSize Label::measureWithConstraints(Renderer &renderer,
   return {width(), height()};
 }
 
-LayoutSize Label::doMeasure(Renderer &renderer,
-                            const LayoutConstraints &constraints) {
+LayoutSize Label::doMeasure(Renderer& renderer, const LayoutConstraints& constraints) {
   return measureWithConstraints(renderer, constraints);
 }
 
-void Label::doLayout(Renderer &renderer) { measure(renderer); }
+void Label::doLayout(Renderer& renderer) { measure(renderer); }

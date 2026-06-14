@@ -2,15 +2,13 @@
 
 #include "config/config_types.h"
 #include "greetd/greetd_client.h"
+#include "greeter/appearance_config.h"
+#include "greeter/greeter_sessions.h"
 #include "render/animation/animation_manager.h"
 #include "render/core/color.h"
 #include "render/core/texture_handle.h"
 #include "render/scene/input_dispatcher.h"
 #include "render/scene/node.h"
-
-#include "greeter/appearance_config.h"
-
-#include "greeter/greeter_sessions.h"
 
 #include <chrono>
 #include <cstddef>
@@ -40,36 +38,33 @@ public:
   GreeterSurface();
   ~GreeterSurface();
 
-  void initialize(RenderContext *context);
+  void initialize(RenderContext* context);
 
-  void setWindow(GreeterWindow *window);
-  void setGreetdClient(GreetdClient *client);
-  void setUsername(const std::string &username);
+  void setWindow(GreeterWindow* window);
+  void setGreetdClient(GreetdClient* client);
+  void setUsername(const std::string& username);
   void setOnExitRequested(std::function<void()> callback);
-  void setOnStateChanged(std::function<void(GreeterSurface *)> callback);
+  void setOnStateChanged(std::function<void(GreeterSurface*)> callback);
 
-  void mirrorStateFrom(const GreeterSurface &other);
+  void mirrorStateFrom(const GreeterSurface& other);
 
   void onPointerLeave();
   void onPointerEvent(float x, float y, std::uint32_t button, bool pressed);
   void onPointerMotion(float x, float y);
-  void onKeyEvent(std::uint32_t sym, std::uint32_t utf32,
-                  std::uint32_t modifiers, bool pressed, bool preedit);
+  void onKeyEvent(std::uint32_t sym, std::uint32_t utf32, std::uint32_t modifiers, bool pressed, bool preedit);
 
   void onThemeChanged();
-  [[nodiscard]] bool handleNavigationKey(std::uint32_t sym,
-                                         std::uint32_t modifiers);
+  [[nodiscard]] bool handleNavigationKey(std::uint32_t sym, std::uint32_t modifiers);
   void requestLayout();
   void requestRedraw();
   void flushDeferredFrameRequests();
 
-  void prepareFrame(std::uint32_t width, std::uint32_t height,
-                    bool needsLayout);
+  void prepareFrame(std::uint32_t width, std::uint32_t height, bool needsLayout);
 
   void setOutputViewport(float x, float y, float width, float height);
   void clearOutputViewport();
 
-  [[nodiscard]] Node *sceneRoot() noexcept { return &m_root; }
+  [[nodiscard]] Node* sceneRoot() noexcept { return &m_root; }
 
 private:
   void notifyStateChanged();
@@ -78,11 +73,11 @@ private:
   void layoutScene(std::uint32_t width, std::uint32_t height);
   void tryAuthenticate();
   void onAuthSuccess();
-  void onAuthError(const GreetdError &error);
+  void onAuthError(const GreetdError& error);
   void resetAuthSession();
   void clearPasswordInput();
   bool driveAuthConversation(std::optional<GreetdAuthMessage> pending);
-  void updateStatus(const std::string &text, bool isError);
+  void updateStatus(const std::string& text, bool isError);
   void toggleUserMenu();
   void toggleSessionMenu();
   void toggleSchemeMenu();
@@ -92,13 +87,12 @@ private:
   void selectScheme(std::size_t index);
   void runBackAction();
   void rebuildFocusRing();
-  void applySelectorBoxStyle(Box *box, const InputArea *area);
+  void applySelectorBoxStyle(Box* box, const InputArea* area);
   void syncPanelSessionChrome();
-  [[nodiscard]] float measureIconSelectorWidth(Glyph *icon,
-                                               Glyph *chevron) const;
-  void layoutSelector(Box *box, Glyph *icon, Glyph *chevron, InputArea *area,
-                      float x, float y, float w, float h);
+  [[nodiscard]] float measureIconSelectorWidth(Glyph* icon, Glyph* chevron) const;
+  void layoutSelector(Box* box, Glyph* icon, Glyph* chevron, InputArea* area, float x, float y, float w, float h);
   void layoutPanelSessionSelector(float x, float y, float w, float h);
+  void layoutPowerButtons(float ox, float oy, float sw, float sh);
   void commitImmediateFrame(bool layout);
   void setFocusIndex(std::ptrdiff_t index);
   void syncFocusIndexFromFocused();
@@ -109,11 +103,11 @@ private:
   void moveMenuHighlight(int delta);
   void activateMenuHighlight();
   void applyMenuHighlight();
-  void buildMenu(const std::vector<std::string> &names, std::size_t selected,
-                 Box *anchor, bool upward, bool rightAlign, int zBase,
-                 Box *&panelOut, std::vector<Box *> &rows,
-                 std::vector<Label *> &labels, std::vector<InputArea *> &areas,
-                 std::function<void(std::size_t)> onSelect);
+  void buildMenu(
+      const std::vector<std::string>& names, std::size_t selected, Box* anchor, bool upward, bool rightAlign, int zBase,
+      Box*& panelOut, std::vector<Box*>& rows, std::vector<Label*>& labels, std::vector<InputArea*>& areas,
+      std::function<void(std::size_t)> onSelect
+  );
   void rebuildUserMenu();
   void rebuildSessionMenu();
   void rebuildSchemeMenu();
@@ -127,57 +121,59 @@ private:
   void applyScheme(std::size_t schemeIndex);
   void clearWallpaperDisplay();
   [[nodiscard]] bool isSyncedScheme(std::size_t schemeIndex) const;
-  [[nodiscard]] std::optional<std::size_t>
-  findSchemeIndex(std::string_view name) const;
+  [[nodiscard]] std::optional<std::size_t> findSchemeIndex(std::string_view name) const;
   void syncWallpaperTexture();
-  void syncHeaderUserAvatar(class Renderer &renderer, float size, float panelX,
-                            float panelWidth, float headerY);
+  void syncHeaderUserAvatar(class Renderer& renderer, float size, float panelX, float panelWidth, float headerY);
 
   Node m_root;
   AnimationManager m_animations;
-  GreeterWindow *m_window = nullptr;
-  RenderContext *m_renderContext = nullptr;
-  GreetdClient *m_greetdClient = nullptr;
+  GreeterWindow* m_window = nullptr;
+  RenderContext* m_renderContext = nullptr;
+  GreetdClient* m_greetdClient = nullptr;
   InputDispatcher m_inputDispatcher;
-  std::function<void(GreeterSurface *)> m_onStateChanged;
+  std::function<void(GreeterSurface*)> m_onStateChanged;
 
-  WallpaperNode *m_wallpaper = nullptr;
-  RectNode *m_letterbox = nullptr;
-  Node *m_backdrop = nullptr;
+  WallpaperNode* m_wallpaper = nullptr;
+  RectNode* m_letterbox = nullptr;
+  Node* m_backdrop = nullptr;
   float m_viewportX = 0.0f;
   float m_viewportY = 0.0f;
   float m_viewportWidth = 0.0f;
   float m_viewportHeight = 0.0f;
   bool m_outputViewportActive = false;
-  Node *m_brandPane = nullptr;
-  ImageNode *m_bottomBrandLogo = nullptr;
-  Glyph *m_headerUserGlyph = nullptr;
-  ImageNode *m_headerUserAvatar = nullptr;
-  Label *m_brandTitleLabel = nullptr;
-  Label *m_brandSubtitleLabel = nullptr;
-  Label *m_formSubtitleLabel = nullptr;
-  Node *m_panelDivider = nullptr;
-  Box *m_loginPanel = nullptr;
-  Box *m_userSelectBox = nullptr;
-  Label *m_userSelectLabel = nullptr;
-  Glyph *m_userSelectGlyph = nullptr;
-  InputArea *m_userSelectArea = nullptr;
-  Box *m_sessionSelectBox = nullptr;
-  Glyph *m_sessionSelectIcon = nullptr;
-  Label *m_sessionSelectLabel = nullptr;
-  Glyph *m_sessionSelectGlyph = nullptr;
-  InputArea *m_sessionSelectArea = nullptr;
-  Box *m_schemeSelectBox = nullptr;
-  Glyph *m_schemeSelectIcon = nullptr;
-  Label *m_schemeSelectLabel = nullptr;
-  Glyph *m_schemeSelectGlyph = nullptr;
-  InputArea *m_schemeSelectArea = nullptr;
-  Input *m_passwordField = nullptr;
-  Button *m_loginButton = nullptr;
-  Button *m_backButton = nullptr;
-  Label *m_statusLabel = nullptr;
-  std::vector<Button *> m_userRowButtons;
-  std::vector<Glyph *> m_userRowArrows;
+  Node* m_brandPane = nullptr;
+  ImageNode* m_bottomBrandLogo = nullptr;
+  Glyph* m_headerUserGlyph = nullptr;
+  ImageNode* m_headerUserAvatar = nullptr;
+  Label* m_brandTitleLabel = nullptr;
+  Label* m_brandSubtitleLabel = nullptr;
+  Label* m_formSubtitleLabel = nullptr;
+  Node* m_panelDivider = nullptr;
+  Box* m_loginPanel = nullptr;
+  Box* m_userSelectBox = nullptr;
+  Label* m_userSelectLabel = nullptr;
+  Glyph* m_userSelectGlyph = nullptr;
+  InputArea* m_userSelectArea = nullptr;
+  Box* m_sessionSelectBox = nullptr;
+  Glyph* m_sessionSelectIcon = nullptr;
+  Label* m_sessionSelectLabel = nullptr;
+  Glyph* m_sessionSelectGlyph = nullptr;
+  InputArea* m_sessionSelectArea = nullptr;
+  Box* m_schemeSelectBox = nullptr;
+  Glyph* m_schemeSelectIcon = nullptr;
+  Label* m_schemeSelectLabel = nullptr;
+  Glyph* m_schemeSelectGlyph = nullptr;
+  InputArea* m_schemeSelectArea = nullptr;
+  Input* m_passwordField = nullptr;
+  Button* m_loginButton = nullptr;
+  Button* m_backButton = nullptr;
+  Label* m_statusLabel = nullptr;
+  Button* m_shutdownButton = nullptr;
+  Button* m_rebootButton = nullptr;
+  Button* m_firmwareButton = nullptr;
+  bool m_canRebootToFirmware = false;
+  std::vector<Button*> m_userRowButtons;
+  std::vector<Glyph*> m_userRowArrows;
 
   std::string m_username;
   std::string m_password;
@@ -203,7 +199,7 @@ private:
   bool m_deferredRedrawRequest = false;
 
   struct Focusable {
-    InputArea *area = nullptr;
+    InputArea* area = nullptr;
     std::function<void()> activate;
   };
   std::vector<Focusable> m_focusRing;
@@ -221,18 +217,18 @@ private:
   bool m_sessionMenuOpen = false;
   bool m_schemeMenuOpen = false;
   bool m_passwordVisible = false;
-  Box *m_userMenuPanel = nullptr;
-  Box *m_sessionMenuPanel = nullptr;
-  std::vector<Label *> m_userMenuLabels;
-  std::vector<InputArea *> m_userMenuAreas;
-  std::vector<Box *> m_userMenuRows;
-  std::vector<Label *> m_sessionMenuLabels;
-  std::vector<InputArea *> m_sessionMenuAreas;
-  std::vector<Box *> m_sessionMenuRows;
-  Box *m_schemeMenuPanel = nullptr;
-  std::vector<Label *> m_schemeMenuLabels;
-  std::vector<InputArea *> m_schemeMenuAreas;
-  std::vector<Box *> m_schemeMenuRows;
+  Box* m_userMenuPanel = nullptr;
+  Box* m_sessionMenuPanel = nullptr;
+  std::vector<Label*> m_userMenuLabels;
+  std::vector<InputArea*> m_userMenuAreas;
+  std::vector<Box*> m_userMenuRows;
+  std::vector<Label*> m_sessionMenuLabels;
+  std::vector<InputArea*> m_sessionMenuAreas;
+  std::vector<Box*> m_sessionMenuRows;
+  Box* m_schemeMenuPanel = nullptr;
+  std::vector<Label*> m_schemeMenuLabels;
+  std::vector<InputArea*> m_schemeMenuAreas;
+  std::vector<Box*> m_schemeMenuRows;
   std::vector<std::string> m_schemeNames;
   std::size_t m_selectedScheme = 0;
   std::optional<GreeterSyncedAppearance> m_syncedAppearance;

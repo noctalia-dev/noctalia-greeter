@@ -158,6 +158,7 @@ _greeter_sources = files(
   'src/greeter/greeter_surface.cpp',
   'src/greeter/greeter_window.cpp',
   'src/greeter/logind_resume.cpp',
+  'src/greeter/power_actions.cpp',
   'src/greeter/greeter.cpp',
   'src/main.cpp',
 ) + _protocol_sources

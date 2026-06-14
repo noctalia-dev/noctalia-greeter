@@ -22,18 +22,17 @@ struct xdg_toplevel;
 // Surface::render().
 class GreeterWindow {
 public:
-  GreeterWindow(WaylandClient &client, GlSharedContext &gl,
-                RenderContext &renderContext, GreeterSurface &surface);
+  GreeterWindow(WaylandClient& client, GlSharedContext& gl, RenderContext& renderContext, GreeterSurface& surface);
   ~GreeterWindow();
 
-  GreeterWindow(const GreeterWindow &) = delete;
-  GreeterWindow &operator=(const GreeterWindow &) = delete;
+  GreeterWindow(const GreeterWindow&) = delete;
+  GreeterWindow& operator=(const GreeterWindow&) = delete;
 
   bool createSurface();
 
   void setSceneReady(bool ready);
 
-  void bindOutput(wl_output *output);
+  void bindOutput(wl_output* output);
   void requestLayout();
   void requestRedraw();
   void matchOutputLogicalSize();
@@ -43,55 +42,46 @@ public:
 
   [[nodiscard]] std::uint32_t width() const noexcept { return m_width; }
   [[nodiscard]] std::uint32_t height() const noexcept { return m_height; }
-  [[nodiscard]] wl_surface *wlSurface() const noexcept { return m_wlSurface; }
-  [[nodiscard]] RenderTarget &renderTarget() noexcept { return m_renderTarget; }
+  [[nodiscard]] wl_surface* wlSurface() const noexcept { return m_wlSurface; }
+  [[nodiscard]] RenderTarget& renderTarget() noexcept { return m_renderTarget; }
 
-  static void handleXdgSurfaceConfigure(void *data, xdg_surface *surface,
-                                        std::uint32_t serial);
-  static void handleToplevelConfigure(void *data, xdg_toplevel *toplevel,
-                                      std::int32_t width, std::int32_t height,
-                                      wl_array *states);
-  static void handleToplevelClose(void *data, xdg_toplevel *toplevel);
-  static void handleToplevelConfigureBounds(void *data, xdg_toplevel *toplevel,
-                                            std::int32_t width,
-                                            std::int32_t height);
-  static void handleToplevelWmCapabilities(void *data, xdg_toplevel *toplevel,
-                                           wl_array *capabilities);
-  static void handleFrameDone(void *data, wl_callback *callback,
-                              std::uint32_t time);
-  static void handleFractionalPreferredScale(void *data,
-                                             struct wp_fractional_scale_v1 *fs,
-                                             std::uint32_t scale);
+  static void handleXdgSurfaceConfigure(void* data, xdg_surface* surface, std::uint32_t serial);
+  static void handleToplevelConfigure(
+      void* data, xdg_toplevel* toplevel, std::int32_t width, std::int32_t height, wl_array* states
+  );
+  static void handleToplevelClose(void* data, xdg_toplevel* toplevel);
+  static void
+  handleToplevelConfigureBounds(void* data, xdg_toplevel* toplevel, std::int32_t width, std::int32_t height);
+  static void handleToplevelWmCapabilities(void* data, xdg_toplevel* toplevel, wl_array* capabilities);
+  static void handleFrameDone(void* data, wl_callback* callback, std::uint32_t time);
+  static void handleFractionalPreferredScale(void* data, struct wp_fractional_scale_v1* fs, std::uint32_t scale);
 
 private:
   void destroyRoleObjects();
   void destroySurface();
   void applyConfigure(std::uint32_t width, std::uint32_t height);
-  void acknowledgeConfigure(std::uint32_t width, std::uint32_t height,
-                            std::uint32_t serial);
+  void acknowledgeConfigure(std::uint32_t width, std::uint32_t height, std::uint32_t serial);
   bool ensureRenderTarget();
   void paintFrame();
   void requestNextFrame();
 
-  WaylandClient &m_client;
-  GlSharedContext &m_gl;
-  RenderContext &m_renderContext;
-  GreeterSurface &m_greeterSurface;
+  WaylandClient& m_client;
+  GlSharedContext& m_gl;
+  RenderContext& m_renderContext;
+  GreeterSurface& m_greeterSurface;
 
-  wl_surface *m_wlSurface = nullptr;
-  xdg_surface *m_xdgSurface = nullptr;
-  xdg_toplevel *m_toplevel = nullptr;
-  wp_fractional_scale_v1 *m_fractionalScale = nullptr;
-  wp_viewport *m_viewport = nullptr;
-  wl_callback *m_frameCallback = nullptr;
+  wl_surface* m_wlSurface = nullptr;
+  xdg_surface* m_xdgSurface = nullptr;
+  xdg_toplevel* m_toplevel = nullptr;
+  wp_fractional_scale_v1* m_fractionalScale = nullptr;
+  wp_viewport* m_viewport = nullptr;
+  wl_callback* m_frameCallback = nullptr;
 
   RenderTarget m_renderTarget;
   void applySurfaceScale();
   [[nodiscard]] float effectiveSurfaceScale() const noexcept;
-  [[nodiscard]] std::uint32_t
-  bufferWidthForLogical(std::uint32_t logical) const noexcept;
-  [[nodiscard]] std::uint32_t
-  bufferHeightForLogical(std::uint32_t logical) const noexcept;
+  [[nodiscard]] std::uint32_t bufferWidthForLogical(std::uint32_t logical) const noexcept;
+  [[nodiscard]] std::uint32_t bufferHeightForLogical(std::uint32_t logical) const noexcept;
 
   std::uint32_t m_width = 0;
   std::uint32_t m_height = 0;
@@ -108,6 +98,6 @@ private:
   std::uint32_t m_pendingConfigureSerial = 0;
   std::uint32_t m_pendingConfigureWidth = 0;
   std::uint32_t m_pendingConfigureHeight = 0;
-  wl_output *m_boundOutput = nullptr;
+  wl_output* m_boundOutput = nullptr;
   bool m_loggedFirstFrame = false;
 };

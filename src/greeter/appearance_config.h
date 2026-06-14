@@ -19,5 +19,4 @@ struct GreeterSyncedAppearance {
 };
 
 [[nodiscard]] std::filesystem::path greeterAppearanceConfigPath();
-[[nodiscard]] std::optional<GreeterSyncedAppearance>
-loadGreeterSyncedAppearance();
+[[nodiscard]] std::optional<GreeterSyncedAppearance> loadGreeterSyncedAppearance();

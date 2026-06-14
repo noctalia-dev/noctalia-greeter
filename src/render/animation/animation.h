@@ -1,8 +1,8 @@
 #pragma once
 
+#include <cmath>
 #include <cstdint>
 #include <functional>
-#include <cmath>
 
 enum class Easing {
   Linear,
@@ -14,10 +14,14 @@ enum class Easing {
 
 inline float easeValue(Easing easing, float t) {
   switch (easing) {
-  case Easing::Linear: return t;
-  case Easing::EaseInCubic: return t * t * t;
-  case Easing::EaseOutCubic: return 1.0f - static_cast<float>(std::pow(1.0f - t, 3));
-  case Easing::EaseInOutCubic: return t < 0.5f ? 4 * t * t * t : 1 - static_cast<float>(std::pow(-2 * t + 2, 3)) * 0.5f;
+  case Easing::Linear:
+    return t;
+  case Easing::EaseInCubic:
+    return t * t * t;
+  case Easing::EaseOutCubic:
+    return 1.0f - static_cast<float>(std::pow(1.0f - t, 3));
+  case Easing::EaseInOutCubic:
+    return t < 0.5f ? 4 * t * t * t : 1 - static_cast<float>(std::pow(-2 * t + 2, 3)) * 0.5f;
   case Easing::EaseOutBack: {
     float c1 = 1.70158f;
     float c3 = c1 + 1.0f;
@@ -40,15 +44,18 @@ struct Animation {
   bool finished = false;
 
   bool tick(float deltaMs) {
-    if (finished) return true;
+    if (finished)
+      return true;
     elapsedMs += deltaMs;
     float t = std::min(elapsedMs / durationMs, 1.0f);
     float eased = easeValue(easing, t);
     float value = from + (to - from) * eased;
-    if (onUpdate) onUpdate(value);
+    if (onUpdate)
+      onUpdate(value);
     if (t >= 1.0f) {
       finished = true;
-      if (onComplete) onComplete();
+      if (onComplete)
+        onComplete();
       return true;
     }
     return false;

@@ -13,8 +13,7 @@ struct DecodedRasterImage {
 };
 
 [[nodiscard]] std::optional<DecodedRasterImage>
-decodeRasterImage(const std::uint8_t *data, std::size_t size,
-                  std::string *errorMessage = nullptr);
+decodeRasterImage(const std::uint8_t* data, std::size_t size, std::string* errorMessage = nullptr);
 
 struct DecodedRasterFrame {
   std::vector<std::uint8_t> rgba; // canvas-size, RGBA8 non-premul
@@ -29,7 +28,7 @@ struct DecodedRasterAnimation {
 };
 
 // Decode animated GIF frames; caps set truncated and return partial frames.
-[[nodiscard]] std::optional<DecodedRasterAnimation>
-decodeAnimatedGif(const std::uint8_t *data, std::size_t size, int maxFrames,
-                  std::size_t maxRgbaBytes,
-                  std::string *errorMessage = nullptr);
+[[nodiscard]] std::optional<DecodedRasterAnimation> decodeAnimatedGif(
+    const std::uint8_t* data, std::size_t size, int maxFrames, std::size_t maxRgbaBytes,
+    std::string* errorMessage = nullptr
+);
