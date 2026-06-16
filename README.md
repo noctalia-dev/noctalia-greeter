@@ -289,6 +289,9 @@ Admin-only keys in `greeter.conf` (set by you, not the UI):
 - `cursor_theme` - cursor theme name (e.g. `Adwaita`); missing → wlroots default cursor
 - `cursor_size` - cursor size in pixels (e.g. `24`); missing → `24`
 - `cursor_path` - colon-separated theme search path (sets `XCURSOR_PATH`); needed when the theme is not on the default search path (`~/.icons:/usr/share/icons:/usr/share/pixmaps`)
+- `keyboard_layout` - XKB layout code(s), e.g. `cz`, `us`, `de,cz` (comma-separated for multiple layouts)
+- `keyboard_variant` - XKB variant(s), e.g. `qwertz` (optional; comma-separated when multiple layouts)
+- `keyboard_options` - XKB options string, e.g. `grp:alt_shift_toggle` (optional)
 
 The greeter updates `session` and `scheme` when you change them in the UI.
 
@@ -317,6 +320,38 @@ for you.
 ## Keyboard
 
 The greeter works without a mouse.
+
+### Layout
+
+The compositor builds an XKB keymap in this precedence order:
+
+1. `greeter.conf`: `keyboard_layout` / `keyboard_variant` / `keyboard_options`
+2. `XKB_DEFAULT_LAYOUT` / `XKB_DEFAULT_VARIANT` / `XKB_DEFAULT_OPTIONS` (environment)
+3. The system default keymap
+
+Example:
+
+```ini
+keyboard_layout = cz
+```
+
+Multiple layouts:
+
+```ini
+keyboard_layout = us,cz
+keyboard_options = grp:alt_shift_toggle
+```
+
+Use standard [XKB layout codes](https://www.freedesktop.org/wiki/Software/XKeyboard-config/Rules/) (`de`, `fr`, `ru`, …).
+
+greetd starts greeters with an empty environment, so set layout in `greeter.conf` or prefix the greetd session command:
+
+```toml
+[default_session]
+command = "env XKB_DEFAULT_LAYOUT=cz /usr/bin/noctalia-greeter-session"
+```
+
+### Shortcuts
 
 | Key | Action |
 |-----|--------|

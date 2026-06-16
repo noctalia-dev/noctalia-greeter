@@ -137,10 +137,13 @@ namespace {
     out << "# session: last used (UI); scheme: color scheme name\n";
     out << "# output: Wayland connector; output_layout: monitor positions; admin-only\n";
     out << "# scale: UI scale; cursor_theme/cursor_size/cursor_path: cursor appearance\n";
+    out << "# keyboard_layout/keyboard_variant/keyboard_options: XKB keymap (compositor)\n";
 
     static constexpr const char* kPreferredOrder[] = {
-        "greeter_user",  "default_session", "default_user", "session",     "scheme",      "output",
-        "output_layout", "scale",           "cursor_theme", "cursor_size", "cursor_path",
+        "greeter_user",     "default_session",  "default_user",  "session",
+        "scheme",           "output",           "output_layout", "scale",
+        "cursor_theme",     "cursor_size",      "cursor_path",   "keyboard_layout",
+        "keyboard_variant", "keyboard_options",
     };
     for (const char* key : kPreferredOrder) {
       const auto it = map.find(key);
@@ -370,9 +373,11 @@ namespace greeter {
     const auto path = greeterConfPath();
     const KeyValueMap map = loadKeyValues(path);
 
-    static constexpr std::array<std::string_view, 11> kKnownKeys = {
-        "greeter_user",  "default_session", "default_user", "session",     "scheme",      "output",
-        "output_layout", "scale",           "cursor_theme", "cursor_size", "cursor_path",
+    static constexpr std::array<std::string_view, 14> kKnownKeys = {
+        "greeter_user",     "default_session",  "default_user",  "session",
+        "scheme",           "output",           "output_layout", "scale",
+        "cursor_theme",     "cursor_size",      "cursor_path",   "keyboard_layout",
+        "keyboard_variant", "keyboard_options",
     };
     for (const auto& [key, value] : map) {
       if (std::find(kKnownKeys.begin(), kKnownKeys.end(), std::string_view(key)) == kKnownKeys.end()) {

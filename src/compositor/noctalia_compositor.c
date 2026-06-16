@@ -120,6 +120,9 @@ struct greeter_server {
   char cursor_theme[128];
   int cursor_size;
   char cursor_path[512];
+  char keyboard_layout[128];
+  char keyboard_variant[128];
+  char keyboard_options[256];
   struct greeter_output_placement output_placements[16];
   size_t output_placement_count;
   struct wlr_fractional_scale_manager_v1* fractional_scale;
@@ -256,6 +259,9 @@ static void read_greeter_config(struct greeter_server* server) {
   server->cursor_theme[0] = '\0';
   server->cursor_size = 0;
   server->cursor_path[0] = '\0';
+  server->keyboard_layout[0] = '\0';
+  server->keyboard_variant[0] = '\0';
+  server->keyboard_options[0] = '\0';
   server->output_placement_count = 0;
 
   const char* state_dir = getenv("NOCTALIA_GREETER_STATE_DIR");
@@ -303,9 +309,45 @@ static void read_greeter_config(struct greeter_server* server) {
       snprintf(server->cursor_path, sizeof(server->cursor_path), "%s", value);
     } else if (strcmp(key, "output_layout") == 0 && value[0] != '\0' && server->output_placement_count == 0) {
       parse_output_layout_value(server, value);
+    } else if (strcmp(key, "keyboard_layout") == 0 && value[0] != '\0' && server->keyboard_layout[0] == '\0') {
+      snprintf(server->keyboard_layout, sizeof(server->keyboard_layout), "%s", value);
+    } else if (strcmp(key, "keyboard_variant") == 0 && value[0] != '\0' && server->keyboard_variant[0] == '\0') {
+      snprintf(server->keyboard_variant, sizeof(server->keyboard_variant), "%s", value);
+    } else if (strcmp(key, "keyboard_options") == 0 && value[0] != '\0' && server->keyboard_options[0] == '\0') {
+      snprintf(server->keyboard_options, sizeof(server->keyboard_options), "%s", value);
     }
   }
   fclose(file);
+}
+
+static struct xkb_keymap* compose_keyboard_keymap(struct xkb_context* context, const struct greeter_server* server) {
+  if (server->keyboard_layout[0] == '\0') {
+    return xkb_keymap_new_from_names(context, NULL, XKB_KEYMAP_COMPILE_NO_FLAGS);
+  }
+
+  struct xkb_rule_names names = {0};
+  names.layout = server->keyboard_layout;
+  if (server->keyboard_variant[0] != '\0') {
+    names.variant = server->keyboard_variant;
+  }
+  if (server->keyboard_options[0] != '\0') {
+    names.options = server->keyboard_options;
+  }
+
+  struct xkb_keymap* keymap = xkb_keymap_new_from_names(context, &names, XKB_KEYMAP_COMPILE_NO_FLAGS);
+  if (keymap == NULL) {
+    wlr_log(
+        WLR_ERROR, "keyboard: failed to compile keymap (layout=%s variant=%s options=%s); using system default",
+        names.layout, names.variant != NULL ? names.variant : "", names.options != NULL ? names.options : ""
+    );
+    return xkb_keymap_new_from_names(context, NULL, XKB_KEYMAP_COMPILE_NO_FLAGS);
+  }
+
+  wlr_log(
+      WLR_INFO, "keyboard: layout=%s variant=%s options=%s", names.layout,
+      names.variant != NULL ? names.variant : "(default)", names.options != NULL ? names.options : "(none)"
+  );
+  return keymap;
 }
 
 static void
@@ -1034,7 +1076,7 @@ static void add_keyboard(struct greeter_server* server, struct wlr_input_device*
   keyboard->wlr_keyboard = wlr_keyboard_from_input_device(device);
 
   struct xkb_context* context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
-  struct xkb_keymap* keymap = xkb_keymap_new_from_names(context, NULL, XKB_KEYMAP_COMPILE_NO_FLAGS);
+  struct xkb_keymap* keymap = compose_keyboard_keymap(context, server);
   wlr_keyboard_set_keymap(keyboard->wlr_keyboard, keymap);
   xkb_keymap_unref(keymap);
   xkb_context_unref(context);
