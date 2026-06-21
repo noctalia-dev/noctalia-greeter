@@ -283,7 +283,6 @@ The greeter adds a **Synced** color scheme when sync data is present. Session an
 
 Admin-only settings in `greeter.toml` (set by you, not the UI):
 
-- `greeter_user` - greetd account name (setup/logging)
 - `[session].default` - session selected when the greeter opens (overrides last-used unless you pass `--session` on the command line)
 - `[user].default` - username to select on startup; opens the password step immediately (`--user` on the command line wins)
 - `[output].name` - Wayland connector name (see Multi-monitor)

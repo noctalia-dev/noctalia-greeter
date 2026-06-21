@@ -7,8 +7,6 @@
 namespace greeter::config {
 
   struct GreeterConfigFile {
-    std::optional<std::string> greeterUser;
-
     std::optional<std::string> sessionDefault;
     std::optional<std::string> sessionLast;
 

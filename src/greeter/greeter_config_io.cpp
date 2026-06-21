@@ -17,8 +17,7 @@ namespace {
   constexpr Logger kLog("greeter-config");
 
   [[nodiscard]] bool isKnownTopLevelKey(std::string_view key) {
-    return key == "greeter_user"
-        || key == "session"
+    return key == "session"
         || key == "user"
         || key == "appearance"
         || key == "output"
@@ -85,10 +84,6 @@ namespace {
 
     for (const auto& [key, node] : root) {
       const auto keyView = key.str();
-      if (keyView == "greeter_user") {
-        config.greeterUser = stringValue(node);
-        continue;
-      }
       if (!node.is_table()) {
         if (!isKnownTopLevelKey(keyView)) {
           warnUnknownTopLevelKey(path, keyView);
@@ -184,13 +179,6 @@ namespace {
 
   [[nodiscard]] toml::table buildTomlTable(const greeter::config::GreeterConfigFile& config) {
     toml::table root;
-
-    insertString(
-        root, "greeter_user", config.greeterUser,
-        [](toml::table& table, std::string_view key, const std::string& value) {
-          table.insert_or_assign(std::string(key), value);
-        }
-    );
 
     toml::table session;
     insertString(

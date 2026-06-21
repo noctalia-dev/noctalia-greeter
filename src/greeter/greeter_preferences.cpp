@@ -250,10 +250,7 @@ namespace greeter {
 
     const auto confPath = greeterConfPath();
     const bool confExisted = std::filesystem::exists(confPath, ec) && !ec;
-    config::GreeterConfigFile file = config::loadConfig(confPath);
-    if (!file.greeterUser.has_value() || file.greeterUser->empty()) {
-      file.greeterUser = std::string(greeterUser);
-    }
+    const config::GreeterConfigFile file = config::loadConfig(confPath);
     if (!config::writeConfig(confPath, file)) {
       errorOut = "failed to write greeter.toml";
       return false;
