@@ -26,6 +26,7 @@ class Button;
 class Glyph;
 class GreeterWindow;
 class Input;
+class SearchField;
 class InputArea;
 class Label;
 class RenderContext;
@@ -52,10 +53,11 @@ public:
   void onPointerLeave();
   void onPointerEvent(float x, float y, std::uint32_t button, bool pressed);
   void onPointerMotion(float x, float y);
+  void onPointerAxis(float x, float y, std::uint32_t axis, float axisLines);
   void onKeyEvent(std::uint32_t sym, std::uint32_t utf32, std::uint32_t modifiers, bool pressed, bool preedit);
 
   void onThemeChanged();
-  [[nodiscard]] bool handleNavigationKey(std::uint32_t sym, std::uint32_t modifiers);
+  [[nodiscard]] bool handleNavigationKey(std::uint32_t sym, std::uint32_t utf32, std::uint32_t modifiers);
   void requestLayout();
   void requestRedraw();
   void flushDeferredFrameRequests();
@@ -80,6 +82,7 @@ private:
   bool driveAuthConversation(std::optional<GreetdAuthMessage> pending);
   void updateStatus(const std::string& text, bool isError);
   void toggleUserMenu();
+  void openUserMenu();
   void toggleSessionMenu();
   void toggleSchemeMenu();
   void closeMenus();
@@ -90,8 +93,10 @@ private:
   void rebuildFocusRing();
   void applySelectorBoxStyle(Box* box, const InputArea* area);
   void syncPanelSessionChrome();
+  void syncPanelUserChrome();
   [[nodiscard]] float measureIconSelectorWidth(Glyph* icon, Glyph* chevron) const;
   void layoutSelector(Box* box, Glyph* icon, Glyph* chevron, InputArea* area, float x, float y, float w, float h);
+  void layoutPanelUserSelector(float x, float y, float w, float h);
   void layoutPanelSessionSelector(float x, float y, float w, float h);
   void layoutPowerButtons(float ox, float oy, float sw, float sh);
   void commitImmediateFrame(bool layout);
@@ -103,6 +108,9 @@ private:
   [[nodiscard]] bool menuOpen() const noexcept;
   void moveMenuHighlight(int delta);
   void activateMenuHighlight();
+  void ensureUserMenuHighlightVisible();
+  void scrollUserMenu(int delta);
+  [[nodiscard]] bool pointerInUserMenuScrollArea(float x, float y) const;
   void applyMenuHighlight();
   void buildMenu(
       const std::vector<std::string>& names, std::size_t selected, Box* anchor, bool upward, bool rightAlign, int zBase,
@@ -110,16 +118,21 @@ private:
       std::function<void(std::size_t)> onSelect
   );
   void rebuildUserMenu();
+  void refreshUserMenuRows();
+  void layoutUserMenuSearchField(float x, float y, float w, float h);
   void rebuildSessionMenu();
   void rebuildSchemeMenu();
   void clearUserMenu();
+  void clearUserMenuRows();
   void clearSessionMenu();
   void clearSchemeMenu();
   void enterPasswordStep(std::size_t userIndex);
+  [[nodiscard]] bool handleUserMenuSearchKey(std::uint32_t sym, bool preedit);
   void applyInitialUserSelection();
   void loadPreferences();
   void reconcileKeyboardFocus();
   [[nodiscard]] bool ownsInputArea(const InputArea* area) const;
+  [[nodiscard]] bool showsUserDropdown() const noexcept;
   void savePreferences() const;
   void buildSchemeNames();
   void applyScheme(std::size_t schemeIndex);
@@ -155,6 +168,7 @@ private:
   Node* m_panelDivider = nullptr;
   Box* m_loginPanel = nullptr;
   Box* m_userSelectBox = nullptr;
+  Glyph* m_userSelectIcon = nullptr;
   Label* m_userSelectLabel = nullptr;
   Glyph* m_userSelectGlyph = nullptr;
   InputArea* m_userSelectArea = nullptr;
@@ -176,8 +190,6 @@ private:
   Button* m_rebootButton = nullptr;
   Button* m_firmwareButton = nullptr;
   bool m_canRebootToFirmware = false;
-  std::vector<Button*> m_userRowButtons;
-  std::vector<Glyph*> m_userRowArrows;
 
   std::string m_username;
   std::string m_password;
@@ -223,6 +235,13 @@ private:
   bool m_schemeMenuOpen = false;
   bool m_passwordVisible = false;
   Box* m_userMenuPanel = nullptr;
+  SearchField* m_userMenuSearchField = nullptr;
+  Label* m_userMenuEmptyLabel = nullptr;
+  std::vector<Glyph*> m_userMenuRowIcons;
+  std::string m_userMenuSearchQuery;
+  std::vector<std::size_t> m_userMenuFilteredIndices;
+  std::size_t m_userMenuScrollOffset = 0;
+  bool m_userMenuSearchFocusPending = false;
   Box* m_sessionMenuPanel = nullptr;
   std::vector<Label*> m_userMenuLabels;
   std::vector<InputArea*> m_userMenuAreas;

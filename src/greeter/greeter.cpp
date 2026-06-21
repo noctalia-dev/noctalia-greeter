@@ -345,6 +345,10 @@ void Greeter::setupInputCallbacks(WaylandClient& client) {
       onPointerMotion(*view->window, event.sx, event.sy);
       onPointerButton(*view->window, event.sx, event.sy, event.button, event.state != 0);
       break;
+    case PointerEvent::Type::Axis:
+      setActiveSurface(view->surface.get());
+      onPointerAxis(*view->window, event.sx, event.sy, event.axis, event.axisLines);
+      break;
     default:
       break;
     }
@@ -382,6 +386,12 @@ void Greeter::onPointerMotion(GreeterWindow& window, double x, double y) {
 void Greeter::onPointerButton(GreeterWindow& window, double x, double y, std::uint32_t button, bool pressed) {
   if (View* view = viewForWindow(window)) {
     view->surface->onPointerEvent(static_cast<float>(x), static_cast<float>(y), button, pressed);
+  }
+}
+
+void Greeter::onPointerAxis(GreeterWindow& window, double x, double y, std::uint32_t axis, float axisLines) {
+  if (View* view = viewForWindow(window)) {
+    view->surface->onPointerAxis(static_cast<float>(x), static_cast<float>(y), axis, axisLines);
   }
 }
 

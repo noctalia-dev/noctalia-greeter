@@ -76,7 +76,7 @@ Input::Input() : Node(NodeType::Container) {
     if (!data.pressed || data.button != BTN_LEFT) {
       return;
     }
-    const float textStartX = Style::spaceMd() + kTextInnerInset;
+    const float textStartX = (m_flatStyle ? kTextInnerInset : Style::spaceMd() + kTextInnerInset);
     m_cursorPos = xToByteOffset(data.localX - textStartX + m_scrollOffset);
     m_selectionAnchor = m_cursorPos;
     updateInteractiveGeometry();
@@ -148,6 +148,40 @@ void Input::setBold(bool) {}
 void Input::setOnChange(std::function<void(const std::string&)> callback) { m_onChange = std::move(callback); }
 void Input::setOnSubmit(std::function<void(const std::string&)> callback) { m_onSubmit = std::move(callback); }
 void Input::setOnFocusLoss(std::function<void()> callback) { m_onFocusLoss = std::move(callback); }
+void Input::setOnKeyDown(
+    std::function<bool(std::uint32_t sym, std::uint32_t utf32, std::uint32_t modifiers, bool preedit)> callback
+) {
+  m_onKeyDown = std::move(callback);
+}
+
+void Input::setEmbeddedStyle(bool embedded, float topRadius) {
+  if (m_embeddedStyle == embedded && m_embeddedTopRadius == topRadius) {
+    return;
+  }
+  m_embeddedStyle = embedded;
+  m_embeddedTopRadius = topRadius;
+  applyVisualState();
+}
+
+void Input::setFlatStyle(bool flat) {
+  if (m_flatStyle == flat) {
+    return;
+  }
+  m_flatStyle = flat;
+  if (m_flatStyle) {
+    m_embeddedStyle = false;
+  }
+  applyVisualState();
+  markLayoutDirty();
+}
+
+void Input::setFlatOnSecondary(bool onSecondary) {
+  if (m_flatOnSecondary == onSecondary) {
+    return;
+  }
+  m_flatOnSecondary = onSecondary;
+  applyVisualState();
+}
 
 void Input::selectAll() {
   m_selectionAnchor = 0;
@@ -168,6 +202,9 @@ void Input::updateDisplayText() {
 }
 
 void Input::handleKey(std::uint32_t sym, std::uint32_t utf32, std::uint32_t modifiers, bool preedit) {
+  if (m_onKeyDown && m_onKeyDown(sym, utf32, modifiers, preedit)) {
+    return;
+  }
   if (preedit) {
     return;
   }
@@ -183,7 +220,7 @@ void Input::handleKey(std::uint32_t sym, std::uint32_t utf32, std::uint32_t modi
         || KeySymbol::isHome(sym)
         || KeySymbol::isEnd(sym)
         || KeySymbol::isEnter(sym)
-        || (ctrl && (sym == 'a' || sym == 'A'));
+        || (ctrl && (sym == 'a' || sym == 'A' || sym == XKB_KEY_a || sym == XKB_KEY_A));
     if (!navigationOrEdit) {
       return;
     }
@@ -198,9 +235,12 @@ void Input::handleKey(std::uint32_t sym, std::uint32_t utf32, std::uint32_t modi
     return;
   }
 
-  if (ctrl && (sym == 'a' || sym == 'A')) {
+  if (ctrl && (sym == 'a' || sym == 'A' || sym == XKB_KEY_a || sym == XKB_KEY_A)) {
     m_selectionAnchor = 0;
     m_cursorPos = m_value.size();
+    updateInteractiveGeometry();
+    markPaintDirty();
+    return;
   } else if (KeySymbol::isBackspace(sym)) {
     if (hasSelection()) {
       deleteSelection();
@@ -285,7 +325,7 @@ void Input::doLayout(Renderer& renderer) {
   const bool showPasswordGlyphs = m_passwordMode && !m_value.empty();
   m_label->setVisible(!showPasswordGlyphs);
   if (!showPasswordGlyphs) {
-    const float textInset = Style::spaceMd() + kTextInnerInset;
+    const float textInset = m_flatStyle ? kTextInnerInset : Style::spaceMd() + kTextInnerInset;
     m_label->setMaxWidth(std::max(0.0f, w - textInset * 2.0f));
     m_label->measure(renderer);
   }
@@ -358,7 +398,7 @@ void Input::doLayout(Renderer& renderer) {
   }
 
   if (m_textViewport != nullptr) {
-    const float textInset = Style::spaceMd() + kTextInnerInset;
+    const float textInset = m_flatStyle ? kTextInnerInset : Style::spaceMd() + kTextInnerInset;
     const float viewportW = std::max(0.0f, w - textInset * 2.0f);
     m_textViewport->setPosition(textInset, 0.0f);
     m_textViewport->setSize(viewportW, h);
@@ -370,9 +410,6 @@ void Input::doLayout(Renderer& renderer) {
   }
 
   updateInteractiveGeometry();
-  if (m_cursor != nullptr) {
-    m_cursor->setVisible(m_inputArea != nullptr && m_inputArea->focused());
-  }
   applyVisualState();
 }
 
@@ -388,20 +425,54 @@ void Input::applyVisualState() {
 
   const bool focused = m_inputArea != nullptr && m_inputArea->focused();
   const bool hovered = m_inputArea != nullptr && m_inputArea->hovered();
-  const Color fill = focused ? colorForRole(ColorRole::Surface) : colorForRole(ColorRole::SurfaceVariant);
-  const Color border = m_invalid ? colorForRole(ColorRole::Error)
-      : focused                  ? colorForRole(ColorRole::Primary)
-      : hovered                  ? colorForRole(ColorRole::Hover)
-                                 : colorForRole(ColorRole::Outline);
+
+  if (m_flatStyle) {
+    m_background->setStyle(
+        RoundedRectStyle{
+            .fillMode = FillMode::None,
+            .radius = Radii(0.0f),
+            .borderWidth = 0.0f,
+        }
+    );
+    const bool showingPlaceholder = m_value.empty() && !m_placeholder.empty();
+    const Color textColor = m_invalid ? colorForRole(ColorRole::Error)
+        : showingPlaceholder
+        ? colorForRole(m_flatOnSecondary ? ColorRole::OnSecondary : ColorRole::OnSurfaceVariant, kPlaceholderAlpha)
+        : m_flatOnSecondary ? colorForRole(ColorRole::OnSecondary)
+                            : colorForRole(ColorRole::OnSurface);
+    if (m_label != nullptr) {
+      m_label->setColor(textColor);
+    }
+    for (auto* glyph : m_passwordGlyphs) {
+      glyph->setColor(textColor);
+    }
+    return;
+  }
+
+  Color fill = focused ? colorForRole(ColorRole::Surface) : colorForRole(ColorRole::SurfaceVariant);
+  Color border = m_invalid ? colorForRole(ColorRole::Error)
+      : focused            ? colorForRole(ColorRole::Primary)
+      : hovered            ? colorForRole(ColorRole::Hover)
+                           : colorForRole(ColorRole::Outline);
+  Radii radius(Style::scaledRadiusMd());
+  float borderWidth = Style::borderWidth();
+
+  if (m_embeddedStyle) {
+    fill = colorForRole(ColorRole::SurfaceVariant);
+    border = focused ? colorForRole(ColorRole::Primary) : Color{};
+    borderWidth = focused ? Style::borderWidth() : 0.0f;
+    const float topRadius = std::max(0.0f, m_embeddedTopRadius);
+    radius = Radii(topRadius, topRadius, 0.0f, 0.0f);
+  }
 
   m_background->setStyle(
       RoundedRectStyle{
           .fill = fill,
           .border = border,
           .fillMode = FillMode::Solid,
-          .radius = Style::scaledRadiusMd(),
+          .radius = radius,
           .softness = 1.0f,
-          .borderWidth = Style::borderWidth(),
+          .borderWidth = borderWidth,
       }
   );
 
@@ -446,9 +517,22 @@ void Input::updateInteractiveGeometry() {
     const float selX1 = stopXForByte(selectionEnd()) - m_scrollOffset;
     m_selectionRect->setPosition(selX0, cursorY);
     m_selectionRect->setSize(std::max(0.0f, selX1 - selX0), cursorHeight);
+    if (m_flatStyle) {
+      m_selectionRect->setStyle(
+          RoundedRectStyle{
+              .fill = colorForRole(ColorRole::Primary),
+              .fillMode = FillMode::Solid,
+              .radius = 2.0f,
+          }
+      );
+      m_selectionRect->setOpacity(0.35f);
+    }
     m_selectionRect->setVisible(true);
+    const bool fullSelection = selectionStart() == 0 && selectionEnd() == m_value.size() && !m_value.empty();
+    m_cursor->setVisible(m_inputArea != nullptr && m_inputArea->focused() && !fullSelection);
   } else {
     m_selectionRect->setVisible(false);
+    m_cursor->setVisible(m_inputArea != nullptr && m_inputArea->focused());
   }
 }
 
@@ -520,7 +604,7 @@ std::size_t Input::selectionEnd() const noexcept { return std::max(m_selectionAn
 
 float Input::textViewportWidth() const noexcept {
   const float w = width() > 0.0f ? width() : kMinWidth;
-  const float textInset = Style::spaceMd() + kTextInnerInset;
+  const float textInset = m_flatStyle ? kTextInnerInset : Style::spaceMd() + kTextInnerInset;
   return std::max(0.0f, w - textInset * 2.0f);
 }
 

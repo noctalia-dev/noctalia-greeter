@@ -136,7 +136,8 @@ namespace {
     out << "# default_user: skip user picker, open password for this account\n";
     out << "# session: last used (UI); scheme: color scheme name\n";
     out << "# output: Wayland connector; output_layout: monitor positions; admin-only\n";
-    out << "# scale: UI scale; cursor_theme/cursor_size/cursor_path: cursor appearance\n";
+    out << "# scale: UI scale\n";
+    out << "# cursor_theme/cursor_size/cursor_path: cursor appearance\n";
     out << "# keyboard_layout/keyboard_variant/keyboard_options: XKB keymap (compositor)\n";
 
     static constexpr const char* kPreferredOrder[] = {
@@ -175,6 +176,32 @@ namespace {
       if (it != map.end() && !it->second.empty()) {
         return it->second;
       }
+    }
+    return std::nullopt;
+  }
+
+  [[nodiscard]] std::optional<bool> parseBoolValue(std::string_view raw) {
+    const std::string value = trim(raw);
+    if (value.empty()) {
+      return std::nullopt;
+    }
+    if (value == "1"
+        || value == "true"
+        || value == "True"
+        || value == "TRUE"
+        || value == "yes"
+        || value == "Yes"
+        || value == "YES") {
+      return true;
+    }
+    if (value == "0"
+        || value == "false"
+        || value == "False"
+        || value == "FALSE"
+        || value == "no"
+        || value == "No"
+        || value == "NO") {
+      return false;
     }
     return std::nullopt;
   }

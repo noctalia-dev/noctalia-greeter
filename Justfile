@@ -80,7 +80,7 @@ run-local: build
   mkdir -p "$(dirname "$log")"
   echo "user=$USER log=$log"
   echo "Recovery: just recover"
-  env NOCTALIA_GREETER_LOG="$log" dbus-run-session -- \
+  env NOCTALIA_GREETER_LOG="$log" NOCTALIA_GREETER_DUMMY_USERS=15 dbus-run-session -- \
     ./build/noctalia-greeter-compositor ./build/noctalia-greeter
 
 # Configure AddressSanitizer build dir

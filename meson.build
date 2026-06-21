@@ -139,6 +139,7 @@ _greeter_sources = files(
   'src/ui/controls/box.cpp',
   'src/ui/controls/button.cpp',
   'src/ui/controls/input.cpp',
+  'src/ui/controls/search_field.cpp',
   'src/ui/controls/label.cpp',
   'src/ui/controls/flex.cpp',
   'src/ui/controls/glyph.cpp',

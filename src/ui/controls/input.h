@@ -27,10 +27,16 @@ public:
   void setInvalid(bool invalid);
   void setEnabled(bool enabled);
   void setBold(bool bold);
+  void setEmbeddedStyle(bool embedded, float topRadius = 0.0f);
+  void setFlatStyle(bool flat);
+  void setFlatOnSecondary(bool onSecondary);
 
   void setOnChange(std::function<void(const std::string&)> callback);
   void setOnSubmit(std::function<void(const std::string&)> callback);
   void setOnFocusLoss(std::function<void()> callback);
+  void setOnKeyDown(
+      std::function<bool(std::uint32_t sym, std::uint32_t utf32, std::uint32_t modifiers, bool preedit)> callback
+  );
 
   void selectAll();
 
@@ -82,8 +88,13 @@ private:
   bool m_passwordMode = false;
   bool m_invalid = false;
   bool m_enabled = true;
+  bool m_embeddedStyle = false;
+  float m_embeddedTopRadius = 0.0f;
+  bool m_flatStyle = false;
+  bool m_flatOnSecondary = false;
 
   std::function<void(const std::string&)> m_onChange;
   std::function<void(const std::string&)> m_onSubmit;
   std::function<void()> m_onFocusLoss;
+  std::function<bool(std::uint32_t, std::uint32_t, std::uint32_t, bool)> m_onKeyDown;
 };
