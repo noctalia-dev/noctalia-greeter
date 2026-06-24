@@ -52,21 +52,21 @@ in
     settings.keyboard = {
       layout = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
-        default = null;
+        default = config.services.xserver.xkb.layout or null;
         example = "us";
         description = "Keyboard layout for the greeter.";
       };
 
       variant = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
-        default = null;
+        default = config.services.xserver.xkb.variant or null;
         example = "colemak";
         description = "Keyboard variant for the greeter.";
       };
 
       options = lib.mkOption {
         type = lib.types.nullOr lib.types.str;
-        default = null;
+        default = config.services.xserver.xkb.options or null;
         example = "grp:win_space_toggle";
         description = "Keyboard options for the greeter.";
       };
