@@ -130,7 +130,6 @@ struct greeter_server {
   struct greeter_output_placement output_placements[16];
   size_t output_placement_count;
   struct wlr_fractional_scale_manager_v1* fractional_scale;
-  int output_retries_left;
 };
 
 static char* trim(char* value) {
@@ -268,7 +267,6 @@ static void read_greeter_config(struct greeter_server* server) {
   server->keyboard_variant[0] = '\0';
   server->keyboard_options[0] = '\0';
   server->output_placement_count = 0;
-  server->output_retries_left = 10;
 
   const char* state_dir = getenv("NOCTALIA_GREETER_STATE_DIR");
   struct greeter_compositor_config config;
@@ -884,7 +882,6 @@ static void choose_outputs(struct greeter_server* server) {
   if (any_output_active(server)) {
     warp_cursor_to_initial_position(server);
   }
-  server->output_retries_left = 10;
   schedule_launch(server);
   schedule_output_frames(server);
 }
