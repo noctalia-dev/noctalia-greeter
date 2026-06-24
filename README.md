@@ -123,10 +123,14 @@ programs.noctalia-greeter = {
 
   # Optional configuration
   greeter-args = "";
-  settings.cursor = {
-    theme = "Adwaita";
-    size = 24;
-    package = pkgs.adwaita-icon-theme;
+  settings = {
+    cursor = {
+      theme = "Adwaita";
+      size = 24;
+    };
+    keyboard = {
+      layout = "us";
+    };
   };
 };
 ```
@@ -136,6 +140,9 @@ The module enables greetd and sets the session command automatically.
 `greeter-args` passes extra flags to `noctalia-greeter-session`, for example
 `--session <name>` to set a default session. Run `noctalia-greeter sessions`
 to list valid names.
+
+`settings` accepts a Nix attrset, a raw TOML string, or a path to a `.toml` file, 
+and is copied to `/var/lib/noctalia-greeter/greeter.toml` on boot.
 
 ## Building and installing
 
@@ -314,9 +321,7 @@ command = "env XCURSOR_THEME=Adwaita XCURSOR_SIZE=24 /usr/bin/noctalia-greeter-s
 ```
 
 If the theme is not under the default search path, also set
-`XCURSOR_PATH` (or `cursor_path`) to the directory that contains it. On NixOS,
-use the `programs.noctalia-greeter.settings.cursor` options instead, which wire this up
-for you.
+`XCURSOR_PATH` (or `cursor.path`) to the directory that contains it. 
 
 ## Keyboard
 
