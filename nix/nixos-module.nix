@@ -81,7 +81,7 @@ in
       }
       // lib.optionalAttrs (cfg.settings != { }) {
         "/var/lib/noctalia-greeter/greeter.toml".C = {
-          argument = generateToml "greeter.toml" cfg.settings;
+          argument = "${generateToml "greeter.toml" cfg.settings}";
           inherit user group;
           mode = "0644";
         };
