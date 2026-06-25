@@ -297,6 +297,12 @@ namespace {
       root.insert("keyboard", std::move(keyboard));
     }
 
+    if (config.authAllowEmptyPassword.has_value()) {
+      toml::table auth;
+      auth.insert_or_assign("allow_empty_password", *config.authAllowEmptyPassword);
+      root.insert("auth", std::move(auth));
+    }
+
     return root;
   }
 
@@ -348,6 +354,7 @@ namespace greeter::config {
     out << "# noctalia-greeter greeter.toml\n";
     out << "# [session] default/last, [user] default, [appearance] scheme/password_style\n";
     out << "# [output] name/layout/scale, [cursor] theme/size/path, [keyboard] layout/variant/options\n";
+    out << "# [auth] allow_empty_password (bool, default false; enables fingerprint/smartcard PAM auth)\n";
     out << '\n';
     out << formatToml(table);
 
