@@ -527,6 +527,23 @@ void GreeterSurface::initialize(RenderContext* context) {
     m_firmwareButton->setTooltip("Restart to UEFI firmware setup");
   }
 
+  const auto applySyncedPowerButton = [](Button* button, std::string_view action, std::string_view fallbackTooltip) {
+    if (button == nullptr) {
+      return;
+    }
+    button->setVisible(power::hasSyncedAction(action));
+    if (const auto glyph = power::syncedActionGlyph(action)) {
+      button->setGlyph(*glyph);
+    }
+    if (const auto label = power::syncedActionLabel(action)) {
+      button->setTooltip(*label);
+    } else {
+      button->setTooltip(fallbackTooltip);
+    }
+  };
+  applySyncedPowerButton(m_shutdownButton, "shutdown", "Shut down");
+  applySyncedPowerButton(m_rebootButton, "reboot", "Restart");
+
   m_root.setAnimationManager(&m_animations);
   // Keep state changes immediate to avoid hover flicker.
   for (Button* btn : {m_shutdownButton, m_rebootButton, m_firmwareButton}) {

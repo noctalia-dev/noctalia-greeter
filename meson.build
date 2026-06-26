@@ -159,6 +159,7 @@ _greeter_sources = files(
   'src/greetd/greetd_client.cpp',
   'src/greeter/appearance_sync.cpp',
   'src/greeter/appearance_config.cpp',
+  'src/greeter/session_config.cpp',
   'src/greeter/greeter_config_io.cpp',
   'src/greeter/greeter_preferences.cpp',
   'src/greeter/greeter_sessions.cpp',

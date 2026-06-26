@@ -1,6 +1,7 @@
 #include "greeter/power_actions.h"
 
 #include "core/log.h"
+#include "greeter/session_config.h"
 
 #include <algorithm>
 #include <cerrno>
@@ -10,6 +11,7 @@
 #include <filesystem>
 #include <initializer_list>
 #include <poll.h>
+#include <string>
 #include <string_view>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -21,6 +23,11 @@ namespace power {
     constexpr Logger kLog("power");
     constexpr std::chrono::milliseconds kCommandTimeout{5000};
     constexpr std::chrono::milliseconds kProcessPollInterval{100};
+
+    const GreeterSyncedSession* syncedSession() {
+      static const std::optional<GreeterSyncedSession> session = loadGreeterSyncedSession();
+      return session.has_value() ? &*session : nullptr;
+    }
 
     bool commandExists(const char* name) {
       if (name == nullptr || name[0] == '\0') {
@@ -153,6 +160,14 @@ namespace power {
       }
     }
 
+    bool runShellCommand(std::string_view command) {
+      if (command.empty()) {
+        return false;
+      }
+      const std::string shellCommand(command);
+      return runChecked({"/bin/sh", "-c", shellCommand.c_str()});
+    }
+
     bool runFirstAvailable(const char* action, std::initializer_list<std::vector<const char*>> candidates) {
       bool attempted = false;
       for (const auto& argv : candidates) {
@@ -176,10 +191,45 @@ namespace power {
       }
       return false;
     }
+
+    std::optional<std::string> syncedCommandFor(std::string_view action) {
+      const GreeterSyncedSession* session = syncedSession();
+      if (session == nullptr) {
+        return std::nullopt;
+      }
+      if (action == "shutdown" && session->power.shutdown.has_value()) {
+        return session->power.shutdown;
+      }
+      if (action == "reboot" && session->power.reboot.has_value()) {
+        return session->power.reboot;
+      }
+      if (action == "suspend" && session->power.suspend.has_value()) {
+        return session->power.suspend;
+      }
+      for (const GreeterSyncedSessionAction& row : session->actions) {
+        if (row.action == action && row.command.has_value()) {
+          return row.command;
+        }
+      }
+      return std::nullopt;
+    }
+
+    bool runSyncedOrFallback(std::string_view action, std::initializer_list<std::vector<const char*>> candidates) {
+      if (const auto command = syncedCommandFor(action)) {
+        if (runShellCommand(*command)) {
+          kLog.info("{}: synced command accepted", action);
+          return true;
+        }
+        kLog.warn("{}: synced command failed", action);
+        return false;
+      }
+      return runFirstAvailable(action.data(), candidates);
+    }
+
   } // namespace
 
   bool powerOff() {
-    return runFirstAvailable(
+    return runSyncedOrFallback(
         "shutdown",
         {
             {"systemctl", "poweroff"},
@@ -192,7 +242,7 @@ namespace power {
   }
 
   bool reboot() {
-    return runFirstAvailable(
+    return runSyncedOrFallback(
         "reboot",
         {
             {"systemctl", "reboot"},
@@ -218,6 +268,42 @@ namespace power {
     std::error_code ec;
     return std::filesystem::exists("/sys/firmware/efi", ec)
         && (commandExists("systemctl") || commandExists("loginctl"));
+  }
+
+  bool hasSyncedAction(std::string_view action) {
+    const GreeterSyncedSession* session = syncedSession();
+    if (session == nullptr || session->actions.empty()) {
+      return true;
+    }
+    return std::ranges::any_of(session->actions, [action](const GreeterSyncedSessionAction& row) {
+      return row.action == action;
+    });
+  }
+
+  std::optional<std::string> syncedActionLabel(std::string_view action) {
+    const GreeterSyncedSession* session = syncedSession();
+    if (session == nullptr) {
+      return std::nullopt;
+    }
+    for (const GreeterSyncedSessionAction& row : session->actions) {
+      if (row.action == action && row.label.has_value()) {
+        return row.label;
+      }
+    }
+    return std::nullopt;
+  }
+
+  std::optional<std::string> syncedActionGlyph(std::string_view action) {
+    const GreeterSyncedSession* session = syncedSession();
+    if (session == nullptr) {
+      return std::nullopt;
+    }
+    for (const GreeterSyncedSessionAction& row : session->actions) {
+      if (row.action == action && row.glyph.has_value()) {
+        return row.glyph;
+      }
+    }
+    return std::nullopt;
   }
 
 } // namespace power

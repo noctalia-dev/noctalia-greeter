@@ -83,6 +83,6 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  kLog.info("installed appearance into '{}'", greeter::appearance::syncedDataDirectory().string());
+  kLog.info("installed appearance and session actions into '{}'", greeter::appearance::syncedDataDirectory().string());
   return 0;
 }
