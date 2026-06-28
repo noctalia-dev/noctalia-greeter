@@ -225,6 +225,9 @@ namespace greeter {
         kLog.warn("invalid appearance.password_style '{}' (using filled circles)", *file.appearancePasswordStyle);
       }
     }
+    if (file.authAllowEmptyPassword.has_value()) {
+      prefs.allowEmptyPassword = *file.authAllowEmptyPassword;
+    }
     return prefs;
   }
 

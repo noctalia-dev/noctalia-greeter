@@ -1248,7 +1248,7 @@ bool GreeterSurface::driveAuthConversation(std::optional<GreetdAuthMessage> pend
       continue;
     }
 
-    if (m_password.empty()) {
+    if (m_password.empty() && !m_allowEmptyPassword) {
       return false;
     }
 
@@ -1272,7 +1272,7 @@ void GreeterSurface::tryAuthenticate() {
     commitImmediateFrame(false);
     return;
   }
-  if (m_password.empty()) {
+  if (m_password.empty() && !m_allowEmptyPassword) {
     updateStatus("Enter a password", true);
     commitImmediateFrame(false);
     return;
@@ -1650,6 +1650,7 @@ void GreeterSurface::syncWallpaperTexture() {
 
 void GreeterSurface::loadPreferences() {
   const auto prefs = greeter::loadGreeterPreferences();
+  m_allowEmptyPassword = prefs.allowEmptyPassword;
   const auto initialSession = greeter::resolveInitialSessionName(prefs);
 
   if (initialSession.has_value()) {

@@ -22,7 +22,8 @@ namespace {
         || key == "appearance"
         || key == "output"
         || key == "cursor"
-        || key == "keyboard";
+        || key == "keyboard"
+        || key == "auth";
   }
 
   [[nodiscard]] bool isKnownSessionKey(std::string_view key) { return key == "default" || key == "last"; }
@@ -40,6 +41,8 @@ namespace {
   [[nodiscard]] bool isKnownKeyboardKey(std::string_view key) {
     return key == "layout" || key == "variant" || key == "options";
   }
+
+  [[nodiscard]] bool isKnownAuthKey(std::string_view key) { return key == "allow_empty_password"; }
 
   [[nodiscard]] std::optional<std::string> stringValue(const toml::node& node) {
     if (const auto value = node.value<std::string>()) {
@@ -166,6 +169,14 @@ namespace {
           } else {
             config.keyboardOptions = stringValue(entryNode);
           }
+        } else if (keyView == "auth") {
+          if (!isKnownAuthKey(entryView)) {
+            warnUnknownSectionKey(path, keyView, entryView);
+            continue;
+          }
+          if (const auto value = entryNode.value<bool>()) {
+            config.authAllowEmptyPassword = *value;
+          }
         }
       }
     }
@@ -286,6 +297,12 @@ namespace {
       root.insert("keyboard", std::move(keyboard));
     }
 
+    if (config.authAllowEmptyPassword.has_value()) {
+      toml::table auth;
+      auth.insert_or_assign("allow_empty_password", *config.authAllowEmptyPassword);
+      root.insert("auth", std::move(auth));
+    }
+
     return root;
   }
 
@@ -337,6 +354,7 @@ namespace greeter::config {
     out << "# noctalia-greeter greeter.toml\n";
     out << "# [session] default/last, [user] default, [appearance] scheme/password_style\n";
     out << "# [output] name/layout/scale, [cursor] theme/size/path, [keyboard] layout/variant/options\n";
+    out << "# [auth] allow_empty_password (bool, default false; enables fingerprint/smartcard PAM auth)\n";
     out << '\n';
     out << formatToml(table);
 

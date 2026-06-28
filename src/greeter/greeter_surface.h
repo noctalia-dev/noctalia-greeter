@@ -191,6 +191,8 @@ private:
   Button* m_firmwareButton = nullptr;
   bool m_canRebootToFirmware = false;
 
+  bool m_allowEmptyPassword = false;
+
   std::string m_username;
   std::string m_password;
   std::string m_status;
