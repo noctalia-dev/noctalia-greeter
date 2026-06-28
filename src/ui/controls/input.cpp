@@ -277,18 +277,18 @@ void Input::handleKey(std::uint32_t sym, std::uint32_t utf32, std::uint32_t modi
       deleteSelection();
       changed = true;
     } else if (m_cursorPos > 0) {
-      const std::size_t prev = prevCharPos(m_value, m_cursorPos);
-      m_value.erase(prev, m_cursorPos - prev);
-      m_cursorPos = prev;
-      m_selectionAnchor = prev;
-      changed = true;
+        const std::size_t prev = ctrl ? 0 :  prevCharPos(m_value, m_cursorPos);
+        m_value.erase(prev, m_cursorPos - prev);
+        m_cursorPos = prev;
+        m_selectionAnchor = prev;
+        changed = true;
     }
   } else if (KeySymbol::isDelete(sym)) {
     if (hasSelection()) {
       deleteSelection();
       changed = true;
     } else if (m_cursorPos < m_value.size()) {
-      const std::size_t next = nextCharPos(m_value, m_cursorPos);
+      const std::size_t next = ctrl ? m_value.size() : nextCharPos(m_value, m_cursorPos);
       m_value.erase(m_cursorPos, next - m_cursorPos);
       changed = true;
     }
