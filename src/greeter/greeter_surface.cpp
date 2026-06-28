@@ -1483,6 +1483,7 @@ void GreeterSurface::buildSchemeNames() {
   m_syncedAppearance = loadGreeterSyncedAppearance();
   if (m_syncedAppearance.has_value()) {
     m_schemeNames.emplace_back(greeter::appearance::kSyncedSchemeDisplayName);
+    m_schemeNames.emplace_back(greeter::appearance::kSyncedBlurSchemeDisplayName);
     m_selectedScheme = 0;
   }
 
@@ -1495,8 +1496,12 @@ void GreeterSurface::buildSchemeNames() {
 }
 
 bool GreeterSurface::isSyncedScheme(const std::size_t schemeIndex) const {
-  return schemeIndex < m_schemeNames.size()
-      && m_schemeNames[schemeIndex] == greeter::appearance::kSyncedSchemeDisplayName;
+  if (schemeIndex >= m_schemeNames.size()) {
+    return false;
+  }
+  const auto& name = m_schemeNames[schemeIndex];
+  return name == greeter::appearance::kSyncedSchemeDisplayName
+      || name == greeter::appearance::kSyncedBlurSchemeDisplayName;
 }
 
 std::optional<std::size_t> GreeterSurface::findSchemeIndex(const std::string_view name) const {
@@ -1514,6 +1519,10 @@ void GreeterSurface::clearWallpaperDisplay() {
   m_wallpaperFillMode = WallpaperFillMode::Crop;
   m_wallpaperFillColor = rgba(0.0f, 0.0f, 0.0f, 0.0f);
   m_wallpaperDirty = true;
+  if (m_wallpaper != nullptr) {
+    m_wallpaper->setBlurRadius(0.0f);
+    m_wallpaper->setTintColor(rgba(0.0f, 0.0f, 0.0f, 0.0f));
+  }
 }
 
 void GreeterSurface::applyScheme(const std::size_t schemeIndex) {
@@ -1540,6 +1549,19 @@ void GreeterSurface::applyScheme(const std::size_t schemeIndex) {
     m_wallpaperFillColor = m_syncedAppearance->wallpaperFillColor;
     m_hasSyncedWallpaper = !m_wallpaperPath.empty();
     m_wallpaperDirty = true;
+
+    if (m_wallpaper != nullptr) {
+      const bool isBlur = m_schemeNames[schemeIndex] == greeter::appearance::kSyncedBlurSchemeDisplayName;
+      if (isBlur) {
+        Color tint = m_syncedAppearance->palette.surface;
+        tint.a = 0.4f;
+        m_wallpaper->setBlurRadius(30.0f);
+        m_wallpaper->setTintColor(tint);
+      } else {
+        m_wallpaper->setBlurRadius(0.0f);
+        m_wallpaper->setTintColor(rgba(0.0f, 0.0f, 0.0f, 0.0f));
+      }
+    }
     return;
   }
 
