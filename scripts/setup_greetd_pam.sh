@@ -37,7 +37,7 @@ fi
 
 PAM_LINE="session    required     ${PAM_MODULE}"
 
-if rg -n "^[[:space:]]*session[[:space:]]+.*${PAM_MODULE}([[:space:]]|$)" "${PAM_FILE}" >/dev/null 2>&1; then
+if grep -q -E "^[[:space:]]*session[[:space:]]+.*${PAM_MODULE}([[:space:]]|$)" "${PAM_FILE}"; then
   echo "info: ${PAM_FILE} already contains ${PAM_MODULE}; nothing to do."
   exit 0
 fi
@@ -50,8 +50,8 @@ tmp="$(mktemp)"
 trap 'rm -f "${tmp}"' EXIT
 
 # Insert after last session line, or append.
-if rg -n "^[[:space:]]*session[[:space:]]+" "${PAM_FILE}" >/dev/null 2>&1; then
-  last_session="$(rg -n "^[[:space:]]*session[[:space:]]+" "${PAM_FILE}" | tail -n 1 | awk -F: '{print $1}')"
+if grep -q -E "^[[:space:]]*session[[:space:]]+" "${PAM_FILE}"; then
+  last_session="$(grep -h -n -E "^[[:space:]]*session[[:space:]]+" "${PAM_FILE}" | tail -n 1 | awk -F: '{print $1}')"
   awk -v line="${PAM_LINE}" -v last="${last_session}" '
     {
       print $0
