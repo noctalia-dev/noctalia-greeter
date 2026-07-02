@@ -64,9 +64,14 @@ nlohmann_dep = declare_dependency(
   include_directories: include_directories('third_party/nlohmann', is_system: true),
 )
 
-tomlplusplus_dep = declare_dependency(
-  include_directories: include_directories('third_party/tomlplusplus', is_system: true),
-)
+# ── Vendored: tomlplusplus (header-only) ─────────────────────────────────
+if get_option('system_tomlplusplus')
+  tomlplusplus_dep = dependency('tomlplusplus')
+else
+  tomlplusplus_dep = declare_dependency(
+    include_directories: include_directories('third_party/tomlplusplus', is_system: true),
+  )
+endif
 
 # ── Wayland protocol generation ───────────────────────────────────────────────
 wayland_scanner    = find_program('wayland-scanner')
