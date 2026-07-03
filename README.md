@@ -102,6 +102,9 @@ sudo xbps-install meson ninja pkg-config git \
 
 Vendored dependencies, with no system package needed: `nlohmann/json`, `stb`, and `Wuffs`.
 
+Dependencies that are vendored by default, with a meson option to
+instead use the system package: `tomlplusplus`
+
 Build requires `wlroots-0.20` and `wayland-server` development packages (see distro lists above).
 
 `libwebp` handles WebP wallpapers when syncing appearance from the shell. Wuffs handles other raster image formats.

@@ -10,7 +10,7 @@
 #include <fstream>
 #include <sstream>
 #include <string_view>
-#include <toml.hpp>
+#include <toml++/toml.hpp>
 
 namespace {
 
