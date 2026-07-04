@@ -1243,6 +1243,11 @@ void GreeterSurface::tryAuthenticate() {
     commitImmediateFrame(false);
     return;
   }
+  if (m_password.empty() && !m_allowEmptyPassword) {
+    updateStatus("Enter a password", true);
+    commitImmediateFrame(false);
+    return;
+  }
 
   if (!m_authSessionStarted) {
     // Arm the typed input (possibly empty) to answer the first secret prompt.
@@ -1736,6 +1741,7 @@ void GreeterSurface::syncWallpaperTexture() {
 
 void GreeterSurface::loadPreferences() {
   const auto prefs = greeter::loadGreeterPreferences();
+  m_allowEmptyPassword = prefs.allowEmptyPassword;
   const auto initialSession = greeter::resolveInitialSessionName(prefs);
 
   if (initialSession.has_value()) {

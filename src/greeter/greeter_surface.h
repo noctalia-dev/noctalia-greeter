@@ -201,6 +201,8 @@ private:
   Button* m_firmwareButton = nullptr;
   bool m_canRebootToFirmware = false;
 
+  bool m_allowEmptyPassword = false;
+
   // greetd replies in request order, so m_pendingReplies (a FIFO of these) tells
   // which request each reply answers.
   enum class AuthRequest {

@@ -316,6 +316,7 @@ Admin-only settings in `greeter.toml` (set by you, not the UI):
 - `[cursor].path` - colon-separated theme search path (sets `XCURSOR_PATH`)
 - `[keyboard].layout` / `.variant` / `.options` - XKB keymap (compositor)
 - `[appearance].password_style` - password mask style: `default` (filled circles) or `random` (cycled glyph shapes, same as Noctalia shell)
+- `[auth].allow_empty_password` - allow submitting with an empty password field (`true`/`false`, default `false`); needed for PAM modules like fprintd or smartcard that handle authentication without a password (PAM expects an empty response to the password prompt)
 
 The greeter updates `[session].last` and `[appearance].scheme` when you change them in the UI.
 

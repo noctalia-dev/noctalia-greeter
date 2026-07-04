@@ -28,6 +28,7 @@ namespace greeter {
     // Manual UI scale; unset or invalid → auto from display geometry.
     std::optional<float> scale;
     PasswordMaskStyle passwordMaskStyle = PasswordMaskStyle::Default;
+    bool allowEmptyPassword = false;
     bool hideLogo = false;
   };
 

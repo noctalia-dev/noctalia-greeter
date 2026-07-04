@@ -28,6 +28,8 @@ namespace greeter::config {
     std::optional<std::string> keyboardVariant;
     std::optional<std::string> keyboardOptions;
     std::optional<bool> keyboardNumlock;
+
+    std::optional<bool> authAllowEmptyPassword;
   };
 
   [[nodiscard]] GreeterConfigFile loadConfig(const std::filesystem::path& path);

@@ -228,6 +228,9 @@ namespace greeter {
     if (file.appearanceHideLogo.has_value()) {
       prefs.hideLogo = *file.appearanceHideLogo;
     }
+    if (file.authAllowEmptyPassword.has_value()) {
+      prefs.allowEmptyPassword = *file.authAllowEmptyPassword;
+    }
     return prefs;
   }
 
