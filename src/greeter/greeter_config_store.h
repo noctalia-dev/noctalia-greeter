@@ -14,6 +14,7 @@ namespace greeter::config {
 
     std::optional<std::string> appearanceScheme;
     std::optional<std::string> appearancePasswordStyle;
+    std::optional<bool> appearanceHideLogo;
 
     std::optional<std::string> outputName;
     std::optional<std::string> outputLayout;
@@ -26,6 +27,7 @@ namespace greeter::config {
     std::optional<std::string> keyboardLayout;
     std::optional<std::string> keyboardVariant;
     std::optional<std::string> keyboardOptions;
+    std::optional<bool> keyboardNumlock;
 
     std::optional<bool> authAllowEmptyPassword;
   };

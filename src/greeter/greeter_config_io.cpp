@@ -10,7 +10,7 @@
 #include <fstream>
 #include <sstream>
 #include <string_view>
-#include <toml.hpp>
+#include <toml++/toml.hpp>
 
 namespace {
 
@@ -30,7 +30,9 @@ namespace {
 
   [[nodiscard]] bool isKnownUserKey(std::string_view key) { return key == "default"; }
 
-  [[nodiscard]] bool isKnownAppearanceKey(std::string_view key) { return key == "scheme" || key == "password_style"; }
+  [[nodiscard]] bool isKnownAppearanceKey(std::string_view key) {
+    return key == "scheme" || key == "password_style" || key == "hide_logo";
+  }
 
   [[nodiscard]] bool isKnownOutputKey(std::string_view key) {
     return key == "name" || key == "layout" || key == "scale";
@@ -39,7 +41,7 @@ namespace {
   [[nodiscard]] bool isKnownCursorKey(std::string_view key) { return key == "theme" || key == "size" || key == "path"; }
 
   [[nodiscard]] bool isKnownKeyboardKey(std::string_view key) {
-    return key == "layout" || key == "variant" || key == "options";
+    return key == "layout" || key == "variant" || key == "options" || key == "numlock";
   }
 
   [[nodiscard]] bool isKnownAuthKey(std::string_view key) { return key == "allow_empty_password"; }
@@ -126,8 +128,12 @@ namespace {
           }
           if (entryView == "scheme") {
             config.appearanceScheme = stringValue(entryNode);
-          } else {
+          } else if (entryView == "password_style") {
             config.appearancePasswordStyle = stringValue(entryNode);
+          } else if (entryView == "hide_logo") {
+            if (const auto value = entryNode.value<bool>()) {
+              config.appearanceHideLogo = *value;
+            }
           }
         } else if (keyView == "output") {
           if (!isKnownOutputKey(entryView)) {
@@ -166,8 +172,12 @@ namespace {
             config.keyboardLayout = stringValue(entryNode);
           } else if (entryView == "variant") {
             config.keyboardVariant = stringValue(entryNode);
-          } else {
+          } else if (entryView == "options") {
             config.keyboardOptions = stringValue(entryNode);
+          } else if (entryView == "numlock") {
+            if (const auto value = entryNode.value<bool>()) {
+              config.keyboardNumlock = *value;
+            }
           }
         } else if (keyView == "auth") {
           if (!isKnownAuthKey(entryView)) {
@@ -234,6 +244,9 @@ namespace {
           table.insert_or_assign(std::string(key), value);
         }
     );
+    if (config.appearanceHideLogo.has_value()) {
+      appearance.insert_or_assign("hide_logo", *config.appearanceHideLogo);
+    }
     if (!appearance.empty()) {
       root.insert("appearance", std::move(appearance));
     }
@@ -293,6 +306,9 @@ namespace {
           table.insert_or_assign(std::string(key), value);
         }
     );
+    if (config.keyboardNumlock.has_value()) {
+      keyboard.insert_or_assign("numlock", *config.keyboardNumlock);
+    }
     if (!keyboard.empty()) {
       root.insert("keyboard", std::move(keyboard));
     }
@@ -352,8 +368,8 @@ namespace greeter::config {
 
     std::ostringstream out;
     out << "# noctalia-greeter greeter.toml\n";
-    out << "# [session] default/last, [user] default, [appearance] scheme/password_style\n";
-    out << "# [output] name/layout/scale, [cursor] theme/size/path, [keyboard] layout/variant/options\n";
+    out << "# [session] default/last, [user] default, [appearance] scheme/password_style/hide_logo\n";
+    out << "# [output] name/layout/scale, [cursor] theme/size/path, [keyboard] layout/variant/options/numlock\n";
     out << "# [auth] allow_empty_password (bool, default false; enables fingerprint/smartcard PAM auth)\n";
     out << '\n';
     out << formatToml(table);
@@ -391,6 +407,9 @@ extern "C" void greeter_compositor_config_load(const char* state_dir, struct gre
   copyString(out->keyboard_layout, sizeof(out->keyboard_layout), config.keyboardLayout);
   copyString(out->keyboard_variant, sizeof(out->keyboard_variant), config.keyboardVariant);
   copyString(out->keyboard_options, sizeof(out->keyboard_options), config.keyboardOptions);
+  if (config.keyboardNumlock.has_value()) {
+    out->keyboard_numlock = *config.keyboardNumlock ? 1 : -1;
+  }
   copyString(out->output_layout, sizeof(out->output_layout), config.outputLayout);
 
   if (config.outputScale.has_value() && *config.outputScale >= 1.0f) {

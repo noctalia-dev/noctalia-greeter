@@ -33,8 +33,6 @@ public:
 
   void onThemeChanged();
 
-  bool startSession(const std::string& command);
-
 private:
   struct View {
     std::unique_ptr<GreeterSurface> surface;
@@ -42,6 +40,7 @@ private:
   };
 
   void connectGreetd();
+  void onGreetdReadable();
   void setupInputCallbacks(WaylandClient& client);
   void syncOutputWindows();
   void syncStateFrom(const GreeterSurface* source);
@@ -57,7 +56,6 @@ private:
   GreeterSurface* m_activeSurface = nullptr;
 
   std::string m_defaultUsername;
-  bool m_sessionStarted = false;
   bool m_exitRequested = false;
   bool m_sceneReady = false;
   bool m_initializing = false;

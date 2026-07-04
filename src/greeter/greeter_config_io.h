@@ -15,6 +15,7 @@ struct greeter_compositor_config {
   char keyboard_layout[128];
   char keyboard_variant[128];
   char keyboard_options[256];
+  int keyboard_numlock;
   char output_layout[2048];
 };
 

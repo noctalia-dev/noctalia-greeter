@@ -26,6 +26,7 @@ namespace {
   constexpr float kTextInnerInset = 3.0f;
   constexpr float kPlaceholderAlpha = 0.68f;
   constexpr float kPasswordGlyphScale = 0.82f;
+  constexpr float kRevealIconScale = 1.15f;
 
   Input::PasswordMaskStyle g_passwordMaskStyle = Input::PasswordMaskStyle::CircleFilled;
 
@@ -124,7 +125,29 @@ Input::Input() : Node(NodeType::Container) {
   });
   m_inputArea = static_cast<InputArea*>(addChild(std::move(area)));
 
+  auto revealIcon = std::make_unique<GlyphNode>();
+  revealIcon->setCodepoint(GlyphRegistry::lookup("eye"));
+  revealIcon->setColor(colorForRole(ColorRole::OnSurfaceVariant));
+  revealIcon->setHitTestVisible(false);
+  revealIcon->setVisible(false);
+  m_revealIcon = static_cast<GlyphNode*>(addChild(std::move(revealIcon)));
+
+  auto revealArea = std::make_unique<InputArea>();
+  revealArea->setOnPress([this](const InputArea::PointerData& data) {
+    if (data.pressed && data.button == BTN_LEFT) {
+      toggleReveal();
+    }
+  });
+  m_revealArea = static_cast<InputArea*>(addChild(std::move(revealArea)));
+
   applyVisualState();
+}
+
+void Input::toggleReveal() {
+  m_revealPassword = !m_revealPassword;
+  m_revealIcon->setCodepoint(GlyphRegistry::lookup(m_revealPassword ? "eye-off" : "eye"));
+  updateDisplayText();
+  markLayoutDirty();
 }
 
 void Input::setValue(std::string_view value) {
@@ -158,6 +181,7 @@ void Input::setPasswordMode(bool enabled) {
   }
   m_passwordMode = enabled;
   if (!m_passwordMode) {
+    m_revealPassword = false;
     syncPasswordGlyphNodes(0);
   }
   updateDisplayText();
@@ -228,7 +252,7 @@ void Input::updateDisplayText() {
   if (m_value.empty() && !m_placeholder.empty()) {
     m_label->setText(m_placeholder);
   } else {
-    m_label->setText(m_passwordMode ? std::string{} : m_value);
+    m_label->setText(m_passwordMode && !m_revealPassword ? std::string{} : m_value);
   }
 }
 
@@ -353,11 +377,16 @@ void Input::doLayout(Renderer& renderer) {
   const float h = m_controlHeight;
   setSize(w, h);
 
-  const bool showPasswordGlyphs = m_passwordMode && !m_value.empty();
+  const bool showPasswordGlyphs = m_passwordMode && !m_revealPassword && !m_value.empty();
   m_label->setVisible(!showPasswordGlyphs);
   if (!showPasswordGlyphs) {
-    const float textInset = m_flatStyle ? kTextInnerInset : Style::spaceMd() + kTextInnerInset;
-    m_label->setMaxWidth(std::max(0.0f, w - textInset * 2.0f));
+    const bool showingPlaceholder = m_value.empty() && !m_placeholder.empty();
+    if (showingPlaceholder) {
+      const float textInset = m_flatStyle ? kTextInnerInset : Style::spaceMd() + kTextInnerInset;
+      m_label->setMaxWidth(std::max(0.0f, w - textInset * 2.0f - revealSlotWidth()));
+    } else {
+      m_label->setMaxWidth(0.0f);
+    }
     m_label->measure(renderer);
   }
 
@@ -424,7 +453,7 @@ void Input::doLayout(Renderer& renderer) {
 
   if (m_textViewport != nullptr) {
     const float textInset = m_flatStyle ? kTextInnerInset : Style::spaceMd() + kTextInnerInset;
-    const float viewportW = std::max(0.0f, w - textInset * 2.0f);
+    const float viewportW = std::max(0.0f, w - textInset * 2.0f - revealSlotWidth());
     m_textViewport->setPosition(textInset, 0.0f);
     m_textViewport->setSize(viewportW, h);
   }
@@ -432,6 +461,22 @@ void Input::doLayout(Renderer& renderer) {
   if (m_inputArea != nullptr) {
     m_inputArea->setPosition(0.0f, 0.0f);
     m_inputArea->setSize(w, h);
+  }
+
+  const bool showReveal = m_passwordMode && !m_value.empty();
+  if (m_revealIcon != nullptr && m_revealArea != nullptr) {
+    m_revealIcon->setVisible(showReveal);
+    m_revealArea->setEnabled(showReveal);
+    if (showReveal) {
+      const float iconSize = std::round(m_fontSize * kRevealIconScale);
+      const float slot = revealSlotWidth();
+      const auto metrics = renderer.measureGlyph(m_revealIcon->codepoint(), iconSize);
+      const float iconX = w - Style::spaceMd() - iconSize;
+      m_revealIcon->setFontSize(iconSize);
+      m_revealIcon->setPosition(iconX, std::round((h - (metrics.top + metrics.bottom)) * 0.5f));
+      m_revealArea->setPosition(w - slot, 0.0f);
+      m_revealArea->setSize(slot, h);
+    }
   }
 
   updateInteractiveGeometry();
@@ -630,7 +675,14 @@ std::size_t Input::selectionEnd() const noexcept { return std::max(m_selectionAn
 float Input::textViewportWidth() const noexcept {
   const float w = width() > 0.0f ? width() : kMinWidth;
   const float textInset = m_flatStyle ? kTextInnerInset : Style::spaceMd() + kTextInnerInset;
-  return std::max(0.0f, w - textInset * 2.0f);
+  return std::max(0.0f, w - textInset * 2.0f - revealSlotWidth());
+}
+
+float Input::revealSlotWidth() const noexcept {
+  if (!m_passwordMode || m_value.empty()) {
+    return 0.0f;
+  }
+  return std::round(m_fontSize * kRevealIconScale) + Style::spaceMd() + Style::spaceSm();
 }
 
 float Input::stopXForByte(std::size_t bytePos) const {

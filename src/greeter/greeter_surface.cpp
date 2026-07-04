@@ -572,14 +572,16 @@ void GreeterSurface::initialize(RenderContext* context) {
   refreshSelectionLabels();
   applyInitialUserSelection();
 
-  const auto logoPath = paths::assetPath("noctalia.svg");
-  m_brandLogoTexture = m_renderContext->textureManager().loadFromFile(logoPath.string(), 1024, true);
-  if (m_bottomBrandLogo != nullptr && m_brandLogoTexture.id != 0) {
-    m_bottomBrandLogo->setTextureId(m_brandLogoTexture.id);
-    m_bottomBrandLogo->setTextureSize(m_brandLogoTexture.width, m_brandLogoTexture.height);
-    m_bottomBrandLogo->setTint(colorForRole(ColorRole::OnSurface, 0.90f));
-  } else {
-    kLog.warn("failed loading logo texture from {}", logoPath.string());
+  if (!m_hideLogo) {
+    const auto logoPath = paths::assetPath("noctalia.svg");
+    m_brandLogoTexture = m_renderContext->textureManager().loadFromFile(logoPath.string(), 1024, true);
+    if (m_bottomBrandLogo != nullptr && m_brandLogoTexture.id != 0) {
+      m_bottomBrandLogo->setTextureId(m_brandLogoTexture.id);
+      m_bottomBrandLogo->setTextureSize(m_brandLogoTexture.width, m_brandLogoTexture.height);
+      m_bottomBrandLogo->setTint(colorForRole(ColorRole::OnSurface, 0.90f));
+    } else {
+      kLog.warn("failed loading logo texture from {}", logoPath.string());
+    }
   }
 
   requestLayout();
@@ -993,7 +995,7 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
   }
 
   if (m_bottomBrandLogo != nullptr) {
-    const bool hasBrandLogo = m_brandLogoTexture.id != 0;
+    const bool hasBrandLogo = m_brandLogoTexture.id != 0 && !m_hideLogo;
     m_bottomBrandLogo->setVisible(hasBrandLogo);
     if (hasBrandLogo) {
       const float logoSize = Style::scaled(64.0f);
@@ -1037,7 +1039,7 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
   const float passwordContentHeight = Style::controlHeight() + sessionRowGap + sessionRowH;
   const float contentBlockHeight = m_passwordVisible ? passwordContentHeight : userPickerContentHeight;
 
-  const bool hasStatus = m_statusIsError && !m_status.empty();
+  const bool hasStatus = !m_status.empty();
   const std::string actualStatus = m_status;
   m_statusLabel->setText("Xy");
   m_statusLabel->measure(*renderer);
@@ -1231,40 +1233,9 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
   }
 }
 
-bool GreeterSurface::driveAuthConversation(std::optional<GreetdAuthMessage> pending) {
-  while (pending.has_value()) {
-    const GreetdAuthMessage& authMsg = *pending;
-
-    if (authMsg.type == GreetdAuthMessageType::Info || authMsg.type == GreetdAuthMessageType::Error) {
-      if (authMsg.type == GreetdAuthMessageType::Error) {
-        updateStatus(authMsg.message, true);
-        clearPasswordInput();
-      }
-      pending = m_greetdClient->postAuthData("");
-      if (m_greetdClient->lastError()) {
-        onAuthError(*m_greetdClient->lastError());
-        return false;
-      }
-      continue;
-    }
-
-    if (m_password.empty() && !m_allowEmptyPassword) {
-      return false;
-    }
-
-    pending = m_greetdClient->postAuthData(m_password);
-    clearPasswordInput();
-    if (m_greetdClient->lastError()) {
-      onAuthError(*m_greetdClient->lastError());
-      return false;
-    }
-  }
-
-  return true;
-}
-
 void GreeterSurface::tryAuthenticate() {
-  if (!m_greetdClient || m_authenticating) {
+  // Ignore re-submits while a request is already in flight.
+  if (m_greetdClient == nullptr || awaitingReply()) {
     return;
   }
   if (m_username.empty()) {
@@ -1278,40 +1249,162 @@ void GreeterSurface::tryAuthenticate() {
     return;
   }
 
-  m_authenticating = true;
-  commitImmediateFrame(false);
-
-  std::optional<GreetdAuthMessage> pending;
   if (!m_authSessionStarted) {
-    pending = m_greetdClient->createSession(m_username);
-    if (m_greetdClient->lastError()) {
-      onAuthError(*m_greetdClient->lastError());
+    // Arm the typed input (possibly empty) to answer the first secret prompt.
+    m_pendingResponse = m_password;
+    m_hasPendingResponse = true;
+    m_authenticating = true;
+    kLog.info("greetd: create_session for '{}'", m_username);
+    if (!m_greetdClient->requestCreateSession(m_username)) {
+      onAuthError(m_greetdClient->lastError().value_or(GreetdError{GreetdErrorType::Error, "failed to send request"}));
       return;
     }
     m_authSessionStarted = true;
-  } else {
-    pending = m_greetdClient->postAuthData(m_password);
-    if (m_greetdClient->lastError()) {
-      onAuthError(*m_greetdClient->lastError());
+    m_pendingReplies.push_back(AuthRequest::CreateSession);
+    syncAuthInteractivity();
+    commitImmediateFrame(false);
+  } else if (m_secretPromptWaiting) {
+    postAuthResponse(m_password);
+  }
+}
+
+void GreeterSurface::onGreetdReadable() {
+  if (m_greetdClient == nullptr) {
+    return;
+  }
+  // Drain every frame currently buffered; readMessage() stops at nullopt.
+  for (;;) {
+    const std::optional<GreetdResponse> response = m_greetdClient->readMessage();
+    if (!response.has_value()) {
+      if (const auto error = m_greetdClient->lastError()) {
+        kLog.warn("greetd connection lost: {}", error->description);
+        // Drop the dead fd so it leaves the poll set instead of spinning on POLLHUP.
+        m_greetdClient->disconnect();
+        onAuthError(*error);
+      }
       return;
     }
+    handleGreetdResponse(*response);
   }
+}
 
-  if (!driveAuthConversation(std::move(pending))) {
-    m_authenticating = false;
+void GreeterSurface::handleGreetdResponse(const GreetdResponse& response) {
+  if (m_pendingReplies.empty()) {
+    return; // unsolicited reply — nothing to correlate it with
+  }
+  const AuthRequest expected = m_pendingReplies.front();
+  m_pendingReplies.pop_front();
+
+  const char* reqName = expected == AuthRequest::CreateSession ? "create_session"
+      : expected == AuthRequest::PostAuthData                  ? "post_auth_data"
+      : expected == AuthRequest::StartSession                  ? "start_session"
+                                                               : "cancel_session";
+  const char* respName = response.type == GreetdResponseType::AuthMessage ? "auth_message"
+      : response.type == GreetdResponseType::Error                        ? "error"
+                                                                          : "success";
+  kLog.debug("greetd reply to {}: {}", reqName, respName);
+
+  // Cancel ack drained the queue; re-enable input it had locked.
+  if (expected == AuthRequest::Cancel) {
+    syncAuthInteractivity();
+    commitImmediateFrame(false);
     return;
   }
 
-  onAuthSuccess();
+  switch (response.type) {
+  case GreetdResponseType::Error:
+    onAuthError(response.error);
+    return;
+  case GreetdResponseType::AuthMessage:
+    handleAuthMessage(response.authMessage);
+    return;
+  case GreetdResponseType::Success:
+    if (expected == AuthRequest::StartSession) {
+      kLog.info("session start confirmed, exiting greeter");
+      if (m_onExitRequested) {
+        m_onExitRequested();
+      }
+    } else {
+      // Auth finished; launch the session.
+      beginSessionStart();
+    }
+    return;
+  }
 }
 
-void GreeterSurface::onAuthSuccess() {
-  m_authenticating = false;
+void GreeterSurface::handleAuthMessage(const GreetdAuthMessage& message) {
+  const char* typeName = message.type == GreetdAuthMessageType::Secret ? "secret"
+      : message.type == GreetdAuthMessageType::Visible                 ? "visible"
+      : message.type == GreetdAuthMessageType::Error                   ? "error"
+                                                                       : "info";
+  kLog.info("PAM {} message: {}", typeName, message.message);
+
+  if (message.type == GreetdAuthMessageType::Info || message.type == GreetdAuthMessageType::Error) {
+    const bool isError = message.type == GreetdAuthMessageType::Error;
+    if (!message.message.empty()) {
+      updateStatus(message.message, isError);
+    }
+    if (isError) {
+      clearPasswordInput();
+    }
+    // Ack with an empty response to resume PAM; paint now so the message shows.
+    if (!m_greetdClient->requestPostAuthData("")) {
+      onAuthError(m_greetdClient->lastError().value_or(GreetdError{GreetdErrorType::Error, "failed to send request"}));
+      return;
+    }
+    m_pendingReplies.push_back(AuthRequest::PostAuthData);
+    syncAuthInteractivity();
+    commitImmediateFrame(false);
+    return;
+  }
+
+  // Secret / Visible prompt. Answer with already-submitted input if we have it
+  // (empty is allowed), otherwise surface the prompt and wait for the user.
+  if (m_hasPendingResponse) {
+    const std::string response = m_pendingResponse;
+    m_hasPendingResponse = false;
+    m_pendingResponse.clear();
+    postAuthResponse(response);
+    return;
+  }
+
+  m_secretPromptWaiting = true;
+  if (!message.message.empty()) {
+    updateStatus(message.message, false);
+  }
+  syncAuthInteractivity();
+  commitImmediateFrame(false);
+}
+
+void GreeterSurface::postAuthResponse(const std::string& data) {
+  kLog.debug("greetd: post_auth_data ({} bytes)", data.size());
+  if (!m_greetdClient->requestPostAuthData(data)) {
+    onAuthError(m_greetdClient->lastError().value_or(GreetdError{GreetdErrorType::Error, "failed to send request"}));
+    return;
+  }
+  clearPasswordInput();
+  m_secretPromptWaiting = false;
+  m_pendingReplies.push_back(AuthRequest::PostAuthData);
+  syncAuthInteractivity();
+  commitImmediateFrame(false);
+}
+
+void GreeterSurface::syncAuthInteractivity() {
+  const bool busy = awaitingReply();
+  if (m_passwordField != nullptr) {
+    m_passwordField->setEnabled(!busy);
+  }
+  if (m_loginButton != nullptr) {
+    m_loginButton->setEnabled(!busy);
+  }
+}
+
+void GreeterSurface::beginSessionStart() {
   kLog.info("authentication successful");
 
   savePreferences();
 
-  if (!m_greetdClient) {
+  if (m_greetdClient == nullptr) {
     kLog.error("no greetd client to start session");
     return;
   }
@@ -1323,28 +1416,28 @@ void GreeterSurface::onAuthSuccess() {
     cmd.command = "/bin/sh";
   }
 
-  m_authenticating = true;
-  if (!m_greetdClient->startSession(cmd)) {
+  if (!m_greetdClient->requestStartSession(cmd)) {
     m_authenticating = false;
     resetAuthSession();
     clearPasswordInput();
-
+    syncAuthInteractivity();
     if (m_greetdClient->lastError()) {
       kLog.error("start_session failed: {}", m_greetdClient->lastError()->description);
       updateStatus("Failed to start session: " + m_greetdClient->lastError()->description, true);
     }
+    commitImmediateFrame(false);
     return;
   }
 
-  kLog.info("session start requested, exiting greeter");
-  if (m_onExitRequested) {
-    m_onExitRequested();
-  }
+  m_pendingReplies.push_back(AuthRequest::StartSession);
 }
 
 void GreeterSurface::resetAuthSession() {
   if (m_greetdClient != nullptr && m_authSessionStarted) {
-    (void)m_greetdClient->cancelSession();
+    if (m_greetdClient->requestCancelSession()) {
+      // Track the ack so a later create_session reply is not mistaken for it.
+      m_pendingReplies.push_back(AuthRequest::Cancel);
+    }
   }
   m_authSessionStarted = false;
 }
@@ -1358,28 +1451,26 @@ void GreeterSurface::clearPasswordInput() {
 
 void GreeterSurface::onAuthError(const GreetdError& error) {
   m_authenticating = false;
+  m_secretPromptWaiting = false;
+  m_hasPendingResponse = false;
+  m_pendingResponse.clear();
+  m_pendingReplies.clear();
   clearPasswordInput();
   resetAuthSession();
+  syncAuthInteractivity();
   updateStatus(error.description, true);
   kLog.warn("authentication failed: {}", error.description);
+  commitImmediateFrame(false);
 }
 
 void GreeterSurface::updateStatus(const std::string& text, bool isError) {
-  if (!isError) {
-    m_status.clear();
-    m_statusIsError = false;
-    if (m_statusLabel != nullptr) {
-      m_statusLabel->setText("");
-    }
-    requestLayout();
-    return;
-  }
-
+  // Empty text clears the line; non-empty text shows as an error or, for PAM
+  // info prompts, as a neutral hint rather than being discarded.
   m_status = text;
-  m_statusIsError = true;
+  m_statusIsError = isError;
   if (m_statusLabel != nullptr) {
     m_statusLabel->setText(text);
-    m_statusLabel->setColor(colorForRole(ColorRole::Error));
+    m_statusLabel->setColor(colorForRole(isError ? ColorRole::Error : ColorRole::OnSurfaceVariant));
   }
   requestLayout();
 }
@@ -1667,6 +1758,8 @@ void GreeterSurface::loadPreferences() {
       }
     }
   }
+
+  m_hideLogo = prefs.hideLogo;
 }
 
 void GreeterSurface::savePreferences() const {

@@ -2,8 +2,11 @@
 
 #include "core/log.h"
 
+#include <cerrno>
 #include <cstring>
+#include <fcntl.h>
 #include <json.hpp>
+#include <poll.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -48,12 +51,20 @@ namespace {
   }
 
   bool parseSuccess(const json& data) { return data.value("type", "") == "success"; }
-} // namespace
 
-struct GreetdClient::Response {
-  bool success = false;
-  json data;
-};
+  std::optional<GreetdResponse> parseResponse(const json& data) {
+    if (auto err = parseError(data)) {
+      return GreetdResponse{GreetdResponseType::Error, {}, *err};
+    }
+    if (auto msg = parseAuthMessage(data)) {
+      return GreetdResponse{GreetdResponseType::AuthMessage, *msg, {}};
+    }
+    if (parseSuccess(data)) {
+      return GreetdResponse{GreetdResponseType::Success, {}, {}};
+    }
+    return std::nullopt;
+  }
+} // namespace
 
 GreetdClient::GreetdClient() = default;
 
@@ -77,6 +88,15 @@ bool GreetdClient::connect(const std::string& socketPath) {
     return false;
   }
 
+  // Non-blocking so the event loop never stalls on a slow PAM conversation.
+  const int flags = ::fcntl(m_socketFd, F_GETFL, 0);
+  if (flags < 0 || ::fcntl(m_socketFd, F_SETFL, flags | O_NONBLOCK) < 0) {
+    kLog.error("failed to set greetd socket non-blocking: {}", strerror(errno));
+    ::close(m_socketFd);
+    m_socketFd = -1;
+    return false;
+  }
+
   kLog.info("connected to greetd at {}", socketPath);
   return true;
 }
@@ -86,121 +106,134 @@ void GreetdClient::disconnect() {
     ::close(m_socketFd);
     m_socketFd = -1;
   }
-  m_sessionId = -1;
+  m_readBuffer.clear();
 }
 
 bool GreetdClient::isConnected() const noexcept { return m_socketFd >= 0; }
 
-GreetdClient::Response GreetdClient::sendRequest(const std::string& request) {
-  if (m_socketFd < 0) {
-    return {false, {}};
-  }
-
-  // Send request with length prefix
-  std::uint32_t len = static_cast<std::uint32_t>(request.size());
-  if (::send(m_socketFd, &len, sizeof(len), MSG_NOSIGNAL) != sizeof(len)) {
-    kLog.error("failed to send request length");
-    return {false, {}};
-  }
-  if (::send(m_socketFd, request.data(), request.size(), MSG_NOSIGNAL) != static_cast<ssize_t>(request.size())) {
-    kLog.error("failed to send request");
-    return {false, {}};
-  }
-
-  // Read response length
-  std::uint32_t responseLen = 0;
-  ssize_t n = ::recv(m_socketFd, &responseLen, sizeof(responseLen), 0);
-  if (n != sizeof(responseLen)) {
-    kLog.error("failed to read response length");
-    return {false, {}};
-  }
-
-  // Read response data
-  std::string response(responseLen, '\0');
-  ssize_t totalRead = 0;
-  while (totalRead < static_cast<ssize_t>(responseLen)) {
-    n = ::recv(m_socketFd, response.data() + totalRead, responseLen - totalRead, 0);
-    if (n <= 0) {
-      kLog.error("failed to read response data");
-      return {false, {}};
+bool GreetdClient::writeAll(const void* data, std::size_t size) {
+  const auto* p = static_cast<const char*>(data);
+  std::size_t off = 0;
+  while (off < size) {
+    const ssize_t n = ::send(m_socketFd, p + off, size - off, MSG_NOSIGNAL);
+    if (n > 0) {
+      off += static_cast<std::size_t>(n);
+      continue;
     }
-    totalRead += n;
+    if (n < 0 && errno == EINTR) {
+      continue;
+    }
+    if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+      // Send buffer full; wait for it to drain (requests are tiny).
+      pollfd pfd{m_socketFd, POLLOUT, 0};
+      ::poll(&pfd, 1, 1000);
+      continue;
+    }
+    return false;
   }
+  return true;
+}
 
-  try {
-    json data = json::parse(response);
-    return {true, data};
-  } catch (const std::exception& e) {
-    kLog.error("failed to parse response: {}", e.what());
-    return {false, {}};
+bool GreetdClient::sendRequest(const std::string& request) {
+  if (m_socketFd < 0) {
+    m_lastError = {GreetdErrorType::Error, "not connected to greetd"};
+    return false;
+  }
+  const std::uint32_t len = static_cast<std::uint32_t>(request.size());
+  if (!writeAll(&len, sizeof(len)) || !writeAll(request.data(), request.size())) {
+    m_lastError = {GreetdErrorType::Error, "failed to send request"};
+    return false;
+  }
+  m_lastError.reset();
+  return true;
+}
+
+void GreetdClient::drainSocket() {
+  char chunk[4096];
+  for (;;) {
+    const ssize_t n = ::recv(m_socketFd, chunk, sizeof(chunk), 0);
+    if (n > 0) {
+      m_readBuffer.append(chunk, static_cast<std::size_t>(n));
+      continue;
+    }
+    if (n == 0) {
+      m_lastError = {GreetdErrorType::Error, "greetd closed the connection"};
+      return;
+    }
+    if (errno == EINTR) {
+      continue;
+    }
+    if (errno == EAGAIN || errno == EWOULDBLOCK) {
+      return;
+    }
+    m_lastError = {GreetdErrorType::Error, std::string("greetd read failed: ") + strerror(errno)};
+    return;
   }
 }
 
-std::optional<GreetdAuthMessage> GreetdClient::createSession(const std::string& username) {
+std::optional<GreetdResponse> GreetdClient::extractFrame() {
+  if (m_readBuffer.size() < sizeof(std::uint32_t)) {
+    return std::nullopt;
+  }
+  std::uint32_t len = 0;
+  std::memcpy(&len, m_readBuffer.data(), sizeof(len));
+  if (m_readBuffer.size() < sizeof(len) + len) {
+    return std::nullopt;
+  }
+
+  const std::string payload = m_readBuffer.substr(sizeof(len), len);
+  m_readBuffer.erase(0, sizeof(len) + len);
+
+  try {
+    const json data = json::parse(payload);
+    if (auto resp = parseResponse(data)) {
+      return resp;
+    }
+    m_lastError = {GreetdErrorType::Error, "unexpected greetd response"};
+    kLog.error("unexpected response: {}", data.dump());
+    return std::nullopt;
+  } catch (const std::exception& e) {
+    m_lastError = {GreetdErrorType::Error, "failed to parse response"};
+    kLog.error("failed to parse response: {}", e.what());
+    return std::nullopt;
+  }
+}
+
+std::optional<GreetdResponse> GreetdClient::readMessage() {
+  m_lastError.reset();
+  if (m_socketFd < 0) {
+    m_lastError = {GreetdErrorType::Error, "not connected to greetd"};
+    return std::nullopt;
+  }
+
+  // A complete frame may already be buffered from a previous drain.
+  if (auto frame = extractFrame()) {
+    return frame;
+  }
+  drainSocket();
+  if (m_lastError) {
+    return std::nullopt;
+  }
+  return extractFrame();
+}
+
+bool GreetdClient::requestCreateSession(const std::string& username) {
   json req;
   req["type"] = "create_session";
   req["username"] = username;
-
-  auto resp = sendRequest(req.dump());
-  if (!resp.success) {
-    m_lastError = {GreetdErrorType::Error, "failed to send request"};
-    return std::nullopt;
-  }
-
-  if (auto err = parseError(resp.data)) {
-    m_lastError = *err;
-    return std::nullopt;
-  }
-
-  m_lastError.reset();
-
-  if (auto msg = parseAuthMessage(resp.data)) {
-    return msg;
-  }
-
-  if (parseSuccess(resp.data)) {
-    return std::nullopt;
-  }
-
-  m_lastError = {GreetdErrorType::Error, "unexpected greetd response to create_session"};
-  kLog.error("unexpected response: {}", resp.data.dump());
-  return std::nullopt;
+  return sendRequest(req.dump());
 }
 
-std::optional<GreetdAuthMessage> GreetdClient::postAuthData(const std::string& data) {
+bool GreetdClient::requestPostAuthData(const std::string& data) {
   json req;
   req["type"] = "post_auth_message_response";
   if (!data.empty()) {
     req["response"] = data;
   }
-
-  auto resp = sendRequest(req.dump());
-  if (!resp.success) {
-    m_lastError = {GreetdErrorType::Error, "failed to send request"};
-    return std::nullopt;
-  }
-
-  if (auto err = parseError(resp.data)) {
-    m_lastError = *err;
-    return std::nullopt;
-  }
-
-  m_lastError.reset();
-
-  if (parseSuccess(resp.data)) {
-    return std::nullopt;
-  }
-
-  if (auto msg = parseAuthMessage(resp.data)) {
-    return msg;
-  }
-
-  m_lastError = {GreetdErrorType::Error, "unexpected greetd response to post_auth_message_response"};
-  kLog.error("unexpected response: {}", resp.data.dump());
-  return std::nullopt;
+  return sendRequest(req.dump());
 }
 
-bool GreetdClient::startSession(const GreetdSessionCommand& command) {
+bool GreetdClient::requestStartSession(const GreetdSessionCommand& command) {
   json req;
   req["type"] = "start_session";
 
@@ -221,48 +254,11 @@ bool GreetdClient::startSession(const GreetdSessionCommand& command) {
     req["env"] = envArray;
   }
 
-  auto resp = sendRequest(req.dump());
-  if (!resp.success) {
-    m_lastError = {GreetdErrorType::Error, "failed to send request"};
-    return false;
-  }
-
-  if (auto err = parseError(resp.data)) {
-    m_lastError = *err;
-    return false;
-  }
-
-  if (!parseSuccess(resp.data)) {
-    m_lastError = {GreetdErrorType::Error, "unexpected greetd response to start_session"};
-    kLog.error("unexpected response: {}", resp.data.dump());
-    return false;
-  }
-
-  m_lastError.reset();
-  return true;
+  return sendRequest(req.dump());
 }
 
-bool GreetdClient::cancelSession() {
+bool GreetdClient::requestCancelSession() {
   json req;
   req["type"] = "cancel_session";
-
-  auto resp = sendRequest(req.dump());
-  if (!resp.success) {
-    m_lastError = {GreetdErrorType::Error, "failed to send request"};
-    return false;
-  }
-
-  if (auto err = parseError(resp.data)) {
-    m_lastError = *err;
-    return false;
-  }
-
-  if (!parseSuccess(resp.data)) {
-    m_lastError = {GreetdErrorType::Error, "unexpected greetd response to cancel_session"};
-    kLog.error("unexpected response: {}", resp.data.dump());
-    return false;
-  }
-
-  m_lastError.reset();
-  return true;
+  return sendRequest(req.dump());
 }

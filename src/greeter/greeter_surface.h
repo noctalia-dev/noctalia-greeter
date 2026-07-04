@@ -13,6 +13,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -50,6 +51,11 @@ public:
 
   void mirrorStateFrom(const GreeterSurface& other);
 
+  // Drive the greetd auth conversation forward when its socket is readable.
+  void onGreetdReadable();
+  // True while this surface is mid-conversation with greetd.
+  [[nodiscard]] bool authInProgress() const noexcept { return m_authenticating; }
+
   void onPointerLeave();
   void onPointerEvent(float x, float y, std::uint32_t button, bool pressed);
   void onPointerMotion(float x, float y);
@@ -75,11 +81,15 @@ private:
   void syncScaledTypography();
   void layoutScene(std::uint32_t width, std::uint32_t height);
   void tryAuthenticate();
-  void onAuthSuccess();
+  void handleGreetdResponse(const GreetdResponse& response);
+  void handleAuthMessage(const GreetdAuthMessage& message);
+  void postAuthResponse(const std::string& data);
+  // Disable the password field and login button while a request is in flight.
+  void syncAuthInteractivity();
+  void beginSessionStart();
   void onAuthError(const GreetdError& error);
   void resetAuthSession();
   void clearPasswordInput();
-  bool driveAuthConversation(std::optional<GreetdAuthMessage> pending);
   void updateStatus(const std::string& text, bool isError);
   void toggleUserMenu();
   void openUserMenu();
@@ -193,12 +203,27 @@ private:
 
   bool m_allowEmptyPassword = false;
 
+  // greetd replies in request order, so m_pendingReplies (a FIFO of these) tells
+  // which request each reply answers.
+  enum class AuthRequest {
+    CreateSession,
+    PostAuthData,
+    StartSession,
+    Cancel,
+  };
+
+  [[nodiscard]] bool awaitingReply() const noexcept { return !m_pendingReplies.empty(); }
+
   std::string m_username;
   std::string m_password;
   std::string m_status;
   bool m_statusIsError = false;
   bool m_authenticating = false;
   bool m_authSessionStarted = false;
+  bool m_secretPromptWaiting = false; // greetd wants secret input from the user
+  bool m_hasPendingResponse = false;  // user-supplied input armed for next prompt
+  std::string m_pendingResponse;
+  std::deque<AuthRequest> m_pendingReplies;
   std::function<void()> m_onExitRequested;
   TextureHandle m_brandLogoTexture{};
   TextureHandle m_headerAvatarTexture{};
@@ -209,6 +234,7 @@ private:
   Color m_wallpaperFillColor = rgba(0.0f, 0.0f, 0.0f, 0.0f);
   bool m_wallpaperDirty = false;
   bool m_hasSyncedWallpaper = false;
+  bool m_hideLogo = false;
   std::chrono::steady_clock::time_point m_lastAnimTick{};
   bool m_animTickInitialized = false;
   bool m_inInputDispatch = false;

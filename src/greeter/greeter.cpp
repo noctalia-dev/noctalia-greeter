@@ -165,27 +165,42 @@ int Greeter::run(WaylandClient& client, const std::atomic<bool>& shutdownRequest
       resumeMonitor.prepareDispatch(glibPriority, glibPoll, pollTimeout);
     }
 
-    pollfd pfds[2]{};
+    pollfd pfds[3]{};
     pfds[0].fd = wl_display_get_fd(display);
     pfds[0].events = POLLIN;
     int pollCount = 1;
+
+    int glibIndex = -1;
     if (glibPoll.fd >= 0) {
-      pfds[1].fd = glibPoll.fd;
-      pfds[1].events = static_cast<short>(glibPoll.events);
+      glibIndex = pollCount;
+      pfds[pollCount].fd = glibPoll.fd;
+      pfds[pollCount].events = static_cast<short>(glibPoll.events);
       glibPoll.revents = 0;
-      pollCount = 2;
+      ++pollCount;
+    }
+
+    int greetdIndex = -1;
+    const int greetdFd = m_greetdClient.fd();
+    if (greetdFd >= 0) {
+      greetdIndex = pollCount;
+      pfds[pollCount].fd = greetdFd;
+      pfds[pollCount].events = POLLIN;
+      ++pollCount;
     }
 
     const int pollResult = poll(pfds, static_cast<nfds_t>(pollCount), pollTimeout);
     if (pollResult > 0) {
-      if (glibPoll.fd >= 0 && pfds[1].revents != 0) {
-        glibPoll.revents = pfds[1].revents;
+      if (glibIndex >= 0 && pfds[glibIndex].revents != 0) {
+        glibPoll.revents = pfds[glibIndex].revents;
         resumeMonitor.checkDispatch(glibPriority, glibPoll);
       }
       if ((pfds[0].revents & POLLIN) != 0) {
         wl_display_read_events(display);
       } else {
         wl_display_cancel_read(display);
+      }
+      if (greetdIndex >= 0 && (pfds[greetdIndex].revents & (POLLIN | POLLHUP | POLLERR)) != 0) {
+        onGreetdReadable();
       }
     } else {
       wl_display_cancel_read(display);
@@ -327,6 +342,27 @@ void Greeter::connectGreetd() {
   }
 }
 
+void Greeter::onGreetdReadable() {
+  // Route replies to the authenticating surface; fall back to the active (or
+  // first) surface to drain stray acks.
+  GreeterSurface* target = nullptr;
+  for (auto& view : m_views) {
+    if (view.surface && view.surface->authInProgress()) {
+      target = view.surface.get();
+      break;
+    }
+  }
+  if (target == nullptr) {
+    target = m_activeSurface;
+  }
+  if (target == nullptr && !m_views.empty()) {
+    target = m_views.front().surface.get();
+  }
+  if (target != nullptr) {
+    target->onGreetdReadable();
+  }
+}
+
 void Greeter::setupInputCallbacks(WaylandClient& client) {
   client.setPointerEventCallback([this](const PointerEvent& event) {
     View* view = viewForSurface(event.surface);
@@ -405,24 +441,4 @@ void Greeter::onThemeChanged() {
   for (auto& view : m_views) {
     view.surface->onThemeChanged();
   }
-}
-
-bool Greeter::startSession(const std::string& command) {
-  if (!m_greetdClient.isConnected()) {
-    return false;
-  }
-
-  GreetdSessionCommand cmd;
-  cmd.command = command;
-
-  if (!m_greetdClient.startSession(cmd)) {
-    kLog.error(
-        "failed to start session: {}", m_greetdClient.lastError() ? m_greetdClient.lastError()->description : "unknown"
-    );
-    return false;
-  }
-
-  m_sessionStarted = true;
-  kLog.info("session started: {}", command);
-  return true;
 }

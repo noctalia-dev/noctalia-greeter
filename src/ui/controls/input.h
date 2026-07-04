@@ -66,6 +66,8 @@ private:
   [[nodiscard]] std::size_t selectionStart() const noexcept;
   [[nodiscard]] std::size_t selectionEnd() const noexcept;
   [[nodiscard]] float textViewportWidth() const noexcept;
+  [[nodiscard]] float revealSlotWidth() const noexcept;
+  void toggleReveal();
   [[nodiscard]] float stopXForByte(std::size_t bytePos) const;
   [[nodiscard]] std::size_t xToByteOffset(float localX) const;
 
@@ -79,6 +81,8 @@ private:
   Label* m_label = nullptr;
   RectNode* m_cursor = nullptr;
   InputArea* m_inputArea = nullptr;
+  GlyphNode* m_revealIcon = nullptr;
+  InputArea* m_revealArea = nullptr;
 
   std::string m_value;
   std::string m_placeholder;
@@ -93,6 +97,7 @@ private:
   float m_fontSize = 14.0f;
   float m_controlHeight = 36.0f;
   bool m_passwordMode = false;
+  bool m_revealPassword = false;
   bool m_invalid = false;
   bool m_enabled = true;
   bool m_embeddedStyle = false;

@@ -127,9 +127,11 @@ struct greeter_server {
   char keyboard_layout[128];
   char keyboard_variant[128];
   char keyboard_options[256];
+  int keyboard_numlock;
   struct greeter_output_placement output_placements[16];
   size_t output_placement_count;
   struct wlr_fractional_scale_manager_v1* fractional_scale;
+  bool shutting_down;
 };
 
 static char* trim(char* value) {
@@ -296,6 +298,7 @@ static void read_greeter_config(struct greeter_server* server) {
   if (config.keyboard_options[0] != '\0') {
     snprintf(server->keyboard_options, sizeof(server->keyboard_options), "%s", config.keyboard_options);
   }
+  server->keyboard_numlock = config.keyboard_numlock;
   if (config.output_layout[0] != '\0' && server->output_placement_count == 0) {
     char layout[2048];
     snprintf(layout, sizeof(layout), "%s", config.output_layout);
@@ -811,7 +814,7 @@ static void schedule_launch(struct greeter_server* server) {
   }
 
   if (use_all_outputs(server)) {
-    if (!all_outputs_active(server)) {
+    if (!all_outputs_active(server) && !any_output_active(server)) {
       return;
     }
   } else if (!any_output_active(server)) {
@@ -896,7 +899,9 @@ static void handle_output_destroy(struct wl_listener* listener, void* data) {
   wl_list_remove(&output->destroy.link);
   wl_list_remove(&output->link);
   free(output);
-  choose_outputs(server);
+  if (!server->shutting_down) {
+    choose_outputs(server);
+  }
 }
 
 static void handle_new_output(struct wl_listener* listener, void* data) {
@@ -1065,13 +1070,16 @@ static void add_keyboard(struct greeter_server* server, struct wlr_input_device*
   xkb_context_unref(context);
 
   // Enable Num Lock by default so numeric keypads work on the greeter.
-  xkb_mod_index_t num_mod = xkb_keymap_mod_get_index(keyboard->wlr_keyboard->keymap, XKB_MOD_NAME_NUM);
-  if (num_mod != XKB_MOD_INVALID) {
-    xkb_mod_mask_t locked = keyboard->wlr_keyboard->modifiers.locked | ((xkb_mod_mask_t)1 << num_mod);
-    wlr_keyboard_notify_modifiers(
-        keyboard->wlr_keyboard, keyboard->wlr_keyboard->modifiers.depressed, keyboard->wlr_keyboard->modifiers.latched,
-        locked, keyboard->wlr_keyboard->modifiers.group
-    );
+  // Can be disabled via greeter.toml: [keyboard] numlock = false
+  if (server->keyboard_numlock >= 0) {
+    xkb_mod_index_t num_mod = xkb_keymap_mod_get_index(keyboard->wlr_keyboard->keymap, XKB_MOD_NAME_NUM);
+    if (num_mod != XKB_MOD_INVALID) {
+      xkb_mod_mask_t locked = keyboard->wlr_keyboard->modifiers.locked | ((xkb_mod_mask_t)1 << num_mod);
+      wlr_keyboard_notify_modifiers(
+          keyboard->wlr_keyboard, keyboard->wlr_keyboard->modifiers.depressed,
+          keyboard->wlr_keyboard->modifiers.latched, locked, keyboard->wlr_keyboard->modifiers.group
+      );
+    }
   }
   wlr_keyboard_set_repeat_info(keyboard->wlr_keyboard, 25, 600);
 
@@ -1255,8 +1263,10 @@ static void try_launch_greeter(void* data) {
   }
   if (use_all_outputs(server)) {
     if (!all_outputs_active(server)) {
-      schedule_launch(server);
-      return;
+      if (!any_output_active(server)) {
+        schedule_launch(server);
+        return;
+      }
     }
   } else if (!any_output_active(server)) {
     return;
@@ -1308,6 +1318,7 @@ static void remove_listener_if_set(struct wl_listener* listener) {
 }
 
 static void cleanup_server_listeners(struct greeter_server* server) {
+  server->shutting_down = true;
   remove_listener_if_set(&server->new_output);
   remove_listener_if_set(&server->new_input);
   remove_listener_if_set(&server->new_toplevel);

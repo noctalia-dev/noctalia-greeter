@@ -29,6 +29,7 @@ namespace greeter {
     std::optional<float> scale;
     PasswordMaskStyle passwordMaskStyle = PasswordMaskStyle::Default;
     bool allowEmptyPassword = false;
+    bool hideLogo = false;
   };
 
   [[nodiscard]] std::filesystem::path greeterConfPath();
