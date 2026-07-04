@@ -37,7 +37,7 @@ fi
 
 PAM_LINE="session    required     ${PAM_MODULE}"
 
-if grep -q -E "^[[:space:]]*session[[:space:]]+.*${PAM_MODULE}([[:space:]]|$)" "${PAM_FILE}"; then
+if grep -q -F "${PAM_MODULE}" "${PAM_FILE}"; then
   echo "info: ${PAM_FILE} already contains ${PAM_MODULE}; nothing to do."
   exit 0
 fi
