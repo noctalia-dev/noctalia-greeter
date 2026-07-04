@@ -75,6 +75,10 @@ private:
   static std::size_t prevCharPos(const std::string& s, std::size_t pos);
   static std::string utf32ToUtf8(std::uint32_t codepoint);
 
+  [[nodiscard]] std::size_t previousWordStartForByteOffset(std::size_t offset) const;
+  [[nodiscard]] std::size_t nextWordStartForByteOffset(std::size_t offset) const;
+  [[nodiscard]] std::size_t nextWordEndForByteOffset(std::size_t offset) const;
+
   RectNode* m_background = nullptr;
   Node* m_textViewport = nullptr;
   RectNode* m_selectionRect = nullptr;

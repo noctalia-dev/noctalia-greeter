@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
 #include <linux/input-event-codes.h>
 #include <xkbcommon/xkbcommon-keysyms.h>
@@ -27,6 +28,17 @@ namespace {
   constexpr float kPlaceholderAlpha = 0.68f;
   constexpr float kPasswordGlyphScale = 0.82f;
   constexpr float kRevealIconScale = 1.15f;
+
+  bool isWordCodepoint(const std::string& text, std::size_t bytePos) {
+    if (bytePos >= text.size()) {
+      return false;
+    }
+    const auto lead = static_cast<unsigned char>(text[bytePos]);
+    if ((lead & 0x80U) != 0) {
+      return true;
+    }
+    return std::isalnum(lead) != 0 || lead == '_';
+  }
 
   Input::PasswordMaskStyle g_passwordMaskStyle = Input::PasswordMaskStyle::CircleFilled;
 
@@ -275,7 +287,8 @@ void Input::handleKey(std::uint32_t sym, std::uint32_t utf32, std::uint32_t modi
         || KeySymbol::isHome(sym)
         || KeySymbol::isEnd(sym)
         || KeySymbol::isEnter(sym)
-        || (ctrl && (sym == 'a' || sym == 'A' || sym == XKB_KEY_a || sym == XKB_KEY_A));
+        || (ctrl && (sym == 'a' || sym == 'A' || sym == XKB_KEY_a || sym == XKB_KEY_A))
+        || (ctrl && (sym == 'u' || sym == 'U' || sym == XKB_KEY_u || sym == XKB_KEY_U));
     if (!navigationOrEdit) {
       return;
     }
@@ -290,7 +303,14 @@ void Input::handleKey(std::uint32_t sym, std::uint32_t utf32, std::uint32_t modi
     return;
   }
 
-  if (ctrl && (sym == 'a' || sym == 'A' || sym == XKB_KEY_a || sym == XKB_KEY_A)) {
+  if (ctrl && (sym == 'u' || sym == 'U' || sym == XKB_KEY_u || sym == XKB_KEY_U)) {
+    if (!m_value.empty()) {
+      m_value.clear();
+      m_cursorPos = 0;
+      m_selectionAnchor = 0;
+      changed = true;
+    }
+  } else if (ctrl && (sym == 'a' || sym == 'A' || sym == XKB_KEY_a || sym == XKB_KEY_A)) {
     m_selectionAnchor = 0;
     m_cursorPos = m_value.size();
     updateInteractiveGeometry();
@@ -301,7 +321,7 @@ void Input::handleKey(std::uint32_t sym, std::uint32_t utf32, std::uint32_t modi
       deleteSelection();
       changed = true;
     } else if (m_cursorPos > 0) {
-      const std::size_t prev = prevCharPos(m_value, m_cursorPos);
+      const std::size_t prev = ctrl ? previousWordStartForByteOffset(m_cursorPos) : prevCharPos(m_value, m_cursorPos);
       m_value.erase(prev, m_cursorPos - prev);
       m_cursorPos = prev;
       m_selectionAnchor = prev;
@@ -312,7 +332,7 @@ void Input::handleKey(std::uint32_t sym, std::uint32_t utf32, std::uint32_t modi
       deleteSelection();
       changed = true;
     } else if (m_cursorPos < m_value.size()) {
-      const std::size_t next = nextCharPos(m_value, m_cursorPos);
+      const std::size_t next = ctrl ? nextWordEndForByteOffset(m_cursorPos) : nextCharPos(m_value, m_cursorPos);
       m_value.erase(m_cursorPos, next - m_cursorPos);
       changed = true;
     }
@@ -321,7 +341,7 @@ void Input::handleKey(std::uint32_t sym, std::uint32_t utf32, std::uint32_t modi
       m_cursorPos = selectionStart();
       m_selectionAnchor = m_cursorPos;
     } else {
-      m_cursorPos = prevCharPos(m_value, m_cursorPos);
+      m_cursorPos = ctrl ? previousWordStartForByteOffset(m_cursorPos) : prevCharPos(m_value, m_cursorPos);
       if (!shift) {
         m_selectionAnchor = m_cursorPos;
       }
@@ -331,7 +351,7 @@ void Input::handleKey(std::uint32_t sym, std::uint32_t utf32, std::uint32_t modi
       m_cursorPos = selectionEnd();
       m_selectionAnchor = m_cursorPos;
     } else {
-      m_cursorPos = nextCharPos(m_value, m_cursorPos);
+      m_cursorPos = ctrl ? nextWordStartForByteOffset(m_cursorPos) : nextCharPos(m_value, m_cursorPos);
       if (!shift) {
         m_selectionAnchor = m_cursorPos;
       }
@@ -346,7 +366,7 @@ void Input::handleKey(std::uint32_t sym, std::uint32_t utf32, std::uint32_t modi
     if (!shift) {
       m_selectionAnchor = m_cursorPos;
     }
-  } else if (utf32 >= 0x20U && utf32 != 0x7FU) {
+  } else if (utf32 >= 0x20U && utf32 != 0x7FU && (modifiers & (KeyMod::Ctrl | KeyMod::Alt | KeyMod::Super)) == 0) {
     if (hasSelection()) {
       deleteSelection();
       changed = true;
@@ -750,4 +770,59 @@ std::string Input::utf32ToUtf8(std::uint32_t cp) {
     result += static_cast<char>(0x80U | (cp & 0x3FU));
   }
   return result;
+}
+
+std::size_t Input::previousWordStartForByteOffset(std::size_t offset) const {
+  if (m_value.empty()) {
+    return 0;
+  }
+
+  std::size_t pos = std::min(offset, m_value.size());
+  while (pos > 0) {
+    const std::size_t prev = prevCharPos(m_value, pos);
+    if (prev == pos || isWordCodepoint(m_value, prev)) {
+      break;
+    }
+    pos = prev;
+  }
+  while (pos > 0) {
+    const std::size_t prev = prevCharPos(m_value, pos);
+    if (prev == pos || !isWordCodepoint(m_value, prev)) {
+      break;
+    }
+    pos = prev;
+  }
+  return pos;
+}
+
+std::size_t Input::nextWordStartForByteOffset(std::size_t offset) const {
+  if (m_value.empty()) {
+    return 0;
+  }
+
+  std::size_t pos = std::min(offset, m_value.size());
+  if (pos < m_value.size() && isWordCodepoint(m_value, pos)) {
+    while (pos < m_value.size() && isWordCodepoint(m_value, pos)) {
+      pos = nextCharPos(m_value, pos);
+    }
+  }
+  while (pos < m_value.size() && !isWordCodepoint(m_value, pos)) {
+    pos = nextCharPos(m_value, pos);
+  }
+  return pos;
+}
+
+std::size_t Input::nextWordEndForByteOffset(std::size_t offset) const {
+  if (m_value.empty()) {
+    return 0;
+  }
+
+  std::size_t pos = std::min(offset, m_value.size());
+  while (pos < m_value.size() && !isWordCodepoint(m_value, pos)) {
+    pos = nextCharPos(m_value, pos);
+  }
+  while (pos < m_value.size() && isWordCodepoint(m_value, pos)) {
+    pos = nextCharPos(m_value, pos);
+  }
+  return pos;
 }
