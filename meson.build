@@ -60,9 +60,14 @@ stb_dep = declare_dependency(
 
 libwebp_dep = dependency('libwebp', required: true)
 
-nlohmann_dep = declare_dependency(
-  include_directories: include_directories('third_party/nlohmann', is_system: true),
-)
+# ── Vendored: nlohmann (header-only) ─────────────────────────────────
+if get_option('system_nlohmann_json')
+  nlohmann_dep = dependency('nlohmann_json')
+else
+  nlohmann_dep = declare_dependency(
+    include_directories: include_directories('third_party/nlohmann', is_system: true),
+  )
+endif
 
 # ── Vendored: tomlplusplus (header-only) ─────────────────────────────────
 if get_option('system_tomlplusplus')

@@ -1,1 +1,2 @@
 option('system_tomlplusplus', type: 'boolean', value: false, description: 'Use system tomlplusplus instead of vendored')
+option('system_nlohmann_json', type: 'boolean', value: false, description: 'Use system nlohmann json instead of vendored')

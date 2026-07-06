@@ -100,10 +100,10 @@ sudo xbps-install meson ninja pkg-config git \
   libxkbcommon-devel libwebp-devel librsvg-devel
 ```
 
-Vendored dependencies, with no system package needed: `nlohmann/json`, `stb`, and `Wuffs`.
+Vendored dependencies, with no system package needed: `stb`, and `Wuffs`.
 
-Dependencies that are vendored by default, with a meson option to
-instead use the system package: `tomlplusplus`
+Dependencies that are vendored by default, with a meson boolean to
+instead use the system package: `tomlplusplus`, `nlohmann/json`.
 
 Build requires `wlroots-0.20` and `wayland-server` development packages (see distro lists above).
 
