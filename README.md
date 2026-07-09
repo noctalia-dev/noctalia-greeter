@@ -63,7 +63,7 @@ sudo dnf install meson gcc-c++ just \
   libwebp-devel librsvg2-devel
 ```
 
-### openSUSE (Tumbleweed & Slowroll)
+### openSUSE Tumbleweed / Slowroll
 
 ```sh
 sudo zypper install meson gcc-c++ just \
