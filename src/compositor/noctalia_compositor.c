@@ -33,6 +33,7 @@
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_subcompositor.h>
+#include <wlr/types/wlr_touch.h>
 #include <wlr/types/wlr_viewporter.h>
 #include <wlr/types/wlr_xcursor_manager.h>
 #include <wlr/types/wlr_xdg_shell.h>
@@ -70,6 +71,15 @@ struct greeter_keyboard {
   struct wl_listener destroy;
 };
 
+struct greeter_touch_point {
+  struct wl_list link;
+  int32_t touch_id;
+  double ref_lx;
+  double ref_ly;
+  double ref_sx;
+  double ref_sy;
+};
+
 struct greeter_view {
   struct greeter_server* server;
   struct greeter_output* output;
@@ -103,6 +113,7 @@ struct greeter_server {
   struct wlr_seat* seat;
   struct wl_list outputs;
   struct wl_list keyboards;
+  struct wl_list touch_points;
   struct wl_listener new_output;
   struct wl_listener new_input;
   struct wl_listener new_toplevel;
@@ -111,6 +122,11 @@ struct greeter_server {
   struct wl_listener cursor_button;
   struct wl_listener cursor_axis;
   struct wl_listener cursor_frame;
+  struct wl_listener cursor_touch_down;
+  struct wl_listener cursor_touch_up;
+  struct wl_listener cursor_touch_motion;
+  struct wl_listener cursor_touch_cancel;
+  struct wl_listener cursor_touch_frame;
   struct wl_listener request_set_cursor;
   struct wl_listener request_set_selection;
   struct wl_event_source* sigchld_source;
@@ -983,6 +999,110 @@ static void pointer_focus(struct greeter_server* server, double lx, double ly) {
   }
 }
 
+static struct wlr_surface* surface_at(struct greeter_server* server, double lx, double ly, double* sx, double* sy) {
+  *sx = lx;
+  *sy = ly;
+  struct wlr_scene_node* node = wlr_scene_node_at(&server->scene->tree.node, lx, ly, sx, sy);
+  if (node == NULL || node->type != WLR_SCENE_NODE_BUFFER) {
+    return NULL;
+  }
+  struct wlr_scene_buffer* buffer = wlr_scene_buffer_from_node(node);
+  struct wlr_scene_surface* scene_surface = wlr_scene_surface_try_from_buffer(buffer);
+  return scene_surface != NULL ? scene_surface->surface : NULL;
+}
+
+static struct greeter_touch_point* touch_point_for_id(struct greeter_server* server, int32_t touch_id) {
+  struct greeter_touch_point* point;
+  wl_list_for_each(point, &server->touch_points, link) {
+    if (point->touch_id == touch_id) {
+      return point;
+    }
+  }
+  return NULL;
+}
+
+static void handle_cursor_touch_down(struct wl_listener* listener, void* data) {
+  struct greeter_server* server = wl_container_of(listener, server, cursor_touch_down);
+  struct wlr_touch_down_event* event = data;
+  double lx;
+  double ly;
+  wlr_cursor_absolute_to_layout_coords(server->cursor, &event->touch->base, event->x, event->y, &lx, &ly);
+
+  double sx;
+  double sy;
+  struct wlr_surface* surface = surface_at(server, lx, ly, &sx, &sy);
+  if (surface == NULL) {
+    return;
+  }
+
+  wlr_seat_touch_notify_down(server->seat, surface, event->time_msec, event->touch_id, sx, sy);
+  if (wlr_seat_touch_get_point(server->seat, event->touch_id) == NULL) {
+    return;
+  }
+
+  struct greeter_touch_point* point = calloc(1, sizeof(*point));
+  if (point == NULL) {
+    wlr_seat_touch_notify_up(server->seat, event->time_msec, event->touch_id);
+    return;
+  }
+  point->touch_id = event->touch_id;
+  point->ref_lx = lx;
+  point->ref_ly = ly;
+  point->ref_sx = sx;
+  point->ref_sy = sy;
+  wl_list_insert(&server->touch_points, &point->link);
+}
+
+static void handle_cursor_touch_up(struct wl_listener* listener, void* data) {
+  struct greeter_server* server = wl_container_of(listener, server, cursor_touch_up);
+  struct wlr_touch_up_event* event = data;
+  struct greeter_touch_point* point = touch_point_for_id(server, event->touch_id);
+  if (point == NULL) {
+    return;
+  }
+  wlr_seat_touch_notify_up(server->seat, event->time_msec, event->touch_id);
+  wl_list_remove(&point->link);
+  free(point);
+}
+
+static void handle_cursor_touch_motion(struct wl_listener* listener, void* data) {
+  struct greeter_server* server = wl_container_of(listener, server, cursor_touch_motion);
+  struct wlr_touch_motion_event* event = data;
+  struct greeter_touch_point* point = touch_point_for_id(server, event->touch_id);
+  if (point == NULL) {
+    return;
+  }
+
+  double lx;
+  double ly;
+  wlr_cursor_absolute_to_layout_coords(server->cursor, &event->touch->base, event->x, event->y, &lx, &ly);
+  const double sx = point->ref_sx + lx - point->ref_lx;
+  const double sy = point->ref_sy + ly - point->ref_ly;
+  wlr_seat_touch_notify_motion(server->seat, event->time_msec, event->touch_id, sx, sy);
+}
+
+static void handle_cursor_touch_cancel(struct wl_listener* listener, void* data) {
+  struct greeter_server* server = wl_container_of(listener, server, cursor_touch_cancel);
+  struct wlr_touch_cancel_event* event = data;
+  struct wlr_touch_point* seat_point = wlr_seat_touch_get_point(server->seat, event->touch_id);
+  if (seat_point != NULL && seat_point->client != NULL) {
+    wlr_seat_touch_notify_cancel(server->seat, seat_point->client);
+  }
+
+  struct greeter_touch_point* point;
+  struct greeter_touch_point* tmp;
+  wl_list_for_each_safe(point, tmp, &server->touch_points, link) {
+    wl_list_remove(&point->link);
+    free(point);
+  }
+}
+
+static void handle_cursor_touch_frame(struct wl_listener* listener, void* data) {
+  (void)data;
+  struct greeter_server* server = wl_container_of(listener, server, cursor_touch_frame);
+  wlr_seat_touch_notify_frame(server->seat);
+}
+
 static void handle_cursor_motion(struct wl_listener* listener, void* data) {
   struct greeter_server* server = wl_container_of(listener, server, cursor_motion);
   struct wlr_pointer_motion_event* event = data;
@@ -1160,6 +1280,9 @@ static void handle_new_input(struct wl_listener* listener, void* data) {
     caps |= WL_SEAT_CAPABILITY_POINTER;
     break;
   case WLR_INPUT_DEVICE_TOUCH:
+    wlr_cursor_attach_input_device(server->cursor, device);
+    caps |= WL_SEAT_CAPABILITY_TOUCH;
+    break;
   case WLR_INPUT_DEVICE_TABLET:
     wlr_cursor_attach_input_device(server->cursor, device);
     caps |= WL_SEAT_CAPABILITY_POINTER;
@@ -1377,8 +1500,20 @@ static void cleanup_server_listeners(struct greeter_server* server) {
   remove_listener_if_set(&server->cursor_button);
   remove_listener_if_set(&server->cursor_axis);
   remove_listener_if_set(&server->cursor_frame);
+  remove_listener_if_set(&server->cursor_touch_down);
+  remove_listener_if_set(&server->cursor_touch_up);
+  remove_listener_if_set(&server->cursor_touch_motion);
+  remove_listener_if_set(&server->cursor_touch_cancel);
+  remove_listener_if_set(&server->cursor_touch_frame);
   remove_listener_if_set(&server->request_set_cursor);
   remove_listener_if_set(&server->request_set_selection);
+
+  struct greeter_touch_point* point;
+  struct greeter_touch_point* tmp;
+  wl_list_for_each_safe(point, tmp, &server->touch_points, link) {
+    wl_list_remove(&point->link);
+    free(point);
+  }
 }
 
 int main(int argc, char** argv) {
@@ -1387,6 +1522,7 @@ int main(int argc, char** argv) {
   struct greeter_server server = {0};
   wl_list_init(&server.outputs);
   wl_list_init(&server.keyboards);
+  wl_list_init(&server.touch_points);
   read_greeter_config(&server);
 
   server.display = wl_display_create();
@@ -1474,6 +1610,16 @@ int main(int argc, char** argv) {
   wl_signal_add(&server.cursor->events.axis, &server.cursor_axis);
   server.cursor_frame.notify = handle_cursor_frame;
   wl_signal_add(&server.cursor->events.frame, &server.cursor_frame);
+  server.cursor_touch_down.notify = handle_cursor_touch_down;
+  wl_signal_add(&server.cursor->events.touch_down, &server.cursor_touch_down);
+  server.cursor_touch_up.notify = handle_cursor_touch_up;
+  wl_signal_add(&server.cursor->events.touch_up, &server.cursor_touch_up);
+  server.cursor_touch_motion.notify = handle_cursor_touch_motion;
+  wl_signal_add(&server.cursor->events.touch_motion, &server.cursor_touch_motion);
+  server.cursor_touch_cancel.notify = handle_cursor_touch_cancel;
+  wl_signal_add(&server.cursor->events.touch_cancel, &server.cursor_touch_cancel);
+  server.cursor_touch_frame.notify = handle_cursor_touch_frame;
+  wl_signal_add(&server.cursor->events.touch_frame, &server.cursor_touch_frame);
   server.request_set_cursor.notify = handle_request_set_cursor;
   wl_signal_add(&server.seat->events.request_set_cursor, &server.request_set_cursor);
   server.request_set_selection.notify = handle_request_set_selection;
