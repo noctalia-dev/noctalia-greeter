@@ -113,6 +113,7 @@ struct greeter_server {
   struct wl_listener cursor_frame;
   struct wl_listener request_set_cursor;
   struct wl_listener request_set_selection;
+  struct wl_listener session_active;
   struct wl_event_source* sigchld_source;
   struct wl_event_source* launch_timer;
   pid_t child_pid;
@@ -1028,6 +1029,36 @@ static void handle_request_set_cursor(struct wl_listener* listener, void* data) 
   }
 }
 
+static struct greeter_keyboard* first_keyboard(struct greeter_server* server) {
+  struct greeter_keyboard* keyboard;
+  wl_list_for_each(keyboard, &server->keyboards, link) { return keyboard; }
+  return NULL;
+}
+
+static void update_seat_keyboard(struct greeter_server* server) {
+  struct greeter_keyboard* keyboard = first_keyboard(server);
+  wlr_seat_set_keyboard(server->seat, keyboard != NULL ? keyboard->wlr_keyboard : NULL);
+}
+
+static void recompute_keyboard_capability(struct greeter_server* server) {
+  uint32_t caps = server->seat->capabilities;
+  if (wl_list_empty(&server->keyboards)) {
+    caps &= ~(uint32_t)WL_SEAT_CAPABILITY_KEYBOARD;
+  } else {
+    caps |= WL_SEAT_CAPABILITY_KEYBOARD;
+  }
+  wlr_seat_set_capabilities(server->seat, caps);
+}
+
+static void focus_mapped_views(struct greeter_server* server) {
+  struct greeter_output* output;
+  wl_list_for_each(output, &server->outputs, link) {
+    if (output->view != NULL && output->view->mapped) {
+      focus_view(output->view);
+    }
+  }
+}
+
 static void handle_keyboard_modifiers(struct wl_listener* listener, void* data) {
   (void)data;
   struct greeter_keyboard* keyboard = wl_container_of(listener, keyboard, modifiers);
@@ -1058,11 +1089,20 @@ static void handle_keyboard_key(struct wl_listener* listener, void* data) {
 static void handle_keyboard_destroy(struct wl_listener* listener, void* data) {
   (void)data;
   struct greeter_keyboard* keyboard = wl_container_of(listener, keyboard, destroy);
+  struct greeter_server* server = keyboard->server;
+  const bool was_seat_keyboard = wlr_seat_get_keyboard(server->seat) == keyboard->wlr_keyboard;
+
   wl_list_remove(&keyboard->modifiers.link);
   wl_list_remove(&keyboard->key.link);
   wl_list_remove(&keyboard->destroy.link);
   wl_list_remove(&keyboard->link);
   free(keyboard);
+
+  if (was_seat_keyboard) {
+    update_seat_keyboard(server);
+  }
+  recompute_keyboard_capability(server);
+  focus_mapped_views(server);
 }
 
 static void configure_libinput_touchpad(struct wlr_input_device* device) {
@@ -1141,6 +1181,8 @@ static void add_keyboard(struct greeter_server* server, struct wlr_input_device*
   wl_list_insert(&server->keyboards, &keyboard->link);
 
   wlr_seat_set_keyboard(server->seat, keyboard->wlr_keyboard);
+  wlr_log(WLR_INFO, "keyboard: added %s", device->name);
+  focus_mapped_views(server);
 }
 
 static void handle_new_input(struct wl_listener* listener, void* data) {
@@ -1151,8 +1193,8 @@ static void handle_new_input(struct wl_listener* listener, void* data) {
   switch (device->type) {
   case WLR_INPUT_DEVICE_KEYBOARD:
     add_keyboard(server, device);
-    caps |= WL_SEAT_CAPABILITY_KEYBOARD;
-    break;
+    recompute_keyboard_capability(server);
+    return;
   case WLR_INPUT_DEVICE_POINTER:
     configure_libinput_touchpad(device);
     configure_libinput_pointer(device);
@@ -1169,6 +1211,19 @@ static void handle_new_input(struct wl_listener* listener, void* data) {
   }
 
   wlr_seat_set_capabilities(server->seat, caps);
+}
+
+static void handle_session_active(struct wl_listener* listener, void* data) {
+  (void)data;
+  struct greeter_server* server = wl_container_of(listener, server, session_active);
+  if (server->session == NULL || !server->session->active) {
+    return;
+  }
+
+  wlr_log(WLR_INFO, "session active; refreshing keyboard focus");
+  update_seat_keyboard(server);
+  recompute_keyboard_capability(server);
+  focus_mapped_views(server);
 }
 
 static void handle_xdg_commit(struct wl_listener* listener, void* data) {
@@ -1379,6 +1434,7 @@ static void cleanup_server_listeners(struct greeter_server* server) {
   remove_listener_if_set(&server->cursor_frame);
   remove_listener_if_set(&server->request_set_cursor);
   remove_listener_if_set(&server->request_set_selection);
+  remove_listener_if_set(&server->session_active);
 }
 
 int main(int argc, char** argv) {
@@ -1494,6 +1550,11 @@ int main(int argc, char** argv) {
     cleanup_server_listeners(&server);
     wl_display_destroy(server.display);
     return 1;
+  }
+
+  if (server.session != NULL) {
+    server.session_active.notify = handle_session_active;
+    wl_signal_add(&server.session->events.active, &server.session_active);
   }
 
   struct wl_event_loop* loop = wl_display_get_event_loop(server.display);
