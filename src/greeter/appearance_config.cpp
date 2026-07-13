@@ -86,26 +86,47 @@ std::optional<GreeterSyncedAppearance> loadGreeterSyncedAppearance() {
       return std::nullopt;
     }
 
-    const auto wallpaperIt = root.find("wallpaper");
-    if (wallpaperIt != root.end() && wallpaperIt->is_object()) {
-      const auto& wallpaper = *wallpaperIt;
+    const auto parseWallpaperObject = [](const nlohmann::json& wallpaper, GreeterOutputWallpaper& out) {
       if (const auto pathValue = wallpaper.find("path"); pathValue != wallpaper.end() && pathValue->is_string()) {
-        appearance.wallpaperPath = pathValue->get<std::string>();
+        out.path = pathValue->get<std::string>();
       }
       if (const auto fillMode = wallpaper.find("fill_mode"); fillMode != wallpaper.end() && fillMode->is_string()) {
         if (const auto parsed = greeter::appearance::parseFillMode(fillMode->get<std::string>())) {
-          appearance.wallpaperFillMode = *parsed;
+          out.fillMode = *parsed;
         }
       }
       if (const auto fillColor = wallpaper.find("fill_color"); fillColor != wallpaper.end() && fillColor->is_string()) {
         Color color;
         if (tryParseHexColor(fillColor->get<std::string>(), color)) {
-          appearance.wallpaperFillColor = color;
+          out.fillColor = color;
         }
-      } else if (!appearance.wallpaperPath.empty()) {
+      } else if (!out.path.empty()) {
         Color color;
-        if (parseColorWallpaperPath(appearance.wallpaperPath, color)) {
-          appearance.wallpaperFillColor = color;
+        if (parseColorWallpaperPath(out.path, color)) {
+          out.fillColor = color;
+        }
+      }
+    };
+
+    const auto wallpaperIt = root.find("wallpaper");
+    if (wallpaperIt != root.end() && wallpaperIt->is_object()) {
+      GreeterOutputWallpaper single;
+      parseWallpaperObject(*wallpaperIt, single);
+      appearance.wallpaperPath = single.path;
+      appearance.wallpaperFillMode = single.fillMode;
+      appearance.wallpaperFillColor = single.fillColor;
+    }
+
+    const auto wallpapersIt = root.find("wallpapers");
+    if (wallpapersIt != root.end() && wallpapersIt->is_object()) {
+      for (const auto& [connector, value] : wallpapersIt->items()) {
+        if (!value.is_object() || connector.empty()) {
+          continue;
+        }
+        GreeterOutputWallpaper entry;
+        parseWallpaperObject(value, entry);
+        if (!entry.path.empty()) {
+          appearance.wallpapersByOutput.emplace(connector, std::move(entry));
         }
       }
     }

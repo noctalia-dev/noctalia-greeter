@@ -19,11 +19,14 @@ namespace greeter::appearance {
     constexpr mode_t kSyncedFileMode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
 
     [[nodiscard]] bool isWallpaperFileName(std::string_view name) {
+      // wallpaper, wallpaper.webp, wallpaper-DP-2.webp, wallpaper-HDMI-A-1.jpg
       if (name == kWallpaperBaseName) {
         return true;
       }
-      constexpr std::string_view kPrefix = "wallpaper.";
-      return name.size() > kPrefix.size() && name.substr(0, kPrefix.size()) == kPrefix;
+      constexpr std::string_view kDot = "wallpaper.";
+      constexpr std::string_view kDash = "wallpaper-";
+      return (name.size() > kDot.size() && name.substr(0, kDot.size()) == kDot)
+          || (name.size() > kDash.size() && name.substr(0, kDash.size()) == kDash);
     }
 
     [[nodiscard]] bool setMode(const std::filesystem::path& path, mode_t mode, std::string& errorOut) {
