@@ -23,7 +23,8 @@ namespace {
         || key == "output"
         || key == "cursor"
         || key == "keyboard"
-        || key == "auth";
+        || key == "auth"
+        || key == "idle";
   }
 
   [[nodiscard]] bool isKnownSessionKey(std::string_view key) { return key == "default" || key == "last"; }
@@ -35,8 +36,15 @@ namespace {
   }
 
   [[nodiscard]] bool isKnownOutputKey(std::string_view key) {
-    return key == "name" || key == "layout" || key == "scale";
+    return key == "name"
+        || key == "layout"
+        || key == "scale"
+        || key == "width"
+        || key == "height"
+        || key == "transforms";
   }
+
+  [[nodiscard]] bool isKnownIdleKey(std::string_view key) { return key == "timeout"; }
 
   [[nodiscard]] bool isKnownCursorKey(std::string_view key) { return key == "theme" || key == "size" || key == "path"; }
 
@@ -69,6 +77,24 @@ namespace {
   [[nodiscard]] std::optional<int> cursorSizeValue(const toml::node& node) {
     if (const auto value = node.value<int64_t>()) {
       if (*value > 0 && *value <= 1024) {
+        return static_cast<int>(*value);
+      }
+    }
+    return std::nullopt;
+  }
+
+  [[nodiscard]] std::optional<int> modeDimensionValue(const toml::node& node) {
+    if (const auto value = node.value<int64_t>()) {
+      if (*value > 0 && *value <= 16384) {
+        return static_cast<int>(*value);
+      }
+    }
+    return std::nullopt;
+  }
+
+  [[nodiscard]] std::optional<int> idleTimeoutValue(const toml::node& node) {
+    if (const auto value = node.value<int64_t>()) {
+      if (*value >= 0 && *value <= 86400) {
         return static_cast<int>(*value);
       }
     }
@@ -144,10 +170,38 @@ namespace {
             config.outputName = stringValue(entryNode);
           } else if (entryView == "layout") {
             config.outputLayout = stringValue(entryNode);
-          } else if (const auto scale = positiveFloatValue(entryNode)) {
-            config.outputScale = *scale;
-          } else {
-            kLog.warn("{}: invalid output.scale value", path.string());
+          } else if (entryView == "scale") {
+            if (const auto scale = positiveFloatValue(entryNode)) {
+              config.outputScale = *scale;
+            } else {
+              kLog.warn("{}: invalid output.scale value", path.string());
+            }
+          } else if (entryView == "width") {
+            if (const auto width = modeDimensionValue(entryNode)) {
+              config.outputModeWidth = *width;
+            } else {
+              kLog.warn("{}: invalid output.width value", path.string());
+            }
+          } else if (entryView == "height") {
+            if (const auto height = modeDimensionValue(entryNode)) {
+              config.outputModeHeight = *height;
+            } else {
+              kLog.warn("{}: invalid output.height value", path.string());
+            }
+          } else if (entryView == "transforms") {
+            config.outputTransforms = stringValue(entryNode);
+          }
+        } else if (keyView == "idle") {
+          if (!isKnownIdleKey(entryView)) {
+            warnUnknownSectionKey(path, keyView, entryView);
+            continue;
+          }
+          if (entryView == "timeout") {
+            if (const auto timeout = idleTimeoutValue(entryNode)) {
+              config.idleTimeoutSec = *timeout;
+            } else {
+              kLog.warn("{}: invalid idle.timeout value", path.string());
+            }
           }
         } else if (keyView == "cursor") {
           if (!isKnownCursorKey(entryView)) {
@@ -265,8 +319,26 @@ namespace {
     if (config.outputScale.has_value()) {
       output.insert_or_assign("scale", static_cast<double>(*config.outputScale));
     }
+    if (config.outputModeWidth.has_value()) {
+      output.insert_or_assign("width", static_cast<int64_t>(*config.outputModeWidth));
+    }
+    if (config.outputModeHeight.has_value()) {
+      output.insert_or_assign("height", static_cast<int64_t>(*config.outputModeHeight));
+    }
+    insertString(
+        output, "transforms", config.outputTransforms,
+        [](toml::table& table, std::string_view key, const std::string& value) {
+          table.insert_or_assign(std::string(key), value);
+        }
+    );
     if (!output.empty()) {
       root.insert("output", std::move(output));
+    }
+
+    if (config.idleTimeoutSec.has_value()) {
+      toml::table idle;
+      idle.insert_or_assign("timeout", static_cast<int64_t>(*config.idleTimeoutSec));
+      root.insert("idle", std::move(idle));
     }
 
     toml::table cursor;
@@ -369,7 +441,8 @@ namespace greeter::config {
     std::ostringstream out;
     out << "# noctalia-greeter greeter.toml\n";
     out << "# [session] default/last, [user] default, [appearance] scheme/password_style/hide_logo\n";
-    out << "# [output] name/layout/scale, [cursor] theme/size/path, [keyboard] layout/variant/options/numlock\n";
+    out << "# [output] name/layout/scale/width/height/transforms, [idle] timeout, [cursor] theme/size/path\n";
+    out << "# [keyboard] layout/variant/options/numlock\n";
     out << "# [auth] allow_empty_password (bool, default false; enables fingerprint/smartcard PAM auth)\n";
     out << '\n';
     out << formatToml(table);
@@ -411,9 +484,19 @@ extern "C" void greeter_compositor_config_load(const char* state_dir, struct gre
     out->keyboard_numlock = *config.keyboardNumlock ? 1 : -1;
   }
   copyString(out->output_layout, sizeof(out->output_layout), config.outputLayout);
+  copyString(out->output_transforms, sizeof(out->output_transforms), config.outputTransforms);
 
   if (config.outputScale.has_value() && *config.outputScale >= 1.0f) {
     out->manual_scale = *config.outputScale;
+  }
+  if (config.outputModeWidth.has_value() && *config.outputModeWidth > 0) {
+    out->manual_mode_width = *config.outputModeWidth;
+  }
+  if (config.outputModeHeight.has_value() && *config.outputModeHeight > 0) {
+    out->manual_mode_height = *config.outputModeHeight;
+  }
+  if (config.idleTimeoutSec.has_value() && *config.idleTimeoutSec >= 0) {
+    out->idle_timeout_sec = *config.idleTimeoutSec;
   }
   if (config.cursorSize.has_value() && *config.cursorSize > 0) {
     out->cursor_size = *config.cursorSize;

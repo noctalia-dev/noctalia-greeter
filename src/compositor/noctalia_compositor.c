@@ -11,7 +11,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/timerfd.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 #include <wayland-server-core.h>
 #include <wayland-server-protocol.h>
@@ -33,6 +35,7 @@
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_subcompositor.h>
+#include <wlr/types/wlr_touch.h>
 #include <wlr/types/wlr_viewporter.h>
 #include <wlr/types/wlr_xcursor_manager.h>
 #include <wlr/types/wlr_xdg_shell.h>
@@ -70,6 +73,15 @@ struct greeter_keyboard {
   struct wl_listener destroy;
 };
 
+struct greeter_touch_point {
+  struct wl_list link;
+  int32_t touch_id;
+  double ref_lx;
+  double ref_ly;
+  double ref_sx;
+  double ref_sy;
+};
+
 struct greeter_view {
   struct greeter_server* server;
   struct greeter_output* output;
@@ -88,6 +100,11 @@ struct greeter_output_placement {
   int y;
 };
 
+struct greeter_output_transform {
+  char name[128];
+  enum wl_output_transform transform;
+};
+
 struct greeter_server {
   struct wl_display* display;
   struct wlr_backend* backend;
@@ -103,6 +120,7 @@ struct greeter_server {
   struct wlr_seat* seat;
   struct wl_list outputs;
   struct wl_list keyboards;
+  struct wl_list touch_points;
   struct wl_listener new_output;
   struct wl_listener new_input;
   struct wl_listener new_toplevel;
@@ -111,6 +129,11 @@ struct greeter_server {
   struct wl_listener cursor_button;
   struct wl_listener cursor_axis;
   struct wl_listener cursor_frame;
+  struct wl_listener cursor_touch_down;
+  struct wl_listener cursor_touch_up;
+  struct wl_listener cursor_touch_motion;
+  struct wl_listener cursor_touch_cancel;
+  struct wl_listener cursor_touch_frame;
   struct wl_listener request_set_cursor;
   struct wl_listener request_set_selection;
   struct wl_listener session_active;
@@ -122,6 +145,15 @@ struct greeter_server {
   char** child_argv_ptr;
   char preferred_output[128];
   float manual_scale;
+  int manual_mode_width;
+  int manual_mode_height;
+  struct greeter_output_transform output_transforms[16];
+  size_t output_transform_count;
+  int idle_timeout_sec;
+  struct timespec last_activity;
+  int idle_timerfd;
+  struct wl_event_source* idle_timerfd_source;
+  bool screens_blanked;
   char cursor_theme[128];
   int cursor_size;
   char cursor_path[512];
@@ -260,9 +292,122 @@ static void parse_output_layout_value(struct greeter_server* server, char* value
   }
 }
 
+static bool parse_transform_token(const char* token, enum wl_output_transform* out) {
+  if (token == NULL || token[0] == '\0' || out == NULL) {
+    return false;
+  }
+  if (strcmp(token, "normal") == 0 || strcmp(token, "0") == 0 || strcmp(token, "none") == 0) {
+    *out = WL_OUTPUT_TRANSFORM_NORMAL;
+    return true;
+  }
+  if (strcmp(token, "90") == 0) {
+    *out = WL_OUTPUT_TRANSFORM_90;
+    return true;
+  }
+  if (strcmp(token, "180") == 0) {
+    *out = WL_OUTPUT_TRANSFORM_180;
+    return true;
+  }
+  if (strcmp(token, "270") == 0) {
+    *out = WL_OUTPUT_TRANSFORM_270;
+    return true;
+  }
+  if (strcmp(token, "flipped") == 0) {
+    *out = WL_OUTPUT_TRANSFORM_FLIPPED;
+    return true;
+  }
+  if (strcmp(token, "flipped-90") == 0 || strcmp(token, "flipped_90") == 0) {
+    *out = WL_OUTPUT_TRANSFORM_FLIPPED_90;
+    return true;
+  }
+  if (strcmp(token, "flipped-180") == 0 || strcmp(token, "flipped_180") == 0) {
+    *out = WL_OUTPUT_TRANSFORM_FLIPPED_180;
+    return true;
+  }
+  if (strcmp(token, "flipped-270") == 0 || strcmp(token, "flipped_270") == 0) {
+    *out = WL_OUTPUT_TRANSFORM_FLIPPED_270;
+    return true;
+  }
+  return false;
+}
+
+static bool parse_output_transform_entry(const char* token, struct greeter_output_transform* out) {
+  char buf[256];
+  if (token == NULL || out == NULL) {
+    return false;
+  }
+  const int token_len = snprintf(buf, sizeof(buf), "%s", token);
+  if (token_len < 0 || (size_t)token_len >= sizeof(buf)) {
+    return false;
+  }
+  char* colon = strrchr(buf, ':');
+  if (colon == NULL || colon == buf) {
+    return false;
+  }
+  *colon = '\0';
+  char* name = trim(buf);
+  char* transform_raw = trim(colon + 1);
+  if (name[0] == '\0' || transform_raw[0] == '\0') {
+    return false;
+  }
+  enum wl_output_transform transform = WL_OUTPUT_TRANSFORM_NORMAL;
+  if (!parse_transform_token(transform_raw, &transform)) {
+    return false;
+  }
+  const int name_len = snprintf(out->name, sizeof(out->name), "%s", name);
+  if (name_len < 0 || (size_t)name_len >= sizeof(out->name)) {
+    return false;
+  }
+  out->transform = transform;
+  return true;
+}
+
+static void parse_output_transforms_value(struct greeter_server* server, char* value) {
+  server->output_transform_count = 0;
+  for (char* p = value; *p != '\0'; ++p) {
+    if (*p == ';') {
+      *p = ' ';
+    }
+  }
+
+  char* saveptr = NULL;
+  for (char* token = strtok_r(value, " \t", &saveptr); token != NULL; token = strtok_r(NULL, " \t", &saveptr)) {
+    if (server->output_transform_count >= sizeof(server->output_transforms) / sizeof(server->output_transforms[0])) {
+      wlr_log(
+          WLR_ERROR, "output_transforms: too many entries (max %zu)",
+          sizeof(server->output_transforms) / sizeof(server->output_transforms[0])
+      );
+      break;
+    }
+    struct greeter_output_transform entry;
+    if (!parse_output_transform_entry(token, &entry)) {
+      wlr_log(WLR_ERROR, "output_transforms: invalid entry '%s' (use NAME:90)", token);
+      continue;
+    }
+    server->output_transforms[server->output_transform_count++] = entry;
+    wlr_log(WLR_INFO, "output transform: %s -> %d", entry.name, (int)entry.transform);
+  }
+}
+
+static enum wl_output_transform transform_for_output(const struct greeter_server* server, const char* name) {
+  if (name == NULL || name[0] == '\0') {
+    return WL_OUTPUT_TRANSFORM_NORMAL;
+  }
+  for (size_t i = 0; i < server->output_transform_count; ++i) {
+    if (strcmp(server->output_transforms[i].name, name) == 0) {
+      return server->output_transforms[i].transform;
+    }
+  }
+  return WL_OUTPUT_TRANSFORM_NORMAL;
+}
+
 static void read_greeter_config(struct greeter_server* server) {
   server->preferred_output[0] = '\0';
   server->manual_scale = 0.0f;
+  server->manual_mode_width = 0;
+  server->manual_mode_height = 0;
+  server->output_transform_count = 0;
+  server->idle_timeout_sec = 0;
   server->cursor_theme[0] = '\0';
   server->cursor_size = 0;
   server->cursor_path[0] = '\0';
@@ -280,6 +425,37 @@ static void read_greeter_config(struct greeter_server* server) {
   }
   if (config.manual_scale >= 1.0f) {
     server->manual_scale = config.manual_scale;
+  }
+  if (config.manual_mode_width > 0) {
+    server->manual_mode_width = config.manual_mode_width;
+  }
+  if (config.manual_mode_height > 0) {
+    server->manual_mode_height = config.manual_mode_height;
+  }
+  if (config.idle_timeout_sec > 0) {
+    server->idle_timeout_sec = config.idle_timeout_sec;
+  }
+  const char* env_idle = getenv("NOCTALIA_GREETER_IDLE_TIMEOUT");
+  if (env_idle != NULL && env_idle[0] != '\0') {
+    const char* cursor = env_idle;
+    while (isspace((unsigned char)*cursor)) {
+      cursor++;
+    }
+    char* end = NULL;
+    const long parsed = strtol(cursor, &end, 10);
+    if (end != cursor) {
+      while (isspace((unsigned char)*end)) {
+        end++;
+      }
+    }
+    if (end != cursor && *end == '\0' && parsed >= 0 && parsed <= 86400) {
+      server->idle_timeout_sec = (int)parsed;
+    } else {
+      wlr_log(WLR_ERROR, "invalid NOCTALIA_GREETER_IDLE_TIMEOUT='%s' (expected 0..86400)", env_idle);
+    }
+  }
+  if (server->idle_timeout_sec > 0) {
+    wlr_log(WLR_INFO, "idle blanking enabled: %ds", server->idle_timeout_sec);
   }
   if (config.cursor_theme[0] != '\0') {
     snprintf(server->cursor_theme, sizeof(server->cursor_theme), "%s", config.cursor_theme);
@@ -304,6 +480,11 @@ static void read_greeter_config(struct greeter_server* server) {
     char layout[2048];
     snprintf(layout, sizeof(layout), "%s", config.output_layout);
     parse_output_layout_value(server, layout);
+  }
+  if (config.output_transforms[0] != '\0') {
+    char transforms[2048];
+    snprintf(transforms, sizeof(transforms), "%s", config.output_transforms);
+    parse_output_transforms_value(server, transforms);
   }
 }
 
@@ -628,6 +809,96 @@ static void handle_output_request_state(struct wl_listener* listener, void* data
   choose_outputs(output->server);
 }
 
+enum { IDLE_POLL_MS = 2000 };
+
+static bool any_active_enabled_output(const struct greeter_server* server) {
+  const struct greeter_output* output;
+  wl_list_for_each(output, &server->outputs, link) {
+    if (output->active && output->wlr_output->enabled) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static void set_outputs_power(struct greeter_server* server, bool on) {
+  bool toggled = false;
+  struct greeter_output* output;
+  wl_list_for_each(output, &server->outputs, link) {
+    if (!output->active || on == output->wlr_output->enabled) {
+      continue;
+    }
+    struct wlr_output_state state;
+    wlr_output_state_init(&state);
+    wlr_output_state_set_enabled(&state, on);
+    if (!wlr_output_commit_state(output->wlr_output, &state)) {
+      wlr_log(WLR_ERROR, "failed to %s output %s", on ? "enable" : "disable", output->wlr_output->name);
+    } else {
+      toggled = true;
+      if (on && output->scene_output != NULL) {
+        wlr_output_schedule_frame(output->wlr_output);
+      }
+    }
+    wlr_output_state_finish(&state);
+  }
+  if (toggled) {
+    server->screens_blanked = !on;
+    if (on) {
+      schedule_output_frames(server);
+    }
+    return;
+  }
+  // Nothing to disable (already off / no active outputs): still mark blanked so idle poll stops.
+  if (!on && !any_active_enabled_output(server)) {
+    server->screens_blanked = true;
+  }
+}
+
+static void note_activity(struct greeter_server* server) {
+  clock_gettime(CLOCK_MONOTONIC, &server->last_activity);
+  if (server->screens_blanked) {
+    set_outputs_power(server, true);
+  }
+}
+
+// Pointer/scroll noise must not reset the idle timer — only wake after blank.
+static void note_pointer_activity(struct greeter_server* server) {
+  if (server->screens_blanked) {
+    note_activity(server);
+  }
+}
+
+static void check_idle_timeout(struct greeter_server* server) {
+  if (server->idle_timeout_sec <= 0 || server->screens_blanked) {
+    return;
+  }
+  struct timespec now;
+  clock_gettime(CLOCK_MONOTONIC, &now);
+  const time_t idle_sec = now.tv_sec - server->last_activity.tv_sec;
+  if (idle_sec < server->idle_timeout_sec) {
+    return;
+  }
+  if (!any_active_enabled_output(server)) {
+    // Already dark / no active outputs: stop retrying until a wake event.
+    server->screens_blanked = true;
+    return;
+  }
+  wlr_log(WLR_INFO, "idle timeout reached (%lds idle), blanking outputs", (long)idle_sec);
+  set_outputs_power(server, false);
+}
+
+// wl_event_loop_add_timer has not fired reliably on some greetd/NVIDIA stacks; timerfd does.
+static int handle_idle_timerfd(int fd, uint32_t mask, void* data) {
+  struct greeter_server* server = data;
+  (void)mask;
+  uint64_t ticks;
+  if (read(fd, &ticks, sizeof(ticks)) != (ssize_t)sizeof(ticks)) {
+    return 0;
+  }
+  check_idle_timeout(server);
+  return 0;
+}
+
 static void disable_output(struct greeter_output* output) {
   if (!output->active && !output->wlr_output->enabled) {
     return;
@@ -656,7 +927,27 @@ static void disable_output(struct greeter_output* output) {
   }
 }
 
-static struct wlr_output_mode* select_output_mode(struct wlr_output* wlr_output) {
+static struct wlr_output_mode* select_output_mode(struct wlr_output* wlr_output, int manual_width, int manual_height) {
+  if ((manual_width > 0) != (manual_height > 0)) {
+    wlr_log(WLR_INFO, "output width/height require both values; ignoring partial manual mode for %s", wlr_output->name);
+  }
+  if (manual_width > 0 && manual_height > 0) {
+    struct wlr_output_mode* best = NULL;
+    struct wlr_output_mode* mode;
+    wl_list_for_each(mode, &wlr_output->modes, link) {
+      if (mode->width != manual_width || mode->height != manual_height) {
+        continue;
+      }
+      if (best == NULL || mode->refresh > best->refresh) {
+        best = mode;
+      }
+    }
+    if (best != NULL) {
+      return best;
+    }
+    wlr_log(WLR_INFO, "no mode %dx%d for %s; falling back to preferred", manual_width, manual_height, wlr_output->name);
+  }
+
   struct wlr_output_mode* preferred = wlr_output_preferred_mode(wlr_output);
   if (preferred == NULL) {
     return NULL;
@@ -690,12 +981,15 @@ static bool commit_output_enabled(struct greeter_output* output) {
   struct wlr_output_state state;
   wlr_output_state_init(&state);
   wlr_output_state_set_enabled(&state, true);
-  struct wlr_output_mode* mode = select_output_mode(output->wlr_output);
+  struct wlr_output_mode* mode =
+      select_output_mode(output->wlr_output, server->manual_mode_width, server->manual_mode_height);
   if (mode != NULL) {
     wlr_output_state_set_mode(&state, mode);
     wlr_log(WLR_INFO, "selected output mode: %dx%d @ %.3f Hz", mode->width, mode->height, mode->refresh / 1000.0);
   }
-  const float scale = output_ui_scale(output->wlr_output, output->server->manual_scale);
+  const enum wl_output_transform transform = transform_for_output(server, output->wlr_output->name);
+  wlr_output_state_set_transform(&state, transform);
+  const float scale = output_ui_scale(output->wlr_output, server->manual_scale);
   wlr_output_state_set_scale(&state, scale);
   bool ok = wlr_output_commit_state(output->wlr_output, &state);
   wlr_output_state_finish(&state);
@@ -704,7 +998,7 @@ static bool commit_output_enabled(struct greeter_output* output) {
     return false;
   }
 
-  wlr_log(WLR_INFO, "output %s scale=%.2f", output->wlr_output->name, scale);
+  wlr_log(WLR_INFO, "output %s scale=%.2f transform=%d", output->wlr_output->name, scale, (int)transform);
   return true;
 }
 
@@ -984,9 +1278,116 @@ static void pointer_focus(struct greeter_server* server, double lx, double ly) {
   }
 }
 
+static struct wlr_surface* surface_at(struct greeter_server* server, double lx, double ly, double* sx, double* sy) {
+  *sx = lx;
+  *sy = ly;
+  struct wlr_scene_node* node = wlr_scene_node_at(&server->scene->tree.node, lx, ly, sx, sy);
+  if (node == NULL || node->type != WLR_SCENE_NODE_BUFFER) {
+    return NULL;
+  }
+  struct wlr_scene_buffer* buffer = wlr_scene_buffer_from_node(node);
+  struct wlr_scene_surface* scene_surface = wlr_scene_surface_try_from_buffer(buffer);
+  return scene_surface != NULL ? scene_surface->surface : NULL;
+}
+
+static struct greeter_touch_point* touch_point_for_id(struct greeter_server* server, int32_t touch_id) {
+  struct greeter_touch_point* point;
+  wl_list_for_each(point, &server->touch_points, link) {
+    if (point->touch_id == touch_id) {
+      return point;
+    }
+  }
+  return NULL;
+}
+
+static void handle_cursor_touch_down(struct wl_listener* listener, void* data) {
+  struct greeter_server* server = wl_container_of(listener, server, cursor_touch_down);
+  struct wlr_touch_down_event* event = data;
+  // Touch-down is press-equivalent: reset idle and wake blanked outputs even with no surface hit.
+  note_activity(server);
+  double lx;
+  double ly;
+  wlr_cursor_absolute_to_layout_coords(server->cursor, &event->touch->base, event->x, event->y, &lx, &ly);
+
+  double sx;
+  double sy;
+  struct wlr_surface* surface = surface_at(server, lx, ly, &sx, &sy);
+  if (surface == NULL) {
+    return;
+  }
+
+  wlr_seat_touch_notify_down(server->seat, surface, event->time_msec, event->touch_id, sx, sy);
+  if (wlr_seat_touch_get_point(server->seat, event->touch_id) == NULL) {
+    return;
+  }
+
+  struct greeter_touch_point* point = calloc(1, sizeof(*point));
+  if (point == NULL) {
+    wlr_seat_touch_notify_up(server->seat, event->time_msec, event->touch_id);
+    return;
+  }
+  point->touch_id = event->touch_id;
+  point->ref_lx = lx;
+  point->ref_ly = ly;
+  point->ref_sx = sx;
+  point->ref_sy = sy;
+  wl_list_insert(&server->touch_points, &point->link);
+}
+
+static void handle_cursor_touch_up(struct wl_listener* listener, void* data) {
+  struct greeter_server* server = wl_container_of(listener, server, cursor_touch_up);
+  struct wlr_touch_up_event* event = data;
+  struct greeter_touch_point* point = touch_point_for_id(server, event->touch_id);
+  if (point == NULL) {
+    return;
+  }
+  wlr_seat_touch_notify_up(server->seat, event->time_msec, event->touch_id);
+  wl_list_remove(&point->link);
+  free(point);
+}
+
+static void handle_cursor_touch_motion(struct wl_listener* listener, void* data) {
+  struct greeter_server* server = wl_container_of(listener, server, cursor_touch_motion);
+  struct wlr_touch_motion_event* event = data;
+  struct greeter_touch_point* point = touch_point_for_id(server, event->touch_id);
+  if (point == NULL) {
+    return;
+  }
+
+  double lx;
+  double ly;
+  wlr_cursor_absolute_to_layout_coords(server->cursor, &event->touch->base, event->x, event->y, &lx, &ly);
+  const double sx = point->ref_sx + lx - point->ref_lx;
+  const double sy = point->ref_sy + ly - point->ref_ly;
+  wlr_seat_touch_notify_motion(server->seat, event->time_msec, event->touch_id, sx, sy);
+}
+
+static void handle_cursor_touch_cancel(struct wl_listener* listener, void* data) {
+  struct greeter_server* server = wl_container_of(listener, server, cursor_touch_cancel);
+  struct wlr_touch_cancel_event* event = data;
+  struct wlr_touch_point* seat_point = wlr_seat_touch_get_point(server->seat, event->touch_id);
+  if (seat_point != NULL && seat_point->client != NULL) {
+    wlr_seat_touch_notify_cancel(server->seat, seat_point->client);
+  }
+
+  struct greeter_touch_point* point;
+  struct greeter_touch_point* tmp;
+  wl_list_for_each_safe(point, tmp, &server->touch_points, link) {
+    wl_list_remove(&point->link);
+    free(point);
+  }
+}
+
+static void handle_cursor_touch_frame(struct wl_listener* listener, void* data) {
+  (void)data;
+  struct greeter_server* server = wl_container_of(listener, server, cursor_touch_frame);
+  wlr_seat_touch_notify_frame(server->seat);
+}
+
 static void handle_cursor_motion(struct wl_listener* listener, void* data) {
   struct greeter_server* server = wl_container_of(listener, server, cursor_motion);
   struct wlr_pointer_motion_event* event = data;
+  note_pointer_activity(server);
   wlr_cursor_move(server->cursor, &event->pointer->base, event->delta_x, event->delta_y);
   pointer_focus(server, server->cursor->x, server->cursor->y);
 }
@@ -994,6 +1395,7 @@ static void handle_cursor_motion(struct wl_listener* listener, void* data) {
 static void handle_cursor_motion_absolute(struct wl_listener* listener, void* data) {
   struct greeter_server* server = wl_container_of(listener, server, cursor_motion_absolute);
   struct wlr_pointer_motion_absolute_event* event = data;
+  note_pointer_activity(server);
   wlr_cursor_warp_absolute(server->cursor, &event->pointer->base, event->x, event->y);
   pointer_focus(server, server->cursor->x, server->cursor->y);
 }
@@ -1001,6 +1403,9 @@ static void handle_cursor_motion_absolute(struct wl_listener* listener, void* da
 static void handle_cursor_button(struct wl_listener* listener, void* data) {
   struct greeter_server* server = wl_container_of(listener, server, cursor_button);
   struct wlr_pointer_button_event* event = data;
+  if (event->state == WL_POINTER_BUTTON_STATE_PRESSED) {
+    note_activity(server);
+  }
   pointer_focus(server, server->cursor->x, server->cursor->y);
   wlr_seat_pointer_notify_button(server->seat, event->time_msec, event->button, event->state);
 }
@@ -1008,6 +1413,7 @@ static void handle_cursor_button(struct wl_listener* listener, void* data) {
 static void handle_cursor_axis(struct wl_listener* listener, void* data) {
   struct greeter_server* server = wl_container_of(listener, server, cursor_axis);
   struct wlr_pointer_axis_event* event = data;
+  note_pointer_activity(server);
   wlr_seat_pointer_notify_axis(
       server->seat, event->time_msec, event->orientation, event->delta, event->delta_discrete, event->source,
       event->relative_direction
@@ -1083,6 +1489,9 @@ static void handle_keyboard_key(struct wl_listener* listener, void* data) {
     }
   }
 
+  if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+    note_activity(server);
+  }
   wlr_seat_keyboard_notify_key(server->seat, event->time_msec, event->keycode, event->state);
 }
 
@@ -1202,6 +1611,9 @@ static void handle_new_input(struct wl_listener* listener, void* data) {
     caps |= WL_SEAT_CAPABILITY_POINTER;
     break;
   case WLR_INPUT_DEVICE_TOUCH:
+    wlr_cursor_attach_input_device(server->cursor, device);
+    caps |= WL_SEAT_CAPABILITY_TOUCH;
+    break;
   case WLR_INPUT_DEVICE_TABLET:
     wlr_cursor_attach_input_device(server->cursor, device);
     caps |= WL_SEAT_CAPABILITY_POINTER;
@@ -1432,18 +1844,33 @@ static void cleanup_server_listeners(struct greeter_server* server) {
   remove_listener_if_set(&server->cursor_button);
   remove_listener_if_set(&server->cursor_axis);
   remove_listener_if_set(&server->cursor_frame);
+  remove_listener_if_set(&server->cursor_touch_down);
+  remove_listener_if_set(&server->cursor_touch_up);
+  remove_listener_if_set(&server->cursor_touch_motion);
+  remove_listener_if_set(&server->cursor_touch_cancel);
+  remove_listener_if_set(&server->cursor_touch_frame);
   remove_listener_if_set(&server->request_set_cursor);
   remove_listener_if_set(&server->request_set_selection);
   remove_listener_if_set(&server->session_active);
+
+  struct greeter_touch_point* point;
+  struct greeter_touch_point* tmp;
+  wl_list_for_each_safe(point, tmp, &server->touch_points, link) {
+    wl_list_remove(&point->link);
+    free(point);
+  }
 }
 
 int main(int argc, char** argv) {
   wlr_log_init(WLR_INFO, NULL);
 
   struct greeter_server server = {0};
+  server.idle_timerfd = -1;
   wl_list_init(&server.outputs);
   wl_list_init(&server.keyboards);
+  wl_list_init(&server.touch_points);
   read_greeter_config(&server);
+  clock_gettime(CLOCK_MONOTONIC, &server.last_activity);
 
   server.display = wl_display_create();
   if (server.display == NULL) {
@@ -1530,6 +1957,16 @@ int main(int argc, char** argv) {
   wl_signal_add(&server.cursor->events.axis, &server.cursor_axis);
   server.cursor_frame.notify = handle_cursor_frame;
   wl_signal_add(&server.cursor->events.frame, &server.cursor_frame);
+  server.cursor_touch_down.notify = handle_cursor_touch_down;
+  wl_signal_add(&server.cursor->events.touch_down, &server.cursor_touch_down);
+  server.cursor_touch_up.notify = handle_cursor_touch_up;
+  wl_signal_add(&server.cursor->events.touch_up, &server.cursor_touch_up);
+  server.cursor_touch_motion.notify = handle_cursor_touch_motion;
+  wl_signal_add(&server.cursor->events.touch_motion, &server.cursor_touch_motion);
+  server.cursor_touch_cancel.notify = handle_cursor_touch_cancel;
+  wl_signal_add(&server.cursor->events.touch_cancel, &server.cursor_touch_cancel);
+  server.cursor_touch_frame.notify = handle_cursor_touch_frame;
+  wl_signal_add(&server.cursor->events.touch_frame, &server.cursor_touch_frame);
   server.request_set_cursor.notify = handle_request_set_cursor;
   wl_signal_add(&server.seat->events.request_set_cursor, &server.request_set_cursor);
   server.request_set_selection.notify = handle_request_set_selection;
@@ -1559,6 +1996,30 @@ int main(int argc, char** argv) {
 
   struct wl_event_loop* loop = wl_display_get_event_loop(server.display);
   server.sigchld_source = wl_event_loop_add_signal(loop, SIGCHLD, handle_sigchld, &server);
+  if (server.idle_timeout_sec > 0) {
+    server.idle_timerfd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
+    if (server.idle_timerfd < 0) {
+      wlr_log(WLR_ERROR, "idle timerfd create failed");
+    } else {
+      const struct itimerspec interval = {
+          .it_interval = {.tv_sec = IDLE_POLL_MS / 1000, .tv_nsec = (IDLE_POLL_MS % 1000) * 1000000L},
+          .it_value = {.tv_sec = IDLE_POLL_MS / 1000, .tv_nsec = (IDLE_POLL_MS % 1000) * 1000000L},
+      };
+      if (timerfd_settime(server.idle_timerfd, 0, &interval, NULL) != 0) {
+        wlr_log(WLR_ERROR, "idle timerfd settime failed");
+        close(server.idle_timerfd);
+        server.idle_timerfd = -1;
+      } else {
+        server.idle_timerfd_source =
+            wl_event_loop_add_fd(loop, server.idle_timerfd, WL_EVENT_READABLE, handle_idle_timerfd, &server);
+        if (server.idle_timerfd_source == NULL) {
+          wlr_log(WLR_ERROR, "idle timerfd event source failed");
+          close(server.idle_timerfd);
+          server.idle_timerfd = -1;
+        }
+      }
+    }
+  }
   server.child_argc = argc;
   server.child_argv_ptr = argv;
   schedule_launch(&server);
@@ -1571,6 +2032,12 @@ int main(int argc, char** argv) {
   }
   if (server.sigchld_source != NULL) {
     wl_event_source_remove(server.sigchld_source);
+  }
+  if (server.idle_timerfd_source != NULL) {
+    wl_event_source_remove(server.idle_timerfd_source);
+  }
+  if (server.idle_timerfd >= 0) {
+    close(server.idle_timerfd);
   }
   cleanup_server_listeners(&server);
   wl_display_destroy_clients(server.display);

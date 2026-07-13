@@ -19,6 +19,12 @@ namespace greeter::config {
     std::optional<std::string> outputName;
     std::optional<std::string> outputLayout;
     std::optional<float> outputScale;
+    std::optional<int> outputModeWidth;
+    std::optional<int> outputModeHeight;
+    // Per-output DRM transforms: "NAME:90; NAME2:180" (see compositor parse).
+    std::optional<std::string> outputTransforms;
+
+    std::optional<int> idleTimeoutSec;
 
     std::optional<std::string> cursorTheme;
     std::optional<int> cursorSize;
