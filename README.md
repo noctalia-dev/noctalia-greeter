@@ -298,9 +298,13 @@ sudo ./scripts/setup_greeter_system.sh
 just setup-log-dir
 ```
 
-On systemd (or opentmpfiles), installs also ship `/usr/lib/tmpfiles.d/noctalia-greeter.conf` so the state dir can be recreated with `systemd-tmpfiles --create`, that drop-in hardcodes the `greeter` user; use the setup script when your greetd user differs.
+On systemd (or opentmpfiles), installs also ship `/usr/lib/tmpfiles.d/noctalia-greeter.conf` so the state dir can be recreated with `systemd-tmpfiles --create` — that drop-in hardcodes the `greeter` user; use the setup script when your greetd user differs.
 
-Log: `/var/lib/noctalia-greeter/greeter.log` (override with `NOCTALIA_GREETER_LOG`; `/tmp` is a last-resort fallback only).
+Logging defaults to **stderr** (so greetd / journald / your init can capture it). Timestamps are omitted in that mode. To write a log file instead (and add timestamps), set `NOCTALIA_GREETER_LOG` to a path in the greetd session command, for example:
+
+```toml
+command = "env NOCTALIA_GREETER_LOG=/var/lib/noctalia-greeter/greeter.log /usr/bin/noctalia-greeter-session"
+```
 
 ## Matching Noctalia Shell
 
@@ -395,9 +399,9 @@ command = "env XKB_DEFAULT_LAYOUT=cz /usr/bin/noctalia-greeter-session"
 
 ## Troubleshooting
 
-- **Blank screen** - Check `/var/lib/noctalia-greeter/greeter.log`. Run `just setup-log-dir` or `setup_greeter_system.sh` if the state dir is missing.
+- **Blank screen** - Check greetd / journal logs (stderr by default). If you opted into a file via `NOCTALIA_GREETER_LOG`, check that path. Ensure `/var/lib/noctalia-greeter` exists (`just setup-log-dir` / `setup_greeter_system.sh`).
 - **Wrong greeter size / only one monitor looks right** - Confirm `[output].name` in `greeter.toml` matches a connector from `noctalia-greeter outputs`. Restart greetd after changing it.
-- **Black screen after reboot** - logs survive under `/var/lib/noctalia-greeter/greeter.log` (run `just setup-log-dir` once). Session output also goes there when writable.
+- **Black screen after reboot** - With default logging, inspect the greetd service journal (or your init's capture of the session stdout/stderr).
 - **`Failed to spawn client` / wrong path in greetd config** - `command` must be the full path from `which noctalia-greeter-session` (often `/usr/bin/...` on packaged installs, not `/usr/local/bin/...`).
 - **`WAYLAND_DISPLAY is not set`** - greetd must use `noctalia-greeter-session` (it starts `noctalia-greeter-compositor`). Fix `command` in `/etc/greetd/config.toml`.
 - **Wrong session on startup** - If `[session].default` is set in `greeter.toml`, it wins over last-used `[session].last`. Run `noctalia-greeter sessions` for exact **Name** spelling.

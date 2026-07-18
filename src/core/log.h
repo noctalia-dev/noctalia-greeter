@@ -3,13 +3,13 @@
 #include <format>
 #include <string_view>
 
-// Raw write to every known log path before anything else (survives early crashes).
+// Raw write to stderr (and optional NOCTALIA_GREETER_LOG file) before anything else.
 void emergencyLogBootstrap(int argc, char* argv[]);
 
-// Open persistent log targets (files, syslog). Call once at startup before other logs.
+// Initialize logging. Default: stderr only. File + syslog when NOCTALIA_GREETER_LOG is a path.
 void initLogging();
 
-// Comma-separated list of file paths logging was opened to (empty if none).
+// Comma-separated list of file paths logging was opened to (empty if stderr-only).
 [[nodiscard]] const char* loggingPaths();
 
 // Forward wlroots log lines into stderr and log files.

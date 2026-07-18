@@ -61,16 +61,15 @@ resolve_greeter_user() {
   echo "greeter"
 }
 
-# Portable state/log path setup (OpenRC, runit, systemd, …). Prefer this over
+# Portable state-dir setup (OpenRC, runit, systemd, …). Prefer this over
 # tmpfiles alone — it uses the real greetd session user, not a hardcoded name.
+# Logging defaults to stderr; do not create a log file here.
 ensure_greeter_paths() {
   local greeter_user="${1:-greeter}"
   local state_dir="${NOCTALIA_GREETER_STATE_DIR:-/var/lib/noctalia-greeter}"
 
   mkdir -p "${state_dir}"
   chmod 0750 "${state_dir}"
-  touch "${state_dir}/greeter.log"
-  chmod 0664 "${state_dir}/greeter.log"
 
   if id -u "${greeter_user}" >/dev/null 2>&1; then
     chown -R "${greeter_user}:${greeter_user}" "${state_dir}"

@@ -5,29 +5,32 @@ _session_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 GREETER_BIN="${NOCTALIA_GREETER_BIN:-${_session_dir}/noctalia-greeter}"
 COMPOSITOR_BIN="${NOCTALIA_GREETER_COMPOSITOR_BIN:-${_session_dir}/noctalia-greeter-compositor}"
 
-_resolve_log_file() {
-  if [ -n "${NOCTALIA_GREETER_LOG:-}" ]; then
-    printf '%s' "${NOCTALIA_GREETER_LOG}"
-    return 0
-  fi
-  for _path in \
-    /var/lib/noctalia-greeter/greeter.log \
-    /tmp/noctalia-greeter-greetd.log; do
-    if touch "${_path}" 2>/dev/null; then
-      printf '%s' "${_path}"
-      return 0
-    fi
-  done
-  printf '%s' /tmp/noctalia-greeter-greetd.log
-}
+# File logging is opt-in. Unset / "-" / "none" / "stderr" / "stdout" → leave
+# stdout/stderr alone for greetd / journald / the init system.
+_log_target="${NOCTALIA_GREETER_LOG:-}"
+_file_logging=0
+case "${_log_target}" in
+"" | - | none | NONE | stderr | STDERR | stdout | STDOUT) ;;
+*)
+  _file_logging=1
+  ;;
+esac
 
-LOG_FILE="$(_resolve_log_file)"
-exec >>"${LOG_FILE}" 2>&1
+if [ "${_file_logging}" -eq 1 ]; then
+  if ! touch "${_log_target}" 2>/dev/null; then
+    echo "error: cannot write NOCTALIA_GREETER_LOG=${_log_target}" >&2
+    exit 1
+  fi
+  exec >>"${_log_target}" 2>&1
+  export NOCTALIA_GREETER_LOG="${_log_target}"
+else
+  unset NOCTALIA_GREETER_LOG
+fi
 
 echo "=== noctalia-greeter-session $(date -Iseconds) pid=$$ uid=$(id -u) euid=$(id -u -r 2>/dev/null || id -u) ==="
 echo "GREETER_BIN=${GREETER_BIN}"
 echo "COMPOSITOR_BIN=${COMPOSITOR_BIN}"
-echo "LOG_FILE=${LOG_FILE}"
+echo "NOCTALIA_GREETER_LOG=${NOCTALIA_GREETER_LOG:-stderr (no file)}"
 echo "GREETD_SOCK=${GREETD_SOCK:-unset}"
 
 _pam_runtime="${XDG_RUNTIME_DIR:-unset}"
@@ -52,21 +55,32 @@ if [ ! -x "${GREETER_BIN}" ]; then
 fi
 
 export GREETER_BIN
-export NOCTALIA_GREETER_LOG="${LOG_FILE}"
 export WLR_LOG="${WLR_LOG:-info}"
 
 echo "launch: ${COMPOSITOR_BIN} -- $*"
 if command -v dbus-run-session >/dev/null 2>&1; then
+  if [ "${_file_logging}" -eq 1 ]; then
+    exec dbus-run-session -- env XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" \
+      GREETER_BIN="${GREETER_BIN}" \
+      NOCTALIA_GREETER_LOG="${NOCTALIA_GREETER_LOG}" \
+      WLR_LOG="${WLR_LOG}" \
+      "${COMPOSITOR_BIN}" -- "$@"
+  fi
   exec dbus-run-session -- env XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" \
     GREETER_BIN="${GREETER_BIN}" \
-    NOCTALIA_GREETER_LOG="${NOCTALIA_GREETER_LOG}" \
     WLR_LOG="${WLR_LOG}" \
     "${COMPOSITOR_BIN}" -- "$@"
 fi
 
 echo "warn: dbus-run-session not found; starting compositor without a session bus."
+if [ "${_file_logging}" -eq 1 ]; then
+  exec env XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" \
+    GREETER_BIN="${GREETER_BIN}" \
+    NOCTALIA_GREETER_LOG="${NOCTALIA_GREETER_LOG}" \
+    WLR_LOG="${WLR_LOG}" \
+    "${COMPOSITOR_BIN}" -- "$@"
+fi
 exec env XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" \
   GREETER_BIN="${GREETER_BIN}" \
-  NOCTALIA_GREETER_LOG="${NOCTALIA_GREETER_LOG}" \
   WLR_LOG="${WLR_LOG}" \
   "${COMPOSITOR_BIN}" -- "$@"

@@ -1,5 +1,6 @@
 #include "core/log.h"
 
+#include <cctype>
 #include <cerrno>
 #include <chrono>
 #include <cstdarg>
@@ -23,6 +24,8 @@ namespace {
   std::string g_logPaths;
   bool g_syslogOpen = false;
   bool g_sessionMode = false;
+  bool g_fileLogging = false;
+  bool g_loggingInitialized = false;
 
   void emergencyWrite(int fd, const void* data, std::size_t size) {
     [[maybe_unused]] const ssize_t written = ::write(fd, data, size);
@@ -36,6 +39,32 @@ namespace {
       return true;
     }
     return false;
+  }
+
+  // File logging is opt-in: NOCTALIA_GREETER_LOG must be a real path.
+  // "-", "none", "stderr", "stdout" (and unset) keep stderr-only logging.
+  [[nodiscard]] bool isStderrOnlyLogTarget(const char* value) {
+    if (value == nullptr || value[0] == '\0') {
+      return true;
+    }
+    if (std::strcmp(value, "-") == 0) {
+      return true;
+    }
+
+    std::string lowered;
+    lowered.reserve(std::strlen(value));
+    for (const char* p = value; *p != '\0'; ++p) {
+      lowered.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(*p))));
+    }
+    return lowered == "none" || lowered == "stderr" || lowered == "stdout";
+  }
+
+  [[nodiscard]] const char* configuredLogFilePath() {
+    const char* value = std::getenv("NOCTALIA_GREETER_LOG");
+    if (isStderrOnlyLogTarget(value)) {
+      return nullptr;
+    }
+    return value;
   }
 
   void emergencyAppend(const char* path, const char* text) {
@@ -74,65 +103,20 @@ namespace {
     return true;
   }
 
-  void tryRuntimeLog() {
-    const char* runtimeDir = std::getenv("XDG_RUNTIME_DIR");
-    if (runtimeDir == nullptr || runtimeDir[0] == '\0') {
-      return;
-    }
-    std::string path = std::string(runtimeDir) + "/noctalia-greeter.log";
-    tryOpenLogFile(path.c_str());
-  }
-
-  void tryHomeStateLog() {
-    const char* home = std::getenv("HOME");
-    if (home == nullptr || home[0] == '\0') {
-      return;
-    }
-    std::string path = std::string(home) + "/.local/state/noctalia-greeter/greeter.log";
-    tryOpenLogFile(path.c_str());
-  }
-
-  void tryHomeCacheLog() {
-    const char* home = std::getenv("HOME");
-    if (home == nullptr || home[0] == '\0') {
-      return;
-    }
-    std::string path = std::string(home) + "/.cache/noctalia-greeter.log";
-    tryOpenLogFile(path.c_str());
-  }
-
-  void tryUidLog() {
-    std::string path = "/tmp/noctalia-greeter-" + std::to_string(::getuid()) + ".log";
-    tryOpenLogFile(path.c_str());
-  }
-
   void initLogFiles() {
-    if (!g_logFiles.empty()) {
+    if (g_loggingInitialized) {
+      return;
+    }
+    g_loggingInitialized = true;
+
+    const char* explicitPath = configuredLogFilePath();
+    if (explicitPath == nullptr) {
+      g_fileLogging = false;
       return;
     }
 
-    const char* explicitPath = std::getenv("NOCTALIA_GREETER_LOG");
-    if (explicitPath != nullptr && explicitPath[0] != '\0') {
-      tryOpenLogFile(explicitPath);
-      return;
-    }
-
-    if (!g_sessionMode) {
-      return;
-    }
-
-    tryUidLog();
-    tryHomeCacheLog();
-    tryRuntimeLog();
-
-    static constexpr const char* kCandidates[] = {
-        "/var/lib/noctalia-greeter/greeter.log",
-        "/tmp/noctalia-greeter.log",
-    };
-    for (const char* path : kCandidates) {
-      tryOpenLogFile(path);
-    }
-    tryHomeStateLog();
+    g_fileLogging = true;
+    tryOpenLogFile(explicitPath);
   }
 
   void writeSyslog(std::string_view level, std::string_view message) {
@@ -173,28 +157,9 @@ void emergencyLogBootstrap(int argc, char* argv[]) {
 
   emergencyWrite(STDERR_FILENO, text, line.size());
 
-  std::string uidLog = "/tmp/noctalia-greeter-" + std::to_string(::getuid()) + ".log";
-  emergencyAppend(uidLog.c_str(), text);
-
-  const char* home = std::getenv("HOME");
-  std::string homeLog;
-  if (home != nullptr && home[0] != '\0') {
-    homeLog = std::string(home) + "/.cache/noctalia-greeter.log";
-    emergencyAppend(homeLog.c_str(), text);
-  }
-
-  static constexpr const char* kEmergencyPaths[] = {
-      "/var/lib/noctalia-greeter/greeter.log",
-      "/tmp/noctalia-greeter.log",
-  };
-  for (const char* path : kEmergencyPaths) {
+  // Only touch files when file logging is explicitly configured.
+  if (const char* path = configuredLogFilePath()) {
     emergencyAppend(path, text);
-  }
-
-  const char* runtimeDir = std::getenv("XDG_RUNTIME_DIR");
-  if (runtimeDir != nullptr && runtimeDir[0] != '\0') {
-    std::string runtimePath = std::string(runtimeDir) + "/noctalia-greeter.log";
-    emergencyAppend(runtimePath.c_str(), text);
   }
 }
 
@@ -202,20 +167,19 @@ void initLogging() {
   g_sessionMode = isSessionMode();
   initLogFiles();
 
-  if (g_sessionMode) {
+  // Syslog duplicates journal when greetd already captures stderr; only use it
+  // alongside an explicit log file.
+  if (g_sessionMode && g_fileLogging) {
     openlog("noctalia-greeter", LOG_PID | LOG_NDELAY, LOG_DAEMON);
     g_syslogOpen = true;
   }
 
-  if (!g_logPaths.empty()) {
-    std::fprintf(stderr, "[info] [log] writing to: %s\n", g_logPaths.c_str());
-    std::fflush(stderr);
-  } else if (g_sessionMode) {
-    std::fprintf(
-        stderr,
-        "[warn] [log] no log file opened; check permissions "
-        "on /var/lib/noctalia-greeter/greeter.log\n"
-    );
+  if (g_fileLogging) {
+    if (!g_logPaths.empty()) {
+      std::fprintf(stderr, "[info] [log] writing to: %s\n", g_logPaths.c_str());
+    } else {
+      std::fprintf(stderr, "[warn] [log] NOCTALIA_GREETER_LOG is set but no log file could be opened\n");
+    }
     std::fflush(stderr);
   }
 }
@@ -225,27 +189,19 @@ const char* loggingPaths() { return g_logPaths.c_str(); }
 static void writeLogLine(std::string_view tag, std::string_view level, std::string_view message) {
   initLogFiles();
 
-  const auto now = std::chrono::system_clock::now();
-  const auto timeT = std::chrono::system_clock::to_time_t(now);
-  const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
-
-  std::tm tm{};
-  localtime_r(&timeT, &tm);
-
   std::ostringstream oss;
-  oss
-      << std::put_time(&tm, "%Y-%m-%d %H:%M:%S")
-      << '.'
-      << std::setfill('0')
-      << std::setw(3)
-      << ms.count()
-      << " ["
-      << level
-      << "] ["
-      << tag
-      << "] "
-      << message
-      << '\n';
+  if (g_fileLogging) {
+    const auto now = std::chrono::system_clock::now();
+    const auto timeT = std::chrono::system_clock::to_time_t(now);
+    const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+
+    std::tm tm{};
+    localtime_r(&timeT, &tm);
+
+    oss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S") << '.' << std::setfill('0') << std::setw(3) << ms.count() << ' ';
+  }
+
+  oss << '[' << level << "] [" << tag << "] " << message << '\n';
 
   const std::string line = oss.str();
   std::fputs(line.c_str(), stderr);
@@ -256,7 +212,7 @@ static void writeLogLine(std::string_view tag, std::string_view level, std::stri
     std::fflush(file);
   }
 
-  if (g_sessionMode) {
+  if (g_fileLogging) {
     writeSyslog(level, message);
   }
 }

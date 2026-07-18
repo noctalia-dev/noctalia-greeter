@@ -78,10 +78,6 @@ in
           inherit user group;
           mode = "0750";
         };
-        "/var/lib/noctalia-greeter/greeter.log".f = {
-          inherit user group;
-          mode = "0664";
-        };
       }
       // lib.optionalAttrs (cfg.settings != { }) {
         "/var/lib/noctalia-greeter/greeter.toml".C = {
