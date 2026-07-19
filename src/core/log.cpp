@@ -43,7 +43,7 @@ namespace {
 
   // File logging is opt-in: NOCTALIA_GREETER_LOG must be a real path.
   // "-", "none", "stderr", "stdout" (and unset) keep console logging
-  // (info/debug → stdout, warn/error → stderr).
+  // (info → stdout, debug/warn/error → stderr).
   [[nodiscard]] bool isStderrOnlyLogTarget(const char* value) {
     if (value == nullptr || value[0] == '\0') {
       return true;
@@ -206,7 +206,7 @@ static void writeLogLine(std::string_view tag, std::string_view level, std::stri
   oss << '[' << level << "] [" << tag << "] " << message << '\n';
 
   const std::string line = oss.str();
-  FILE* stream = (level == "error" || level == "warn") ? stderr : stdout;
+  FILE* stream = (level == "info") ? stdout : stderr;
   std::fputs(line.c_str(), stream);
   std::fflush(stream);
 

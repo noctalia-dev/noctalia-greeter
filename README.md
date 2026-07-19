@@ -300,7 +300,7 @@ just setup-log-dir
 
 On systemd (or opentmpfiles), installs also ship `/usr/lib/tmpfiles.d/noctalia-greeter.conf` so the state dir can be recreated with `systemd-tmpfiles --create` — that drop-in hardcodes the `greeter` user; use the setup script when your greetd user differs.
 
-Logging defaults to **stdout/stderr** (info/debug → stdout, warn/error → stderr; no timestamps) so greetd / journald / your init can capture it. To write a log file instead (with timestamps), set `NOCTALIA_GREETER_LOG` to a path in the greetd session command, for example:
+Logging defaults to **stdout/stderr** (info → stdout, debug/warn/error → stderr; no timestamps) so greetd / journald / your init can capture it. To write a log file instead (with timestamps), set `NOCTALIA_GREETER_LOG` to a path in the greetd session command, for example:
 
 ```toml
 command = "env NOCTALIA_GREETER_LOG=/var/lib/noctalia-greeter/greeter.log /usr/bin/noctalia-greeter-session"
