@@ -42,7 +42,8 @@ namespace {
   }
 
   // File logging is opt-in: NOCTALIA_GREETER_LOG must be a real path.
-  // "-", "none", "stderr", "stdout" (and unset) keep stderr-only logging.
+  // "-", "none", "stderr", "stdout" (and unset) keep console logging
+  // (info/debug → stdout, warn/error → stderr).
   [[nodiscard]] bool isStderrOnlyLogTarget(const char* value) {
     if (value == nullptr || value[0] == '\0') {
       return true;
@@ -176,11 +177,12 @@ void initLogging() {
 
   if (g_fileLogging) {
     if (!g_logPaths.empty()) {
-      std::fprintf(stderr, "[info] [log] writing to: %s\n", g_logPaths.c_str());
+      std::fprintf(stdout, "[info] [log] writing to: %s\n", g_logPaths.c_str());
+      std::fflush(stdout);
     } else {
       std::fprintf(stderr, "[warn] [log] NOCTALIA_GREETER_LOG is set but no log file could be opened\n");
+      std::fflush(stderr);
     }
-    std::fflush(stderr);
   }
 }
 
@@ -204,8 +206,9 @@ static void writeLogLine(std::string_view tag, std::string_view level, std::stri
   oss << '[' << level << "] [" << tag << "] " << message << '\n';
 
   const std::string line = oss.str();
-  std::fputs(line.c_str(), stderr);
-  std::fflush(stderr);
+  FILE* stream = (level == "error" || level == "warn") ? stderr : stdout;
+  std::fputs(line.c_str(), stream);
+  std::fflush(stream);
 
   for (FILE* file : g_logFiles) {
     std::fputs(line.c_str(), file);
