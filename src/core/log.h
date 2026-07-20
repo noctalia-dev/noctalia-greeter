@@ -6,7 +6,8 @@
 // Raw write to stderr (and optional NOCTALIA_GREETER_LOG file) before anything else.
 void emergencyLogBootstrap(int argc, char* argv[]);
 
-// Initialize logging. Default: stderr only. File + syslog when NOCTALIA_GREETER_LOG is a path.
+// Initialize logging. Console by default; file when NOCTALIA_GREETER_LOG is a path.
+// Under greetd, also mirrors to syslog for journald.
 void initLogging();
 
 // Comma-separated list of file paths logging was opened to (empty if stderr-only).

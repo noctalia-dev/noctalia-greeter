@@ -5,24 +5,28 @@ _session_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 GREETER_BIN="${NOCTALIA_GREETER_BIN:-${_session_dir}/noctalia-greeter}"
 COMPOSITOR_BIN="${NOCTALIA_GREETER_COMPOSITOR_BIN:-${_session_dir}/noctalia-greeter-compositor}"
 
-# File logging is opt-in. Unset / "-" / "none" / "stderr" / "stdout" → leave
-# stdout/stderr alone for greetd / journald / the init system.
-_log_target="${NOCTALIA_GREETER_LOG:-}"
-_file_logging=0
-case "${_log_target}" in
-"" | - | none | NONE | stderr | STDERR | stdout | STDOUT) ;;
+# Default: redirect to a always-writable /tmp log so wlroots/libseat chatter
+# does not paint the VT. Opt out with NOCTALIA_GREETER_LOG=stderr|stdout|none|-.
+_file_logging=1
+_log_target="/tmp/noctalia-greeter-$(id -u).log"
+case "${NOCTALIA_GREETER_LOG:-}" in
+"" ) ;;
+- | none | NONE | stderr | STDERR | stdout | STDOUT)
+  _file_logging=0
+  ;;
 *)
-  _file_logging=1
+  _log_target="${NOCTALIA_GREETER_LOG}"
   ;;
 esac
 
 if [ "${_file_logging}" -eq 1 ]; then
-  if ! touch "${_log_target}" 2>/dev/null; then
-    echo "error: cannot write NOCTALIA_GREETER_LOG=${_log_target}" >&2
-    exit 1
+  if touch "${_log_target}" 2>/dev/null; then
+    exec >>"${_log_target}" 2>&1
+    export NOCTALIA_GREETER_LOG="${_log_target}"
+  else
+    echo "warn: cannot write ${_log_target}; logging to stderr" >&2
+    unset NOCTALIA_GREETER_LOG
   fi
-  exec >>"${_log_target}" 2>&1
-  export NOCTALIA_GREETER_LOG="${_log_target}"
 else
   unset NOCTALIA_GREETER_LOG
 fi
@@ -55,11 +59,12 @@ if [ ! -x "${GREETER_BIN}" ]; then
 fi
 
 export GREETER_BIN
-export WLR_LOG="${WLR_LOG:-info}"
+# Raise log level with WLR_LOG=info when debugging.
+export WLR_LOG="${WLR_LOG:-error}"
 
 echo "launch: ${COMPOSITOR_BIN} -- $*"
 if command -v dbus-run-session >/dev/null 2>&1; then
-  if [ "${_file_logging}" -eq 1 ]; then
+  if [ -n "${NOCTALIA_GREETER_LOG:-}" ]; then
     exec dbus-run-session -- env XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" \
       GREETER_BIN="${GREETER_BIN}" \
       NOCTALIA_GREETER_LOG="${NOCTALIA_GREETER_LOG}" \
@@ -73,7 +78,7 @@ if command -v dbus-run-session >/dev/null 2>&1; then
 fi
 
 echo "warn: dbus-run-session not found; starting compositor without a session bus."
-if [ "${_file_logging}" -eq 1 ]; then
+if [ -n "${NOCTALIA_GREETER_LOG:-}" ]; then
   exec env XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" \
     GREETER_BIN="${GREETER_BIN}" \
     NOCTALIA_GREETER_LOG="${NOCTALIA_GREETER_LOG}" \

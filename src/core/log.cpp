@@ -41,9 +41,9 @@ namespace {
     return false;
   }
 
-  // File logging is opt-in: NOCTALIA_GREETER_LOG must be a real path.
-  // "-", "none", "stderr", "stdout" (and unset) keep console logging
-  // (info/debug → stdout, warn/error → stderr).
+  // Session wrapper defaults NOCTALIA_GREETER_LOG to /tmp/noctalia-greeter-<uid>.log.
+  // "-", "none", "stderr", "stdout" (or unset when not launched via session) keep
+  // console logging (info/debug → stdout, warn/error → stderr).
   [[nodiscard]] bool isStderrOnlyLogTarget(const char* value) {
     if (value == nullptr || value[0] == '\0') {
       return true;
@@ -168,9 +168,9 @@ void initLogging() {
   g_sessionMode = isSessionMode();
   initLogFiles();
 
-  // Syslog duplicates journal when greetd already captures stderr; only use it
-  // alongside an explicit log file.
-  if (g_sessionMode && g_fileLogging) {
+  // Under greetd, always mirror to syslog so journald sees greeter logs even when
+  // the session wrapper has redirected stdout/stderr off the VT into a file.
+  if (g_sessionMode) {
     openlog("noctalia-greeter", LOG_PID | LOG_NDELAY, LOG_DAEMON);
     g_syslogOpen = true;
   }
@@ -215,9 +215,7 @@ static void writeLogLine(std::string_view tag, std::string_view level, std::stri
     std::fflush(file);
   }
 
-  if (g_fileLogging) {
-    writeSyslog(level, message);
-  }
+  writeSyslog(level, message);
 }
 
 void installWlrLogHandler() {}
