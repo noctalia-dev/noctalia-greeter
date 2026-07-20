@@ -300,17 +300,17 @@ just setup-log-dir
 
 On systemd (or opentmpfiles), installs also ship `/usr/lib/tmpfiles.d/noctalia-greeter.conf` so the state dir can be recreated with `systemd-tmpfiles --create` — that drop-in hardcodes the `greeter` user; use the setup script when your greetd user differs.
 
-Logging defaults to **`/tmp/noctalia-greeter-<uid>.log`** via `noctalia-greeter-session` (redirects stdout/stderr so the brief pre-DRM VT flash stays clean). Greeter messages are also mirrored to **syslog** under greetd for `journalctl`. Override the path with `NOCTALIA_GREETER_LOG=/path`, or use `NOCTALIA_GREETER_LOG=stderr` for console-only debugging (info/debug → stdout, warn/error → stderr; no timestamps):
+Logging defaults to **syslog** under greetd (journald on systemd, metalog/syslog-ng/etc. on OpenRC). The session wrapper parks stdout/stderr so wlroots/libseat chatter does not flash the VT. Override with `NOCTALIA_GREETER_LOG=stderr` for console debugging, or `NOCTALIA_GREETER_LOG=/path` for a log file:
 
 ```toml
 command = "env NOCTALIA_GREETER_LOG=stderr WLR_LOG=info /usr/bin/noctalia-greeter-session"
 ```
 
-For a persistent path under the state dir:
-
 ```toml
 command = "env NOCTALIA_GREETER_LOG=/var/lib/noctalia-greeter/greeter.log /usr/bin/noctalia-greeter-session"
 ```
+
+On systemd, inspect greeter lines with `journalctl -u greetd` (or your greetd unit name) and look for the `noctalia-greeter` syslog identifier.
 
 ## Matching Noctalia Shell
 
@@ -405,9 +405,9 @@ command = "env XKB_DEFAULT_LAYOUT=cz /usr/bin/noctalia-greeter-session"
 
 ## Troubleshooting
 
-- **Blank screen** - Check `/tmp/noctalia-greeter-<uid>.log` (session default) or the path in `NOCTALIA_GREETER_LOG`. With `NOCTALIA_GREETER_LOG=stderr`, inspect the greetd journal. Ensure `/var/lib/noctalia-greeter` exists (`just setup-log-dir` / `setup_greeter_system.sh`).
+- **Blank screen** - Check greetd logs: `journalctl -u greetd` (syslog identifier `noctalia-greeter`) or your system logger. If you set `NOCTALIA_GREETER_LOG` to a path or `stderr`, check that sink instead. Ensure `/var/lib/noctalia-greeter` exists (`just setup-log-dir` / `setup_greeter_system.sh`).
 - **Wrong greeter size / only one monitor looks right** - Confirm `[output].name` in `greeter.toml` matches a connector from `noctalia-greeter outputs`. Restart greetd after changing it.
-- **Black screen after reboot** - Check the greeter log file or greetd journal (`NOCTALIA_GREETER_LOG=stderr`). Confirm the state dir and synced appearance files are present.
+- **Black screen after reboot** - Same as blank screen: greetd/syslog first. Confirm the state dir and synced appearance files are present.
 - **`Failed to spawn client` / wrong path in greetd config** - `command` must be the full path from `which noctalia-greeter-session` (often `/usr/bin/...` on packaged installs, not `/usr/local/bin/...`).
 - **`WAYLAND_DISPLAY is not set`** - greetd must use `noctalia-greeter-session` (it starts `noctalia-greeter-compositor`). Fix `command` in `/etc/greetd/config.toml`.
 - **Wrong session on startup** - If `[session].default` is set in `greeter.toml`, it wins over last-used `[session].last`. Run `noctalia-greeter sessions` for exact **Name** spelling.

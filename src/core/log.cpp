@@ -25,6 +25,7 @@ namespace {
   bool g_syslogOpen = false;
   bool g_sessionMode = false;
   bool g_fileLogging = false;
+  bool g_consoleLogging = true;
   bool g_loggingInitialized = false;
 
   void emergencyWrite(int fd, const void* data, std::size_t size) {
@@ -41,10 +42,8 @@ namespace {
     return false;
   }
 
-  // Session wrapper defaults NOCTALIA_GREETER_LOG to /tmp/noctalia-greeter-<uid>.log.
-  // "-", "none", "stderr", "stdout" (or unset when not launched via session) keep
-  // console logging (info/debug → stdout, warn/error → stderr).
-  [[nodiscard]] bool isStderrOnlyLogTarget(const char* value) {
+  // "-", "none", "stderr", "stdout" mean no log file (console or syslog-only).
+  [[nodiscard]] bool isNonFileLogTarget(const char* value) {
     if (value == nullptr || value[0] == '\0') {
       return true;
     }
@@ -60,12 +59,37 @@ namespace {
     return lowered == "none" || lowered == "stderr" || lowered == "stdout";
   }
 
+  // Explicit console debug: session wrapper keeps NOCTALIA_GREETER_LOG=stderr.
+  [[nodiscard]] bool isExplicitConsoleLogTarget(const char* value) {
+    if (value == nullptr || value[0] == '\0') {
+      return false;
+    }
+    if (std::strcmp(value, "-") == 0) {
+      return true;
+    }
+
+    std::string lowered;
+    lowered.reserve(std::strlen(value));
+    for (const char* p = value; *p != '\0'; ++p) {
+      lowered.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(*p))));
+    }
+    return lowered == "none" || lowered == "stderr" || lowered == "stdout";
+  }
+
   [[nodiscard]] const char* configuredLogFilePath() {
     const char* value = std::getenv("NOCTALIA_GREETER_LOG");
-    if (isStderrOnlyLogTarget(value)) {
+    if (isNonFileLogTarget(value)) {
       return nullptr;
     }
     return value;
+  }
+
+  void ensureSyslog() {
+    if (g_syslogOpen) {
+      return;
+    }
+    openlog("noctalia-greeter", LOG_PID | LOG_NDELAY, LOG_DAEMON);
+    g_syslogOpen = true;
   }
 
   void emergencyAppend(const char* path, const char* text) {
@@ -110,17 +134,26 @@ namespace {
     }
     g_loggingInitialized = true;
 
+    g_sessionMode = isSessionMode();
+    const char* logEnv = std::getenv("NOCTALIA_GREETER_LOG");
     const char* explicitPath = configuredLogFilePath();
-    if (explicitPath == nullptr) {
-      g_fileLogging = false;
-      return;
-    }
 
-    g_fileLogging = true;
-    tryOpenLogFile(explicitPath);
+    if (explicitPath != nullptr) {
+      g_fileLogging = true;
+      tryOpenLogFile(explicitPath);
+      // Under greetd the session wrapper already redirected streams to the file.
+      g_consoleLogging = !g_sessionMode;
+    } else if (g_sessionMode && !isExplicitConsoleLogTarget(logEnv)) {
+      // Default under greetd: syslog only (fds parked by the session wrapper).
+      g_fileLogging = false;
+      g_consoleLogging = false;
+    } else {
+      g_fileLogging = false;
+      g_consoleLogging = true;
+    }
   }
 
-  void writeSyslog(std::string_view level, std::string_view message) {
+  void writeSyslog(std::string_view level, std::string_view tag, std::string_view message) {
     if (!g_syslogOpen) {
       return;
     }
@@ -129,10 +162,12 @@ namespace {
       priority = LOG_ERR;
     } else if (level == "warn") {
       priority = LOG_WARNING;
+    } else if (level == "debug") {
+      priority = LOG_DEBUG;
     }
     syslog(
-        priority, "[%.*s] %.*s", static_cast<int>(level.size()), level.data(), static_cast<int>(message.size()),
-        message.data()
+        priority, "[%.*s] [%.*s] %.*s", static_cast<int>(level.size()), level.data(), static_cast<int>(tag.size()),
+        tag.data(), static_cast<int>(message.size()), message.data()
     );
   }
 } // namespace
@@ -151,35 +186,44 @@ void emergencyLogBootstrap(int argc, char* argv[]) {
   }
   msg << " GREETD_SOCK=" << (std::getenv("GREETD_SOCK") ? std::getenv("GREETD_SOCK") : "unset");
   msg << " XDG_VTNR=" << (std::getenv("XDG_VTNR") ? std::getenv("XDG_VTNR") : "unset");
-  msg << " ===\n";
+  msg << " ===";
 
   const std::string line = msg.str();
-  const char* text = line.c_str();
+  const char* logEnv = std::getenv("NOCTALIA_GREETER_LOG");
+  const bool sessionSyslogOnly =
+      isSessionMode() && configuredLogFilePath() == nullptr && !isExplicitConsoleLogTarget(logEnv);
 
-  emergencyWrite(STDERR_FILENO, text, line.size());
+  if (sessionSyslogOnly) {
+    ensureSyslog();
+    syslog(LOG_INFO, "%s", line.c_str());
+  } else {
+    const std::string withNl = line + '\n';
+    emergencyWrite(STDERR_FILENO, withNl.c_str(), withNl.size());
+  }
 
-  // Only touch files when file logging is explicitly configured.
   if (const char* path = configuredLogFilePath()) {
-    emergencyAppend(path, text);
+    emergencyAppend(path, (line + '\n').c_str());
   }
 }
 
 void initLogging() {
-  g_sessionMode = isSessionMode();
   initLogFiles();
 
-  // Under greetd, always mirror to syslog so journald sees greeter logs even when
-  // the session wrapper has redirected stdout/stderr off the VT into a file.
+  // Under greetd, syslog is the maintainer-facing sink (journald / system logger).
   if (g_sessionMode) {
-    openlog("noctalia-greeter", LOG_PID | LOG_NDELAY, LOG_DAEMON);
-    g_syslogOpen = true;
+    ensureSyslog();
   }
 
   if (g_fileLogging) {
     if (!g_logPaths.empty()) {
-      std::fprintf(stdout, "[info] [log] writing to: %s\n", g_logPaths.c_str());
-      std::fflush(stdout);
-    } else {
+      if (g_consoleLogging) {
+        std::fprintf(stdout, "[info] [log] writing to: %s\n", g_logPaths.c_str());
+        std::fflush(stdout);
+      }
+      if (g_syslogOpen) {
+        syslog(LOG_INFO, "[info] [log] writing to: %s", g_logPaths.c_str());
+      }
+    } else if (g_consoleLogging) {
       std::fprintf(stderr, "[warn] [log] NOCTALIA_GREETER_LOG is set but no log file could be opened\n");
       std::fflush(stderr);
     }
@@ -190,6 +234,9 @@ const char* loggingPaths() { return g_logPaths.c_str(); }
 
 static void writeLogLine(std::string_view tag, std::string_view level, std::string_view message) {
   initLogFiles();
+  if (g_sessionMode && !g_syslogOpen) {
+    ensureSyslog();
+  }
 
   std::ostringstream oss;
   if (g_fileLogging) {
@@ -206,16 +253,19 @@ static void writeLogLine(std::string_view tag, std::string_view level, std::stri
   oss << '[' << level << "] [" << tag << "] " << message << '\n';
 
   const std::string line = oss.str();
-  FILE* stream = (level == "error" || level == "warn") ? stderr : stdout;
-  std::fputs(line.c_str(), stream);
-  std::fflush(stream);
+
+  if (g_consoleLogging) {
+    FILE* stream = (level == "error" || level == "warn") ? stderr : stdout;
+    std::fputs(line.c_str(), stream);
+    std::fflush(stream);
+  }
 
   for (FILE* file : g_logFiles) {
     std::fputs(line.c_str(), file);
     std::fflush(file);
   }
 
-  writeSyslog(level, message);
+  writeSyslog(level, tag, message);
 }
 
 void installWlrLogHandler() {}

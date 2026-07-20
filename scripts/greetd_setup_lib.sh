@@ -63,7 +63,7 @@ resolve_greeter_user() {
 
 # Portable state-dir setup (OpenRC, runit, systemd, …). Prefer this over
 # tmpfiles alone — it uses the real greetd session user, not a hardcoded name.
-# Logging defaults to /tmp via noctalia-greeter-session; do not create a log file here.
+# Logging defaults to syslog via the greeter; do not create a log file here.
 ensure_greeter_paths() {
   local greeter_user="${1:-greeter}"
   local state_dir="${NOCTALIA_GREETER_STATE_DIR:-/var/lib/noctalia-greeter}"

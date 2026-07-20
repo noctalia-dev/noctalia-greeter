@@ -139,9 +139,9 @@ int main(int argc, char* argv[]) {
       kLog.warn("log-test warn line");
       kLog.error("log-test error line");
       std::printf(
-          "Session logging defaults to /tmp/noctalia-greeter-<uid>.log; set NOCTALIA_GREETER_LOG=stderr for console\n"
+          "Under greetd, logs go to syslog by default; set NOCTALIA_GREETER_LOG=stderr or =/path to override\n"
       );
-      return loggingPaths()[0] != '\0' ? 0 : 1;
+      return 0;
     }
     if (std::strcmp(argv[i], "--help") == 0 || std::strcmp(argv[i], "-h") == 0) {
       std::puts(
@@ -165,9 +165,8 @@ int main(int argc, char* argv[]) {
           "Environment:\n"
           "  GREETD_SOCK           Path to greetd Unix socket\n"
           "  WAYLAND_DISPLAY       Wayland display (set by compositor)\n"
-          "  NOCTALIA_GREETER_LOG  Log file path (session default:\n"
-          "                        /tmp/noctalia-greeter-<uid>.log; use -, none,\n"
-          "                        stderr, or stdout for console only)\n"
+          "  NOCTALIA_GREETER_LOG  Under greetd: unset → syslog (fds parked);\n"
+          "                        stderr/none/- → console; /path → log file\n"
           "\n"
           "Greetd example:\n"
           "  command = \"/usr/local/bin/noctalia-greeter-session -- --session "
@@ -194,8 +193,10 @@ int main(int argc, char* argv[]) {
     const char* paths = loggingPaths();
     if (paths[0] != '\0') {
       kLog.info("greetd session: file logs at {}", paths);
+    } else if (std::getenv("NOCTALIA_GREETER_LOG") != nullptr) {
+      kLog.info("greetd session: console logging");
     } else {
-      kLog.info("greetd session: console logging (no file)");
+      kLog.info("greetd session: syslog logging");
     }
     logStartupEnvironment();
   }

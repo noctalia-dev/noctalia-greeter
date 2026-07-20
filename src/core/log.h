@@ -3,14 +3,14 @@
 #include <format>
 #include <string_view>
 
-// Raw write to stderr (and optional NOCTALIA_GREETER_LOG file) before anything else.
+// Early bootstrap line (stderr, syslog, and/or NOCTALIA_GREETER_LOG file).
 void emergencyLogBootstrap(int argc, char* argv[]);
 
-// Initialize logging. Console by default; file when NOCTALIA_GREETER_LOG is a path.
-// Under greetd, also mirrors to syslog for journald.
+// Initialize logging. Under greetd: syslog by default. Optional file via
+// NOCTALIA_GREETER_LOG=/path; console debug via NOCTALIA_GREETER_LOG=stderr.
 void initLogging();
 
-// Comma-separated list of file paths logging was opened to (empty if stderr-only).
+// Comma-separated list of file paths logging was opened to (empty if none).
 [[nodiscard]] const char* loggingPaths();
 
 // Forward wlroots log lines into stderr and log files.
