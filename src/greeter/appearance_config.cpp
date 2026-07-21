@@ -5,7 +5,7 @@
 #include "render/core/color.h"
 
 #include <fstream>
-#include <json.hpp>
+#include <nlohmann/json.hpp>
 
 namespace {
   constexpr Logger kLog("greeter-appearance");

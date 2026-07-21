@@ -47,6 +47,7 @@ sudo pacman -S meson gcc just \
   libglvnd freetype2 fontconfig \
   cairo pango harfbuzz \
   libxkbcommon glib2 \
+  tomlplusplus nlohmann-json stb \
   libwebp librsvg
 ```
 
@@ -60,6 +61,7 @@ sudo dnf install meson gcc-c++ just \
   freetype-devel fontconfig-devel \
   cairo-devel pango-devel harfbuzz-devel \
   libxkbcommon-devel glib2-devel \
+  tomlplusplus-devel json-devel stb_image_resize2-devel \
   libwebp-devel librsvg2-devel
 ```
 
@@ -73,6 +75,7 @@ sudo zypper install meson gcc-c++ just \
   freetype2-devel fontconfig-devel \
   cairo-devel pango-devel harfbuzz-devel \
   libxkbcommon-devel glib2-devel \
+  tomlplusplus-devel nlohmann_json-devel stb-devel \
   libwebp-devel librsvg-devel
 ```
 
@@ -86,6 +89,7 @@ sudo apt install meson g++ just \
   libfreetype-dev libfontconfig-dev \
   libcairo2-dev libpango1.0-dev libharfbuzz-dev \
   libxkbcommon-dev libglib2.0-dev \
+  libtomlplusplus-dev nlohmann-json3-dev libstb-dev \
   libwebp-dev librsvg2-dev
 ```
 
@@ -97,10 +101,11 @@ sudo xbps-install meson ninja pkg-config git \
   wayland-devel wayland-protocols wlroots-devel libepoxy-devel \
   MesaLib-devel libglvnd-devel cairo-devel \
   pango-devel fontconfig-devel freetype-devel harfbuzz-devel \
+  tomlplusplus-devel nlohmann-json-devel stb \
   libxkbcommon-devel libwebp-devel librsvg-devel
 ```
 
-Vendored dependencies, with no system package needed: `nlohmann/json`, `stb`, and `Wuffs`.
+Vendored dependencies, with no system package needed: `Wuffs`.
 
 Dependencies that are vendored by default, with a meson option to
 instead use the system package: `tomlplusplus`

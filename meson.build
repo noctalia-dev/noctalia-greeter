@@ -39,6 +39,8 @@ glib_dep           = dependency('glib-2.0')
 gobject_dep        = dependency('gobject-2.0')
 gio_dep            = dependency('gio-2.0')
 wayland_server_dep = dependency('wayland-server')
+tomlplusplus_dep   = dependency('tomlplusplus')
+nlohmann_dep       = dependency('nlohmann_json')
 wlroots_dep = dependency('wlroots-0.20')
 libinput_dep = dependency('libinput')
 
@@ -54,24 +56,12 @@ if not gles2_dep.found()
   gles2_dep = dependency('epoxy')
 endif
 
-stb_dep = declare_dependency(
-  include_directories: include_directories('third_party/stb', is_system: true),
-)
+# ── System: stb_image_resize2 (header-only) ─────────────────────────────────
+if not cc.has_header('stb/stb_image_resize2.h')
+  error('stb/stb_image_resize2.h not found')
+endif
 
 libwebp_dep = dependency('libwebp', required: true)
-
-nlohmann_dep = declare_dependency(
-  include_directories: include_directories('third_party/nlohmann', is_system: true),
-)
-
-# ── Vendored: tomlplusplus (header-only) ─────────────────────────────────
-if get_option('system_tomlplusplus')
-  tomlplusplus_dep = dependency('tomlplusplus')
-else
-  tomlplusplus_dep = declare_dependency(
-    include_directories: include_directories('third_party/tomlplusplus', is_system: true),
-  )
-endif
 
 # ── Wayland protocol generation ───────────────────────────────────────────────
 wayland_scanner    = find_program('wayland-scanner')
@@ -178,9 +168,6 @@ _greeter_sources = files(
 
 _greeter_inc = [
   include_directories('src'),
-  include_directories('third_party/stb', is_system: true),
-  include_directories('third_party/nlohmann', is_system: true),
-  include_directories('third_party/tomlplusplus', is_system: true),
   include_directories('third_party/wuffs', is_system: true),
 ]
 
@@ -203,7 +190,6 @@ executable('noctalia-greeter',
     glib_dep,
     gobject_dep,
     gio_dep,
-    stb_dep,
     libwebp_dep,
     nlohmann_dep,
     tomlplusplus_dep,

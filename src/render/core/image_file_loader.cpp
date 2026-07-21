@@ -10,7 +10,7 @@
 #include <cstring>
 
 #define STB_IMAGE_RESIZE_IMPLEMENTATION
-#include <stb_image_resize2.h>
+#include <stb/stb_image_resize2.h>
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wexpansion-to-defined"
 #include <librsvg/rsvg.h>
