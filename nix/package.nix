@@ -1,6 +1,7 @@
 {
   lib,
   stdenv,
+  fetchurl,
   meson,
   ninja,
   pkg-config,
@@ -19,10 +20,23 @@
   libwebp,
   glib,
   librsvg,
+  nlohmann_json,
+  tomlplusplus,
+  stb,
   jemalloc,
 }: let
   inherit (builtins) head match readFile;
   version = head (match ".*version: '([^']+)'.*" (readFile ../meson.build));
+  # nixpkgs' stb snapshot predates stb_image_resize2.h. Keep using the system
+  # package, but update its source to the revision the project previously
+  # vendored until nixpkgs updates it.
+  stbWithResize2 = stb.overrideAttrs {
+    version = "0-unstable-2026-03-13";
+    src = fetchurl {
+      url = "https://github.com/nothings/stb/archive/904aa67e1e2d1dec92959df63e700b166d5c1022.tar.gz";
+      hash = "sha256-h32Bx1qTYIJeLm2Ut5PXqa/+l+Lb7pfIP8hWY8JfDCc=";
+    };
+  };
 in
   stdenv.mkDerivation {
     pname = "noctalia-greeter";
@@ -58,6 +72,9 @@ in
       libwebp
       glib
       librsvg
+      nlohmann_json
+      tomlplusplus
+      stbWithResize2
     ];
 
 
