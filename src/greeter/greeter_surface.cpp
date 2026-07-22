@@ -38,7 +38,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
-#include <json.hpp>
+#include <nlohmann/json.hpp>
 #include <linux/input-event-codes.h>
 #include <pwd.h>
 #include <sys/types.h>

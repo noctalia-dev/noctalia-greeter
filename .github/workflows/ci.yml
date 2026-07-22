@@ -44,6 +44,7 @@ jobs:
             freetype2 fontconfig \
             cairo pango harfbuzz \
             librsvg libxkbcommon glib2 \
+            tomlplusplus nlohmann-json stb \
             libwebp jemalloc
 
       - uses: actions/checkout@v4
