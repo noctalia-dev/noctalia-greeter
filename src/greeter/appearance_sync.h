@@ -18,6 +18,7 @@ namespace greeter::appearance {
   inline constexpr const char* kGreeterTomlFileName = "greeter.toml";
   inline constexpr const char* kWallpaperBaseName = "wallpaper";
   inline constexpr const char* kSyncedSchemeDisplayName = "Synced";
+  inline constexpr const char* kSyncedBlurSchemeDisplayName = "Synced (Blur)";
   inline constexpr const char* kSyncedDataDirEnv = "NOCTALIA_GREETER_STATE_DIR";
 
   [[nodiscard]] std::filesystem::path syncedDataDirectory();
