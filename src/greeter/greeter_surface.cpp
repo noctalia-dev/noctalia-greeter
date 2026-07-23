@@ -1633,7 +1633,20 @@ std::optional<std::size_t> GreeterSurface::findSchemeIndex(const std::string_vie
   return std::nullopt;
 }
 
+void GreeterSurface::setBoundOutputName(std::string outputName) {
+  if (m_boundOutputName == outputName) {
+    return;
+  }
+  m_boundOutputName = std::move(outputName);
+  // Re-resolve synced wallpaper for this connector after binding.
+  if (isSyncedScheme(m_selectedScheme)) {
+    applyScheme(m_selectedScheme);
+    requestLayout();
+  }
+}
+
 void GreeterSurface::clearWallpaperDisplay() {
+
   m_hasSyncedWallpaper = false;
   m_wallpaperPath.clear();
   m_wallpaperFillMode = WallpaperFillMode::Crop;
@@ -1660,9 +1673,10 @@ void GreeterSurface::applyScheme(const std::size_t schemeIndex) {
 
     setPalette(m_syncedAppearance->palette);
     Style::setCornerRadiusScale(m_syncedAppearance->cornerRadiusScale);
-    m_wallpaperPath = m_syncedAppearance->wallpaperPath;
-    m_wallpaperFillMode = m_syncedAppearance->wallpaperFillMode;
-    m_wallpaperFillColor = m_syncedAppearance->wallpaperFillColor;
+    const auto wallpaper = m_syncedAppearance->wallpaperForOutput(m_boundOutputName);
+    m_wallpaperPath = wallpaper.path;
+    m_wallpaperFillMode = wallpaper.fillMode;
+    m_wallpaperFillColor = wallpaper.fillColor;
     m_hasSyncedWallpaper = !m_wallpaperPath.empty();
     m_wallpaperDirty = true;
     return;

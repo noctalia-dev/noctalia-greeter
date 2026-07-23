@@ -43,6 +43,7 @@ public:
   void initialize(RenderContext* context);
 
   void setWindow(GreeterWindow* window);
+  void setBoundOutputName(std::string outputName);
   void setGreetdClient(GreetdClient* client);
   void setUsername(const std::string& username);
   void setOnExitRequested(std::function<void()> callback);
@@ -229,6 +230,7 @@ private:
   TextureHandle m_headerAvatarTexture{};
   TextureHandle m_wallpaperTexture{};
   std::string m_loadedHeaderAvatarPath;
+  std::string m_boundOutputName;
   std::string m_wallpaperPath;
   WallpaperFillMode m_wallpaperFillMode = WallpaperFillMode::Crop;
   Color m_wallpaperFillColor = rgba(0.0f, 0.0f, 0.0f, 0.0f);

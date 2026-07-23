@@ -251,6 +251,7 @@ void Greeter::syncOutputWindows() {
 
     const std::size_t index = m_views.size();
     view.window->bindOutput(targets[index]->output);
+    view.surface->setBoundOutputName(targets[index]->name);
     kLog.info("greeter view for output '{}'", targets[index]->name.empty() ? "?" : targets[index]->name.c_str());
 
     if (!m_views.empty()) {
@@ -275,6 +276,7 @@ void Greeter::syncOutputWindows() {
 
   for (std::size_t i = 0; i < targets.size(); ++i) {
     m_views[i].window->bindOutput(targets[i]->output);
+    m_views[i].surface->setBoundOutputName(targets[i]->name);
     m_views[i].window->matchOutputLogicalSize();
     if (m_sceneReady) {
       m_views[i].window->setSceneReady(true);
