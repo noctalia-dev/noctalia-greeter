@@ -98,6 +98,9 @@ private:
   void toggleSchemeMenu();
   void closeMenus();
   void closeMenusAndRestoreFocus();
+  // Password field while the password step is up, else null. Selector menus hand
+  // focus back here so typing can resume without a manual Shift+Tab.
+  [[nodiscard]] InputArea* menuReturnFocusTarget() const;
   void selectSession(std::size_t index);
   void selectScheme(std::size_t index);
   void runBackAction();
