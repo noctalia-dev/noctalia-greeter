@@ -249,7 +249,10 @@ void GlesRenderBackend::makeCurrent(RenderTarget& target) {
 void GlesRenderBackend::beginFrame(RenderTarget& target) {
   makeCurrent(target);
 
-  setViewport(target.bufferWidth(), target.bufferHeight());
+  m_bufferWidth = target.bufferWidth();
+  m_bufferHeight = target.bufferHeight();
+
+  setViewport(m_bufferWidth, m_bufferHeight);
   setBlendMode(RenderBlendMode::PremultipliedAlpha);
   disableScissor();
   clear(rgba(0.0f, 0.0f, 0.0f, 0.0f));
@@ -432,8 +435,47 @@ void GlesRenderBackend::drawWallpaper(
     WallpaperSourceKind sourceKind2, TextureId texture2, const Color& sourceColor2, float surfaceWidth,
     float surfaceHeight, float width, float height, float imageWidth1, float imageHeight1, float imageWidth2,
     float imageHeight2, float progress, float fillMode, const TransitionParams& params, const Color& fillColor,
-    const Mat3& transform
+    const Mat3& transform, float blurRadius, const Color& tintColor
 ) {
+  if (blurRadius > 0.0f) {
+    const std::uint32_t targetWidth = m_bufferWidth > 0 ? m_bufferWidth : static_cast<std::uint32_t>(surfaceWidth);
+    const std::uint32_t targetHeight = m_bufferHeight > 0 ? m_bufferHeight : static_cast<std::uint32_t>(surfaceHeight);
+    const std::uint32_t fbWidth = std::max(1u, targetWidth / 4);
+    const std::uint32_t fbHeight = std::max(1u, targetHeight / 4);
+
+    auto fb1 = createFramebuffer(fbWidth, fbHeight);
+    auto fb2 = createFramebuffer(fbWidth, fbHeight);
+
+    if (fb1 != nullptr && fb2 != nullptr && fb1->valid() && fb2->valid()) {
+      bindFramebuffer(*fb1);
+      setViewport(fbWidth, fbHeight);
+      clear(rgba(0.0f, 0.0f, 0.0f, 0.0f));
+
+      m_wallpaperProgram.ensureInitialized();
+      m_wallpaperProgram.draw(
+          transition, sourceKind1, texture1, sourceColor1, sourceKind2, texture2, sourceColor2, surfaceWidth,
+          surfaceHeight, width, height, imageWidth1, imageHeight1, imageWidth2, imageHeight2, progress, fillMode,
+          params, fillColor, transform
+      );
+
+      bindFramebuffer(*fb2);
+      setViewport(fbWidth, fbHeight);
+      clear(rgba(0.0f, 0.0f, 0.0f, 0.0f));
+      drawFramebufferBlur(fb1->colorTexture(), fbWidth, fbHeight, 1.0f, 0.0f, blurRadius);
+
+      bindDefaultFramebuffer();
+      setViewport(targetWidth, targetHeight);
+      drawFramebufferBlur(fb2->colorTexture(), fbWidth, fbHeight, 0.0f, 1.0f, blurRadius);
+
+      if (tintColor.a > 0.0f) {
+        setBlendMode(RenderBlendMode::StraightAlpha);
+        drawFullscreenTint(tintColor);
+        setBlendMode(RenderBlendMode::PremultipliedAlpha);
+      }
+      return;
+    }
+  }
+
   m_wallpaperProgram.ensureInitialized();
   m_wallpaperProgram.draw(
       transition, sourceKind1, texture1, sourceColor1, sourceKind2, texture2, sourceColor2, surfaceWidth, surfaceHeight,
