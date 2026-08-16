@@ -2007,14 +2007,33 @@ void GreeterSurface::closeMenus() {
   clearSchemeMenu();
 }
 
+InputArea* GreeterSurface::menuReturnFocusTarget() const {
+  // The session and scheme selectors are a detour from the only control that
+  // matters on the password step, and the pointer path cannot infer this from the
+  // previous focus: a click focuses the selector before its handler runs, so
+  // "where focus was" is already the selector itself. Naming the password field
+  // outright keeps keyboard, focus-ring and pointer opens behaving alike.
+  if (!m_passwordVisible || m_passwordField == nullptr) {
+    return nullptr;
+  }
+  return m_passwordField->inputArea();
+}
+
 void GreeterSurface::closeMenusAndRestoreFocus() {
   InputArea* owner = m_userMenuOpen ? m_userSelectArea
       : m_sessionMenuOpen           ? m_sessionSelectArea
       : m_schemeMenuOpen            ? m_schemeSelectArea
                                     : nullptr;
+  InputArea* target = owner;
+  // The user menu belongs to the step before the password field exists.
+  if (m_sessionMenuOpen || m_schemeMenuOpen) {
+    if (InputArea* passwordArea = menuReturnFocusTarget(); passwordArea != nullptr) {
+      target = passwordArea;
+    }
+  }
   closeMenus();
-  if (owner != nullptr) {
-    m_inputDispatcher.setFocus(owner);
+  if (target != nullptr) {
+    m_inputDispatcher.setFocus(target);
   }
   requestLayout();
 }
@@ -2028,8 +2047,12 @@ void GreeterSurface::selectSession(std::size_t index) {
   savePreferences();
   m_sessionMenuOpen = false;
   m_menuHighlight = -1;
-  if (m_sessionSelectArea != nullptr) {
-    m_inputDispatcher.setFocus(m_sessionSelectArea);
+  InputArea* sessionFocus = menuReturnFocusTarget();
+  if (sessionFocus == nullptr) {
+    sessionFocus = m_sessionSelectArea;
+  }
+  if (sessionFocus != nullptr) {
+    m_inputDispatcher.setFocus(sessionFocus);
   }
   notifyStateChanged();
   commitImmediateFrame(true);
@@ -2044,8 +2067,12 @@ void GreeterSurface::selectScheme(std::size_t index) {
   savePreferences();
   m_schemeMenuOpen = false;
   m_menuHighlight = -1;
-  if (m_schemeSelectArea != nullptr) {
-    m_inputDispatcher.setFocus(m_schemeSelectArea);
+  InputArea* schemeFocus = menuReturnFocusTarget();
+  if (schemeFocus == nullptr) {
+    schemeFocus = m_schemeSelectArea;
+  }
+  if (schemeFocus != nullptr) {
+    m_inputDispatcher.setFocus(schemeFocus);
   }
   notifyStateChanged();
   commitImmediateFrame(true);
