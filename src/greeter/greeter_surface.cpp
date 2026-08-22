@@ -6,8 +6,8 @@
 #include "core/log.h"
 #include "core/resource_paths.h"
 #include "greeter/appearance_config.h"
-#include "greeter/greeter_config_store.h"
 #include "greeter/appearance_sync.h"
+#include "greeter/greeter_config_store.h"
 #include "greeter/greeter_preferences.h"
 #include "greeter/greeter_sessions.h"
 #include "greeter/greeter_window.h"
@@ -1174,9 +1174,7 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
         }
     );
     m_configErrorHeading->setPosition(bannerX + padding, bannerY + padding);
-    m_configErrorLabel->setPosition(
-        bannerX + padding, bannerY + padding + m_configErrorHeading->height() + gap
-    );
+    m_configErrorLabel->setPosition(bannerX + padding, bannerY + padding + m_configErrorHeading->height() + gap);
   }
 
   syncHeaderUserAvatar(*renderer, headerGlyphSize, panelX, panelWidth, headerY);
@@ -2132,11 +2130,15 @@ void GreeterSurface::rebuildFocusRing() {
   if (m_showFirmwareButton && m_firmwareButton != nullptr && m_firmwareButton->inputArea() != nullptr) {
     m_focusRing.push_back({m_firmwareButton->inputArea(), []() { power::rebootToFirmwareSetup(); }});
   }
-  if (m_showRebootButton && power::hasSyncedAction("reboot") && m_rebootButton != nullptr
+  if (m_showRebootButton
+      && power::hasSyncedAction("reboot")
+      && m_rebootButton != nullptr
       && m_rebootButton->inputArea() != nullptr) {
     m_focusRing.push_back({m_rebootButton->inputArea(), []() { power::reboot(); }});
   }
-  if (m_showShutdownButton && power::hasSyncedAction("shutdown") && m_shutdownButton != nullptr
+  if (m_showShutdownButton
+      && power::hasSyncedAction("shutdown")
+      && m_shutdownButton != nullptr
       && m_shutdownButton->inputArea() != nullptr) {
     m_focusRing.push_back({m_shutdownButton->inputArea(), []() { power::powerOff(); }});
   }
