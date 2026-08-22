@@ -243,6 +243,7 @@ void Greeter::syncOutputWindows() {
     View view;
     view.surface = std::make_unique<GreeterSurface>();
     view.surface->setGreetdClient(&m_greetdClient);
+    view.surface->setAutoLoginAllowed(m_views.empty());
     view.surface->setOnExitRequested([this]() { m_exitRequested = true; });
     view.surface->setOnStateChanged([this](GreeterSurface* source) { syncStateFrom(source); });
     view.surface->initialize(m_renderContext.get());

@@ -20,9 +20,8 @@ namespace {
 
   void recordParseError(const std::filesystem::path& path, const toml::parse_error& error) {
     const auto source = error.source();
-    const auto existing = std::ranges::find_if(g_diagnostics, [&path](const auto& diagnostic) {
-      return diagnostic.path == path;
-    });
+    const auto existing =
+        std::ranges::find_if(g_diagnostics, [&path](const auto& diagnostic) { return diagnostic.path == path; });
     if (existing != g_diagnostics.end()) {
       return;
     }
@@ -87,7 +86,9 @@ namespace {
     return key == "layout" || key == "variant" || key == "options" || key == "numlock";
   }
 
-  [[nodiscard]] bool isKnownAuthKey(std::string_view key) { return key == "allow_empty_password"; }
+  [[nodiscard]] bool isKnownAuthKey(std::string_view key) {
+    return key == "allow_empty_password" || key == "autologin";
+  }
 
   [[nodiscard]] std::optional<std::string> stringValue(const toml::node& node) {
     if (const auto value = node.value<std::string>()) {
@@ -334,7 +335,11 @@ namespace {
             continue;
           }
           if (const auto value = entryNode.value<bool>()) {
-            config.authAllowEmptyPassword = *value;
+            if (entryView == "allow_empty_password") {
+              config.authAllowEmptyPassword = *value;
+            } else {
+              config.authAutoLogin = *value;
+            }
           }
         }
       }
@@ -551,6 +556,13 @@ namespace {
     if (config.authAllowEmptyPassword.has_value()) {
       toml::table auth;
       auth.insert_or_assign("allow_empty_password", *config.authAllowEmptyPassword);
+      if (config.authAutoLogin.has_value()) {
+        auth.insert_or_assign("autologin", *config.authAutoLogin);
+      }
+      root.insert("auth", std::move(auth));
+    } else if (config.authAutoLogin.has_value()) {
+      toml::table auth;
+      auth.insert_or_assign("autologin", *config.authAutoLogin);
       root.insert("auth", std::move(auth));
     }
 
@@ -797,7 +809,7 @@ namespace greeter::config {
     out << "# [appearance.wallpapers.<connector>] per-output wallpaper overrides\n";
     out << "# [output] name/layout/scale/scales/width/height/transforms, [idle] timeout, [cursor] theme/size/path\n";
     out << "# [keyboard] layout/variant/options/numlock\n";
-    out << "# [auth] allow_empty_password (bool, default false; enables fingerprint/smartcard PAM auth)\n";
+    out << "# [auth] allow_empty_password, autologin (bool; autologin requires [user].default)\n";
     out << '\n';
     out << formatToml(table);
 

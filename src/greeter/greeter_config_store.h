@@ -70,6 +70,7 @@ namespace greeter::config {
     std::optional<bool> keyboardNumlock;
 
     std::optional<bool> authAllowEmptyPassword;
+    std::optional<bool> authAutoLogin;
   };
 
   // Sync + UI mutable file (sync.toml). Never managed by Nix. Loses to greeter.toml.
