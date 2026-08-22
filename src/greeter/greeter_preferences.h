@@ -23,7 +23,12 @@ namespace greeter {
 
   struct GreeterPreferences {
     std::optional<std::string> defaultSession;
+    bool showSessionSelector = true;
     std::optional<std::string> defaultUser;
+    bool showThemeSelector = true;
+    bool showShutdownButton = true;
+    bool showRebootButton = true;
+    bool showFirmwareButton = true;
     std::optional<std::string> session;
     std::optional<std::string> scheme;
     std::optional<std::string> output;

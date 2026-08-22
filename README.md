@@ -238,6 +238,20 @@ Optional default session (must match a name from the session picker, e.g. `niri`
 command = "/usr/bin/noctalia-greeter-session -- --session niri"
 ```
 
+To hide the session picker, set `ui.show_session_selector = false` in `greeter.toml`.
+The selected session still follows CLI default, configured default, and the last
+session from `sync.toml`; if none is available, the first discovered session is used.
+
+Individual UI controls can be hidden under `[ui]`; omitted options default to `true`:
+
+```toml
+[ui]
+show_theme_selector = false
+show_shutdown_button = false
+show_reboot_button = true
+show_firmware_button = true
+```
+
 List valid session names:
 
 ```sh
