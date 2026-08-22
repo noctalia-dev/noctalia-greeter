@@ -13,6 +13,18 @@
 [session]
 # Session Name from `noctalia-greeter sessions` (picker label, not .desktop id).
 default = "niri"
+# Set false to hide the session picker. The CLI default, this default, or the
+# last session from sync.toml is still used; if none is available, the first
+# discovered session is started.
+show_selector = true
+
+[ui]
+# All UI controls below are shown by default when omitted.
+show_session_selector = true
+show_theme_selector = true
+show_shutdown_button = true
+show_reboot_button = true
+show_firmware_button = true
 
 [user]
 # Opens the password step for this account on startup.

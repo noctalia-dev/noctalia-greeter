@@ -144,6 +144,8 @@ private:
   void reconcileKeyboardFocus();
   [[nodiscard]] bool ownsInputArea(const InputArea* area) const;
   [[nodiscard]] bool showsUserDropdown() const noexcept;
+  [[nodiscard]] bool showsSessionSelector() const noexcept;
+  [[nodiscard]] bool showsThemeSelector() const noexcept;
   void savePreferences() const;
   void buildSchemeNames();
   void applyScheme(std::size_t schemeIndex);
@@ -206,6 +208,11 @@ private:
   bool m_canRebootToFirmware = false;
 
   bool m_allowEmptyPassword = false;
+  bool m_showSessionSelector = true;
+  bool m_showThemeSelector = true;
+  bool m_showShutdownButton = true;
+  bool m_showRebootButton = true;
+  bool m_showFirmwareButton = true;
 
   // greetd replies in request order, so m_pendingReplies (a FIFO of these) tells
   // which request each reply answers.

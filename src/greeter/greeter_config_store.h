@@ -37,10 +37,17 @@ namespace greeter::config {
   // Full declarative greeter.toml. UI and Sync never write this file.
   struct GreeterConfigFile {
     std::optional<std::string> sessionDefault;
+    std::optional<bool> sessionShowSelector;
     // Legacy only: migrated into sync.toml; stripped on greeter.toml write.
     std::optional<std::string> sessionLast;
 
     std::optional<std::string> userDefault;
+
+    std::optional<bool> uiShowThemeSelector;
+    std::optional<bool> uiShowSessionSelector;
+    std::optional<bool> uiShowShutdownButton;
+    std::optional<bool> uiShowRebootButton;
+    std::optional<bool> uiShowFirmwareButton;
 
     // Declarative scheme (overrides sync.toml last scheme when set).
     std::optional<std::string> appearanceScheme;
