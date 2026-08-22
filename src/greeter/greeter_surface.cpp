@@ -2216,12 +2216,18 @@ void GreeterSurface::rebuildFocusRing() {
       && m_firmwareButton->visible()) {
     m_focusRing.push_back({m_firmwareButton->inputArea(), []() { power::rebootToFirmwareSetup(); }});
   }
-  if (m_showRebootButton && power::hasSyncedAction("reboot") && m_rebootButton != nullptr
-      && m_rebootButton->inputArea() != nullptr && m_rebootButton->visible()) {
+  if (m_showRebootButton
+      && power::hasSyncedAction("reboot")
+      && m_rebootButton != nullptr
+      && m_rebootButton->inputArea() != nullptr
+      && m_rebootButton->visible()) {
     m_focusRing.push_back({m_rebootButton->inputArea(), []() { power::reboot(); }});
   }
-  if (m_showShutdownButton && power::hasSyncedAction("shutdown") && m_shutdownButton != nullptr
-      && m_shutdownButton->inputArea() != nullptr && m_shutdownButton->visible()) {
+  if (m_showShutdownButton
+      && power::hasSyncedAction("shutdown")
+      && m_shutdownButton != nullptr
+      && m_shutdownButton->inputArea() != nullptr
+      && m_shutdownButton->visible()) {
     m_focusRing.push_back({m_shutdownButton->inputArea(), []() { power::powerOff(); }});
   }
 

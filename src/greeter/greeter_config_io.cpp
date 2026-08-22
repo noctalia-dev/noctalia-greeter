@@ -976,7 +976,8 @@ namespace greeter::config {
     out << "# and output layout/transforms when not set here. Session power actions/menu entries are\n";
     out << "# Sync-only (sync.toml [session.power]/[[session.actions]]) and are not settable here.\n";
     out << "# [session] default, show_selector, [user] default\n";
-    out << "# [ui] show_session_selector, show_theme_selector, show_shutdown_button, show_reboot_button, show_firmware_button\n";
+    out << "# [ui] show_session_selector, show_theme_selector, show_shutdown_button, show_reboot_button, "
+           "show_firmware_button\n";
     out << "# [appearance] scheme, password_style, hide_logo, power_buttons_position, scheme_selector_position, "
            "theme_mode, corner_radius_scale, font_family\n";
     out << "# [appearance.palette] full color role table, [appearance.wallpaper] path/fill_mode/fill_color\n";
