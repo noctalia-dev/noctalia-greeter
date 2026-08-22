@@ -48,6 +48,22 @@ After installation:
 - [Set up optional Sync with Noctalia](docs/user/sync.md)
 - [Troubleshoot a login or display problem](docs/user/troubleshooting.md)
 
+### UI controls
+
+To hide the session picker, set `ui.show_session_selector = false` in `greeter.toml`.
+The selected session still follows CLI default, configured default, and the last
+session from `sync.toml`; if none is available, the first discovered session is used.
+
+Individual UI controls can be hidden under `[ui]`; omitted options default to `true`:
+
+```toml
+[ui]
+show_theme_selector = false
+show_shutdown_button = false
+show_reboot_button = true
+show_firmware_button = true
+```
+
 ## Scope
 
 Noctalia Greeter is a **display/login greeter** for greetd. It handles user/session selection and authentication UI.
