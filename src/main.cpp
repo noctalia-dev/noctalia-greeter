@@ -101,7 +101,9 @@ int main(int argc, char* argv[]) {
       if (!output.done || output.name.empty()) {
         continue;
       }
-      std::printf("%s\n", output.name.c_str());
+      std::printf(
+          "%s - %s - %s - %s\n", output.name.c_str(), output.make.c_str(), output.model.c_str(), output.serial.c_str()
+      );
       any = true;
     }
     if (!any) {
@@ -153,7 +155,7 @@ int main(int argc, char* argv[]) {
           "\n"
           "Commands:\n"
           "  sessions              List available session names and exit\n"
-          "  outputs               List Wayland connector names and exit\n"
+          "  outputs               List Wayland output identities and exit\n"
           "\n"
           "Options:\n"
           "  -h, --help            Show this help message\n"

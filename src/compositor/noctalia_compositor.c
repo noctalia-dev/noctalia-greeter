@@ -12,9 +12,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <syslog.h>
 #include <sys/timerfd.h>
 #include <sys/wait.h>
+#include <syslog.h>
 #include <time.h>
 #include <unistd.h>
 #include <wayland-server-core.h>
@@ -33,6 +33,7 @@
 #include <wlr/types/wlr_keyboard.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_output_layout.h>
+#include <wlr/types/wlr_output_management_v1.h>
 #include <wlr/types/wlr_pointer.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_seat.h>
@@ -233,6 +234,7 @@ struct greeter_server {
   struct greeter_output_placement output_placements[16];
   size_t output_placement_count;
   struct wlr_fractional_scale_manager_v1* fractional_scale;
+  struct wlr_output_manager_v1* output_manager;
   bool shutting_down;
 };
 
@@ -684,7 +686,7 @@ notify_surface_scale(struct greeter_server* server, struct wlr_surface* surface,
 
 static bool use_all_outputs(const struct greeter_server* server) { return server->preferred_output[0] == '\0'; }
 
-static struct greeter_output* output_by_name(struct greeter_server* server, const char* name) {
+static struct greeter_output* output_by_connector(struct greeter_server* server, const char* name) {
   struct greeter_output* output;
   wl_list_for_each(output, &server->outputs, link) {
     if (strcmp(output->wlr_output->name, name) == 0) {
@@ -692,6 +694,52 @@ static struct greeter_output* output_by_name(struct greeter_server* server, cons
     }
   }
   return NULL;
+}
+
+static bool contains_output_token(const char* value, const char* token) {
+  if (value == NULL || value[0] == '\0' || token == NULL || token[0] == '\0') {
+    return false;
+  }
+
+  const size_t token_len = strlen(token);
+  const char* match = value;
+  while ((match = strstr(match, token)) != NULL) {
+    const bool starts_token = match == value || isspace((unsigned char)match[-1]);
+    const char after = match[token_len];
+    const bool ends_token = after == '\0' || isspace((unsigned char)after);
+    if (starts_token && ends_token) {
+      return true;
+    }
+    match += token_len;
+  }
+  return false;
+}
+
+static bool output_matches_selector(const struct wlr_output* output, const char* selector) {
+  return strcmp(output->name, selector) == 0
+      || contains_output_token(output->description, selector)
+      || contains_output_token(output->make, selector)
+      || contains_output_token(output->model, selector)
+      || contains_output_token(output->serial, selector);
+}
+
+static struct greeter_output* output_by_selector(struct greeter_server* server, const char* selector) {
+  struct greeter_output* result = NULL;
+  struct greeter_output* output;
+  wl_list_for_each(output, &server->outputs, link) {
+    if (!output_matches_selector(output->wlr_output, selector)) {
+      continue;
+    }
+    if (result != NULL) {
+      wlr_log(WLR_INFO, "output selector '%s' is ambiguous; using all outputs", selector);
+      return NULL;
+    }
+    result = output;
+  }
+  if (result == NULL) {
+    wlr_log(WLR_INFO, "output selector '%s' not connected; using all outputs", selector);
+  }
+  return result;
 }
 
 static bool any_output_active(const struct greeter_server* server) {
@@ -702,6 +750,24 @@ static bool any_output_active(const struct greeter_server* server) {
     }
   }
   return false;
+}
+
+static void publish_output_configuration(struct greeter_server* server) {
+  if (server->output_manager == NULL) {
+    return;
+  }
+  struct wlr_output_configuration_v1* config = wlr_output_configuration_v1_create();
+  if (config == NULL) {
+    return;
+  }
+  struct greeter_output* output;
+  wl_list_for_each(output, &server->outputs, link) {
+    struct wlr_output_configuration_head_v1* head = wlr_output_configuration_head_v1_create(config, output->wlr_output);
+    if (head != NULL) {
+      head->state.enabled = output->active;
+    }
+  }
+  wlr_output_manager_v1_set_configuration(server->output_manager, config);
 }
 
 static int compare_greeter_output_ptr(const void* a, const void* b) {
@@ -783,7 +849,7 @@ static bool layout_output_at(struct greeter_output* output, int layout_x, int la
 static void layout_outputs_from_config(struct greeter_server* server) {
   for (size_t i = 0; i < server->output_placement_count; ++i) {
     const struct greeter_output_placement* cfg = &server->output_placements[i];
-    struct greeter_output* output = output_by_name(server, cfg->name);
+    struct greeter_output* output = output_by_connector(server, cfg->name);
     if (output == NULL) {
       wlr_log(WLR_INFO, "output_layout: '%s' not connected", cfg->name);
       continue;
@@ -1205,7 +1271,7 @@ static void warp_cursor_to_output_center(struct greeter_server* server, struct g
 
 static void warp_cursor_to_initial_position(struct greeter_server* server) {
   if (!use_all_outputs(server)) {
-    struct greeter_output* pinned = output_by_name(server, server->preferred_output);
+    struct greeter_output* pinned = output_by_selector(server, server->preferred_output);
     if (pinned != NULL && pinned->active) {
       warp_cursor_to_output_center(server, pinned);
       return;
@@ -1301,9 +1367,8 @@ static void choose_outputs(struct greeter_server* server) {
   bool use_all = use_all_outputs(server);
   struct greeter_output* pinned = NULL;
   if (!use_all) {
-    pinned = output_by_name(server, server->preferred_output);
+    pinned = output_by_selector(server, server->preferred_output);
     if (pinned == NULL) {
-      wlr_log(WLR_INFO, "output '%s' not connected; using all outputs", server->preferred_output);
       use_all = true;
     }
   }
@@ -1349,6 +1414,7 @@ static void choose_outputs(struct greeter_server* server) {
   if (any_output_active(server)) {
     warp_cursor_to_initial_position(server);
   }
+  publish_output_configuration(server);
   schedule_launch(server);
   schedule_output_frames(server);
 }
@@ -2079,6 +2145,7 @@ int main(int argc, char** argv) {
   wlr_data_device_manager_create(server.display);
   wlr_viewporter_create(server.display);
   server.fractional_scale = wlr_fractional_scale_manager_v1_create(server.display, 1);
+  server.output_manager = wlr_output_manager_v1_create(server.display);
   server.output_layout = wlr_output_layout_create(server.display);
   server.scene = wlr_scene_create();
   server.scene_output_layout = wlr_scene_attach_output_layout(server.scene, server.output_layout);

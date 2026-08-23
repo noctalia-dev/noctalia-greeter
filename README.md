@@ -1,5 +1,4 @@
-Noctalia Greeter
-===
+# Noctalia Greeter
 
 A minimal login greeter for [greetd](https://github.com/kennylevinsen/greetd) that matches the look and feel of [Noctalia Shell](https://github.com/noctalia-dev/noctalia-shell).
 
@@ -265,16 +264,37 @@ Sessions come from `wayland-sessions` `.desktop` files under `/usr/share`, each 
 
 ### Multi-monitor
 
-By default the greeter is **mirrored on every connected monitor** (same UI on each display, each sized to that output's own resolution and scale). To pin it to a single connector, set `[output].name` in `/var/lib/noctalia-greeter/greeter.toml`:
+By default the greeter is **mirrored on every connected monitor** (same UI on each display, each sized to that output's own resolution and scale). To pin it to one display, set `[output].name` in `/var/lib/noctalia-greeter/greeter.toml`:
 
 ```toml
 [output]
 name = "DP-2"
 ```
 
-The compositor disables the other connectors at the KMS level when `[output].name` is set. If it names a disconnected connector, the greeter falls back to mirroring on all outputs.
+`name` can match any of the exact values of the display connector, description, make, model, or serial number. `noctalia-greeter outputs` prints `CONNECTOR - MAKE - MODEL - SERIAL`. For example, using a serial number:
 
-When using multiple monitors, set `[output].layout` manually or sync from Noctalia Shell (see Matching Noctalia Shell). Without it, outputs are placed left-to-right by connector name. Portrait panels need `[output].transforms` (also synced from the shell) so the greeter UI is upright. List connector names with `noctalia-greeter outputs`:
+```toml
+[output]
+name = "CVN12345"
+```
+
+Or a connector:
+
+```toml
+[output]
+name = "HDMI-A-1"
+```
+
+Or a description:
+
+```toml
+[output]
+name = "LG TV SSCR2"
+```
+
+The compositor disables the other connectors at the KMS level when `[output].name` selects exactly one output. If it has no match or matches multiple outputs, the greeter logs the reason and falls back to mirroring on all outputs.
+
+When using multiple monitors, set `[output].layout` manually or sync from Noctalia Shell (see Matching Noctalia Shell). Without it, outputs are placed left-to-right by connector name. Portrait panels need `[output].transforms` (also synced from the shell) so the greeter UI is upright. Layout and transform maps still use connector names. List output identities with `noctalia-greeter outputs` (the serial field is empty when the compositor does not expose output management):
 
 ```toml
 [output]
@@ -312,7 +332,7 @@ timeout = 300
 
 On NixOS: `programs.noctalia-greeter.settings.idle.timeout = 300;` (written to `greeter.toml`).
 
-List connector names from a running Wayland session:
+List output identities from a running Wayland session:
 
 ```sh
 noctalia-greeter outputs
@@ -420,16 +440,16 @@ command = "env XKB_DEFAULT_LAYOUT=cz /usr/bin/noctalia-greeter-session"
 
 ### Shortcuts
 
-| Key | Action |
-|-----|--------|
-| `Tab` / `Shift+Tab` | Move focus |
-| `↑` / `↓` | Move focus, or move in an open menu |
-| `Enter` | Submit password / activate / confirm menu |
-| `Space` | Activate focused control |
-| `Esc` | Close menu or leave password step |
-| `F3` | Session picker |
-| `F7` | Color scheme picker |
-| `Ctrl+Alt+F1`-`F12` | Switch to virtual terminal (TTY) |
+| Key                 | Action                                    |
+| ------------------- | ----------------------------------------- |
+| `Tab` / `Shift+Tab` | Move focus                                |
+| `↑` / `↓`           | Move focus, or move in an open menu       |
+| `Enter`             | Submit password / activate / confirm menu |
+| `Space`             | Activate focused control                  |
+| `Esc`               | Close menu or leave password step         |
+| `F3`                | Session picker                            |
+| `F7`                | Color scheme picker                       |
+| `Ctrl+Alt+F1`-`F12` | Switch to virtual terminal (TTY)          |
 
 ## Troubleshooting
 

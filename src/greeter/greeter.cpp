@@ -38,23 +38,11 @@ namespace {
   }
 
   void applyConfiguredOutput(WaylandClient& client, const std::optional<std::string>& configured) {
-    if (!configured.has_value() || configured->empty()) {
-      client.forgetPreferredOutput();
-      return;
-    }
-
-    client.setPreferredOutputName(configured);
-    if (!client.hasReadyOutputs()) {
-      return;
-    }
-
-    if (!client.hasResolvedPreferredOutput()) {
-      kLog.warn("output '{}' is not connected; showing on all outputs", *configured);
-      client.forgetPreferredOutput();
-      return;
-    }
-
-    kLog.info("preferred output connector: {}", *configured);
+    // The greeter compositor resolves [output].name before clients connect.
+    // Do not reinterpret an identity selector here: wl_output does not expose
+    // serial numbers, and a client-side fallback could disagree with the compositor.
+    (void)configured;
+    client.forgetPreferredOutput();
   }
 } // namespace
 
