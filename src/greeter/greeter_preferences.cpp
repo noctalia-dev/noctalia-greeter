@@ -450,6 +450,9 @@ namespace greeter {
     if (file.authAllowEmptyPassword.has_value()) {
       prefs.allowEmptyPassword = *file.authAllowEmptyPassword;
     }
+    if (file.authAutoLogin.has_value()) {
+      prefs.autoLogin = *file.authAutoLogin;
+    }
     return prefs;
   }
 

@@ -45,6 +45,8 @@ public:
   void setWindow(GreeterWindow* window);
   void setBoundOutputName(std::string outputName);
   void setGreetdClient(GreetdClient* client);
+  // Only one output view may own greetd's single authentication conversation.
+  void setAutoLoginAllowed(bool allowed) noexcept;
   void setUsername(const std::string& username);
   void setOnExitRequested(std::function<void()> callback);
   void setOnStateChanged(std::function<void(GreeterSurface*)> callback);
@@ -82,6 +84,7 @@ private:
   void syncScaledTypography();
   void layoutScene(std::uint32_t width, std::uint32_t height);
   void tryAuthenticate();
+  void tryAutoLogin();
   void handleGreetdResponse(const GreetdResponse& response);
   void handleAuthMessage(const GreetdAuthMessage& message);
   void postAuthResponse(const std::string& data);
@@ -206,6 +209,8 @@ private:
   bool m_canRebootToFirmware = false;
 
   bool m_allowEmptyPassword = false;
+  bool m_autoLogin = false;
+  bool m_autoLoginAllowed = true;
 
   // greetd replies in request order, so m_pendingReplies (a FIFO of these) tells
   // which request each reply answers.

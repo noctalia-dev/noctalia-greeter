@@ -101,3 +101,7 @@ numlock = true
 [auth]
 # Allow empty password submit (fprintd / smartcard PAM). Default false.
 allow_empty_password = false
+# Authenticate [user].default immediately. This runs greetd's PAM stack, so
+# pam_systemd_loadkey can unlock a matching GNOME Keyring after LUKS. If PAM
+# asks for input or authentication fails, the normal password screen is shown.
+autologin = false

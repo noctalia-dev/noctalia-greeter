@@ -31,6 +31,7 @@ namespace greeter {
     std::optional<float> scale;
     PasswordMaskStyle passwordMaskStyle = PasswordMaskStyle::Default;
     bool allowEmptyPassword = false;
+    bool autoLogin = false;
     bool hideLogo = false;
     // UI element positioning: "hidden", "bottom-left", "bottom-right", "top-left", "top-right"
     std::optional<std::string> powerButtonsPosition;

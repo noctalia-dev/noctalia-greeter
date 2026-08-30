@@ -34,6 +34,23 @@ It is built for **greetd**: greetd starts the bundled wlroots compositor (`nocta
 
 Pair it with **[Noctalia v5](https://github.com/noctalia-dev/noctalia)** if you want wallpaper and palette synced from the shell settings (optional).
 
+## PAM autologin
+
+To have the greeter authenticate a configured account immediately, set both values below:
+
+```toml
+[user]
+default = "your-user"
+
+[auth]
+autologin = true
+```
+
+This is authenticated autologin: the greeter calls greetd's normal `create_session`
+flow, so PAM modules such as `pam_systemd_loadkey` and `pam_gnome_keyring` can use a
+LUKS passphrase retained by the systemd initrd. It never submits an empty password.
+If PAM asks for input or rejects the login, the normal password screen remains available.
+
 ## Dependencies
 
 Install everything below on the machine where greetd will run. Each list covers build tools and libraries, plus **greetd** and **D-Bus** (used by `noctalia-greeter-session`). You still need your desktop sessions separately (niri, Hyprland, and so on).
