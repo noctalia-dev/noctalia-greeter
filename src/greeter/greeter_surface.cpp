@@ -599,6 +599,7 @@ void GreeterSurface::initialize(RenderContext* context) {
   applyScheme(m_selectedScheme);
   refreshSelectionLabels();
   applyInitialUserSelection();
+  tryAutoLogin();
 
   if (const auto& diagnostics = greeter::config::configDiagnostics(); !diagnostics.empty()) {
     const auto& diagnostic = diagnostics.front();
@@ -723,6 +724,8 @@ void GreeterSurface::reconcileKeyboardFocus() {
 void GreeterSurface::setWindow(GreeterWindow* window) { m_window = window; }
 
 void GreeterSurface::setGreetdClient(GreetdClient* client) { m_greetdClient = client; }
+
+void GreeterSurface::setAutoLoginAllowed(const bool allowed) noexcept { m_autoLoginAllowed = allowed; }
 
 void GreeterSurface::setUsername(const std::string& username) { m_username = username; }
 
@@ -1387,6 +1390,26 @@ void GreeterSurface::tryAuthenticate() {
   }
 }
 
+void GreeterSurface::tryAutoLogin() {
+  if (!m_autoLogin || !m_autoLoginAllowed) {
+    return;
+  }
+  if (m_greetdClient == nullptr || !m_greetdClient->isConnected() || m_username.empty()) {
+    kLog.warn("autologin requires a connected greetd client and [user].default; showing the login screen");
+    return;
+  }
+
+  m_authenticating = true;
+  kLog.info("greetd: autologin create_session for '{}'", m_username);
+  if (!m_greetdClient->requestCreateSession(m_username)) {
+    onAuthError(m_greetdClient->lastError().value_or(GreetdError{GreetdErrorType::Error, "failed to send request"}));
+    return;
+  }
+  m_authSessionStarted = true;
+  m_pendingReplies.push_back(AuthRequest::CreateSession);
+  syncAuthInteractivity();
+}
+
 void GreeterSurface::onGreetdReadable() {
   if (m_greetdClient == nullptr) {
     return;
@@ -1934,6 +1957,12 @@ void GreeterSurface::syncWallpaperTexture() {
 void GreeterSurface::loadPreferences() {
   const auto prefs = greeter::loadGreeterPreferences();
   m_allowEmptyPassword = prefs.allowEmptyPassword;
+  // Autologin is deliberately tied to the declarative user setting. A CLI
+  // --user or a single discovered account must never enable it implicitly.
+  m_autoLogin = prefs.autoLogin && prefs.defaultUser.has_value() && !prefs.defaultUser->empty();
+  if (prefs.autoLogin && !m_autoLogin) {
+    kLog.warn("[auth].autologin requires an explicit [user].default; showing the login screen");
+  }
   const auto initialSession = greeter::resolveInitialSessionName(prefs);
 
   if (initialSession.has_value()) {

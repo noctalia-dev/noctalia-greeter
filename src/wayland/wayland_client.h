@@ -19,6 +19,9 @@ struct wl_seat;
 struct wp_fractional_scale_manager_v1;
 struct wp_viewporter;
 struct xdg_wm_base;
+struct zwlr_output_head_v1;
+struct zwlr_output_manager_v1;
+struct zwlr_output_mode_v1;
 
 struct WaylandOutputLayout {
   int32_t x = 0;
@@ -31,6 +34,10 @@ struct WaylandOutputInfo {
   wl_output* output = nullptr;
   std::uint32_t registryName = 0;
   std::string name;
+  std::string description;
+  std::string make;
+  std::string model;
+  std::string serial;
   int32_t x = 0;
   int32_t y = 0;
   int32_t physicalWidthMm = 0;
@@ -113,10 +120,21 @@ public:
   static void handleOutputScale(void* data, wl_output* output, std::int32_t factor);
   static void handleOutputName(void* data, wl_output* output, const char* name);
   static void handleOutputDescription(void* data, wl_output* output, const char* description);
+  static void handleOutputManagerHead(void* data, zwlr_output_manager_v1* manager, zwlr_output_head_v1* head);
+  static void handleOutputManagerDone(void* data, zwlr_output_manager_v1* manager, std::uint32_t serial);
+  static void handleOutputManagerFinished(void* data, zwlr_output_manager_v1* manager);
+  static void handleOutputHeadName(void* data, zwlr_output_head_v1* head, const char* name);
+  static void handleOutputHeadDescription(void* data, zwlr_output_head_v1* head, const char* description);
+  static void handleOutputHeadMake(void* data, zwlr_output_head_v1* head, const char* make);
+  static void handleOutputHeadModel(void* data, zwlr_output_head_v1* head, const char* model);
+  static void handleOutputHeadSerial(void* data, zwlr_output_head_v1* head, const char* serial);
+  static void handleOutputHeadFinished(void* data, zwlr_output_head_v1* head);
+  static void handleOutputModeFinished(void* data, zwlr_output_mode_v1* mode);
 
 private:
   void bindGlobal(wl_registry* registry, std::uint32_t name, const char* interface, std::uint32_t version);
   void bindOutput(wl_registry* registry, std::uint32_t name, std::uint32_t version);
+  void matchPendingOutputHeads();
   [[nodiscard]] const WaylandOutputInfo* primaryOutput() const noexcept;
   [[nodiscard]] const WaylandOutputInfo* preferredOutput() const noexcept;
   [[nodiscard]] const WaylandOutputInfo* findOutputByName(std::string_view name) const noexcept;
@@ -131,6 +149,16 @@ private:
   xdg_wm_base* m_xdgWmBase = nullptr;
   wp_fractional_scale_manager_v1* m_fractionalScaleManager = nullptr;
   wp_viewporter* m_viewporter = nullptr;
+  zwlr_output_manager_v1* m_outputManager = nullptr;
+  struct PendingOutputHead {
+    zwlr_output_head_v1* head = nullptr;
+    std::string name;
+    std::string description;
+    std::string make;
+    std::string model;
+    std::string serial;
+  };
+  std::vector<PendingOutputHead> m_pendingOutputHeads;
   WaylandSeat m_seatHandler;
   std::vector<WaylandOutputInfo> m_outputs;
   std::vector<greeter::GreeterOutputPlacement> m_outputLayout;

@@ -74,6 +74,7 @@ foreach _p : [
   ['cursor-shape-v1', 'protocols/cursor-shape-v1.xml'],
   ['fractional-scale-v1', wayland_protos_dir / 'staging/fractional-scale/fractional-scale-v1.xml'],
   ['viewporter', wayland_protos_dir / 'stable/viewporter/viewporter.xml'],
+  ['wlr-output-management-unstable-v1', 'protocols/wlr-output-management-unstable-v1.xml'],
 ]
   _name = _p[0]
   _xml  = _p[1]

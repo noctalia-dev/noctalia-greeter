@@ -4,6 +4,7 @@
 #include "fractional-scale-v1-client-protocol.h"
 #include "greeter/greeter_preferences.h"
 #include "viewporter-client-protocol.h"
+#include "wlr-output-management-unstable-v1-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
 
 #include <algorithm>
@@ -126,6 +127,50 @@ namespace {
       .scale = &WaylandClient::handleOutputScale,
       .name = &WaylandClient::handleOutputName,
       .description = &WaylandClient::handleOutputDescription,
+  };
+
+  void ignoreOutputHeadPhysicalSize(void*, zwlr_output_head_v1*, std::int32_t, std::int32_t) {}
+  void handleOutputHeadMode(void* data, zwlr_output_head_v1*, zwlr_output_mode_v1* mode);
+  void ignoreOutputHeadMode(void*, zwlr_output_head_v1*, zwlr_output_mode_v1*) {}
+  void ignoreOutputHeadEnabled(void*, zwlr_output_head_v1*, std::int32_t) {}
+  void ignoreOutputHeadPosition(void*, zwlr_output_head_v1*, std::int32_t, std::int32_t) {}
+  void ignoreOutputHeadTransform(void*, zwlr_output_head_v1*, std::int32_t) {}
+  void ignoreOutputHeadScale(void*, zwlr_output_head_v1*, wl_fixed_t) {}
+  void ignoreOutputModeSize(void*, zwlr_output_mode_v1*, std::int32_t, std::int32_t) {}
+  void ignoreOutputModeRefresh(void*, zwlr_output_mode_v1*, std::int32_t) {}
+  void ignoreOutputModePreferred(void*, zwlr_output_mode_v1*) {}
+
+  const zwlr_output_mode_v1_listener kOutputModeListener = {
+      .size = &ignoreOutputModeSize,
+      .refresh = &ignoreOutputModeRefresh,
+      .preferred = &ignoreOutputModePreferred,
+      .finished = &WaylandClient::handleOutputModeFinished,
+  };
+
+  const zwlr_output_head_v1_listener kOutputHeadListener = {
+      .name = &WaylandClient::handleOutputHeadName,
+      .description = &WaylandClient::handleOutputHeadDescription,
+      .physical_size = &ignoreOutputHeadPhysicalSize,
+      .mode = &handleOutputHeadMode,
+      .enabled = &ignoreOutputHeadEnabled,
+      .current_mode = &ignoreOutputHeadMode,
+      .position = &ignoreOutputHeadPosition,
+      .transform = &ignoreOutputHeadTransform,
+      .scale = &ignoreOutputHeadScale,
+      .finished = &WaylandClient::handleOutputHeadFinished,
+      .make = &WaylandClient::handleOutputHeadMake,
+      .model = &WaylandClient::handleOutputHeadModel,
+      .serial_number = &WaylandClient::handleOutputHeadSerial,
+  };
+
+  void handleOutputHeadMode(void* data, zwlr_output_head_v1*, zwlr_output_mode_v1* mode) {
+    zwlr_output_mode_v1_add_listener(mode, &kOutputModeListener, data);
+  }
+
+  const zwlr_output_manager_v1_listener kOutputManagerListener = {
+      .head = &WaylandClient::handleOutputManagerHead,
+      .done = &WaylandClient::handleOutputManagerDone,
+      .finished = &WaylandClient::handleOutputManagerFinished,
   };
 
   void logWaylandConnectDiagnostics() {
@@ -255,6 +300,12 @@ bool WaylandClient::connect() {
 
 void WaylandClient::disconnect() {
   m_seatHandler.cleanup();
+
+  if (m_outputManager != nullptr) {
+    zwlr_output_manager_v1_stop(m_outputManager);
+    m_outputManager = nullptr;
+  }
+  m_pendingOutputHeads.clear();
 
   if (m_xdgWmBase != nullptr) {
     xdg_wm_base_destroy(m_xdgWmBase);
@@ -677,7 +728,7 @@ void WaylandClient::notifyOutputsChanged() {
 
 void WaylandClient::handleOutputGeometry(
     void* data, wl_output* wlOut, std::int32_t x, std::int32_t y, std::int32_t physWidth, std::int32_t physHeight,
-    std::int32_t /*subpixel*/, const char* /*make*/, const char* /*model*/, std::int32_t /*transform*/
+    std::int32_t /*subpixel*/, const char* make, const char* model, std::int32_t /*transform*/
 ) {
   auto* client = static_cast<WaylandClient*>(data);
   for (auto& out : client->m_outputs) {
@@ -690,6 +741,8 @@ void WaylandClient::handleOutputGeometry(
     out.y = y;
     out.physicalWidthMm = physWidth;
     out.physicalHeightMm = physHeight;
+    out.make = make != nullptr ? make : "";
+    out.model = model != nullptr ? model : "";
     if (changed && out.done) {
       client->notifyOutputsChanged();
     }
@@ -756,12 +809,104 @@ void WaylandClient::handleOutputName(void* data, wl_output* wlOut, const char* n
   for (auto& out : client->m_outputs) {
     if (out.output == wlOut) {
       out.name = name;
+      client->matchPendingOutputHeads();
       break;
     }
   }
 }
 
-void WaylandClient::handleOutputDescription(void* /*data*/, wl_output* /*output*/, const char* /*description*/) {}
+void WaylandClient::handleOutputDescription(void* data, wl_output* wlOut, const char* description) {
+  auto* client = static_cast<WaylandClient*>(data);
+  for (auto& out : client->m_outputs) {
+    if (out.output == wlOut) {
+      out.description = description != nullptr ? description : "";
+      break;
+    }
+  }
+}
+
+void WaylandClient::matchPendingOutputHeads() {
+  for (const PendingOutputHead& head : m_pendingOutputHeads) {
+    if (head.name.empty()) {
+      continue;
+    }
+    for (auto& output : m_outputs) {
+      if (output.name != head.name) {
+        continue;
+      }
+      output.description = head.description;
+      output.make = head.make;
+      output.model = head.model;
+      output.serial = head.serial;
+      break;
+    }
+  }
+}
+
+void WaylandClient::handleOutputManagerHead(void* data, zwlr_output_manager_v1*, zwlr_output_head_v1* head) {
+  auto* client = static_cast<WaylandClient*>(data);
+  client->m_pendingOutputHeads.push_back({head, {}, {}, {}, {}, {}});
+  zwlr_output_head_v1_add_listener(head, &kOutputHeadListener, client);
+}
+
+void WaylandClient::handleOutputManagerDone(void* data, zwlr_output_manager_v1*, std::uint32_t) {
+  static_cast<WaylandClient*>(data)->matchPendingOutputHeads();
+}
+
+void WaylandClient::handleOutputManagerFinished(void* data, zwlr_output_manager_v1*) {
+  static_cast<WaylandClient*>(data)->m_outputManager = nullptr;
+}
+
+void WaylandClient::handleOutputHeadName(void* data, zwlr_output_head_v1* head, const char* name) {
+  auto* client = static_cast<WaylandClient*>(data);
+  for (auto& pending : client->m_pendingOutputHeads)
+    if (pending.head == head)
+      pending.name = name != nullptr ? name : "";
+}
+
+void WaylandClient::handleOutputHeadDescription(void* data, zwlr_output_head_v1* head, const char* description) {
+  auto* client = static_cast<WaylandClient*>(data);
+  for (auto& pending : client->m_pendingOutputHeads)
+    if (pending.head == head)
+      pending.description = description != nullptr ? description : "";
+}
+
+void WaylandClient::handleOutputHeadMake(void* data, zwlr_output_head_v1* head, const char* make) {
+  auto* client = static_cast<WaylandClient*>(data);
+  for (auto& pending : client->m_pendingOutputHeads)
+    if (pending.head == head)
+      pending.make = make != nullptr ? make : "";
+}
+
+void WaylandClient::handleOutputHeadModel(void* data, zwlr_output_head_v1* head, const char* model) {
+  auto* client = static_cast<WaylandClient*>(data);
+  for (auto& pending : client->m_pendingOutputHeads)
+    if (pending.head == head)
+      pending.model = model != nullptr ? model : "";
+}
+
+void WaylandClient::handleOutputHeadSerial(void* data, zwlr_output_head_v1* head, const char* serial) {
+  auto* client = static_cast<WaylandClient*>(data);
+  for (auto& pending : client->m_pendingOutputHeads)
+    if (pending.head == head)
+      pending.serial = serial != nullptr ? serial : "";
+}
+
+void WaylandClient::handleOutputHeadFinished(void* data, zwlr_output_head_v1* head) {
+  auto* client = static_cast<WaylandClient*>(data);
+  std::erase_if(client->m_pendingOutputHeads, [head](const PendingOutputHead& pending) {
+    return pending.head == head;
+  });
+  if (wl_proxy_get_version(reinterpret_cast<wl_proxy*>(head)) >= 3) {
+    zwlr_output_head_v1_release(head);
+  }
+}
+
+void WaylandClient::handleOutputModeFinished(void*, zwlr_output_mode_v1* mode) {
+  if (wl_proxy_get_version(reinterpret_cast<wl_proxy*>(mode)) >= 3) {
+    zwlr_output_mode_v1_release(mode);
+  }
+}
 
 void WaylandClient::bindOutput(wl_registry* registry, std::uint32_t name, std::uint32_t version) {
   const std::uint32_t bindVersion = std::min(version, 4u);
@@ -814,6 +959,14 @@ void WaylandClient::bindGlobal(
 
   if (interfaceName == wl_output_interface.name) {
     bindOutput(registry, name, version);
+    return;
+  }
+
+  if (interfaceName == zwlr_output_manager_v1_interface.name) {
+    m_outputManager = static_cast<zwlr_output_manager_v1*>(
+        wl_registry_bind(registry, name, &zwlr_output_manager_v1_interface, std::min(version, 3u))
+    );
+    zwlr_output_manager_v1_add_listener(m_outputManager, &kOutputManagerListener, this);
     return;
   }
 
