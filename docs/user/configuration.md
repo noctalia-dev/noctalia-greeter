@@ -26,6 +26,8 @@ If `greeter.toml` is missing, the greeter uses built-in defaults. System setup c
 
 On NixOS, use `services.displayManager.noctalia-greeter.settings` with the nixpkgs module or `programs.noctalia-greeter.settings` with the project flake. Both materialize `greeter.toml` using a tmpfiles `L+` entry.
 
+The `[appearance].hide_*` keys are declarative `greeter.toml` settings. They are not read from or written to `sync.toml`.
+
 The **Synced** scheme uses a complete `[appearance.palette]` from `greeter.toml` when present, otherwise the same keys from `sync.toml`. Legacy live `appearance.json` is migrated into `sync.toml` once. See [Sync with Noctalia](sync.md) for the complete precedence and authorization model.
 
 ## Keys the greeter remembers
@@ -50,6 +52,11 @@ Set these keys in `greeter.toml`. A command-line `--session` or `--user` value t
 | `[appearance].scheme` | Color scheme: `Synced` or a built-in name such as `Noctalia` |
 | `[appearance].password_style` | Password mask: `default` or `random` |
 | `[appearance].hide_logo` | Hide the Noctalia brand logo |
+| `[appearance].hide_session_selector` | Hide the session selector (`true` / `false`; default `false`) |
+| `[appearance].hide_theme_selector` | Hide the theme selector (`true` / `false`; default `false`) |
+| `[appearance].hide_shutdown_button` | Hide the shutdown button (`true` / `false`; default `false`) |
+| `[appearance].hide_reboot_button` | Hide the reboot button (`true` / `false`; default `false`) |
+| `[appearance].hide_firmware_button` | Hide the firmware button (`true` / `false`; default `false`) |
 | `[appearance].power_buttons_position` | Power controls: `bottom-right` (default), `bottom-left`, `top-left`, `top-right`, or `hidden` |
 | `[appearance].scheme_selector_position` | Scheme picker: `top-right` (default), `top-left`, `bottom-left`, `bottom-right`, or `hidden` |
 | `[appearance].theme_mode` | Theme mode for the Synced appearance, such as `dark` |

@@ -437,24 +437,21 @@ namespace greeter {
 
     GreeterPreferences prefs;
     prefs.defaultSession = file.sessionDefault;
-    if (file.sessionShowSelector.has_value()) {
-      prefs.showSessionSelector = *file.sessionShowSelector;
-    }
     prefs.defaultUser = file.userDefault;
-    if (file.uiShowSessionSelector.has_value()) {
-      prefs.showSessionSelector = *file.uiShowSessionSelector;
+    if (file.appearanceHideSessionSelector.has_value()) {
+      prefs.hideSessionSelector = *file.appearanceHideSessionSelector;
     }
-    if (file.uiShowThemeSelector.has_value()) {
-      prefs.showThemeSelector = *file.uiShowThemeSelector;
+    if (file.appearanceHideThemeSelector.has_value()) {
+      prefs.hideThemeSelector = *file.appearanceHideThemeSelector;
     }
-    if (file.uiShowShutdownButton.has_value()) {
-      prefs.showShutdownButton = *file.uiShowShutdownButton;
+    if (file.appearanceHideShutdownButton.has_value()) {
+      prefs.hideShutdownButton = *file.appearanceHideShutdownButton;
     }
-    if (file.uiShowRebootButton.has_value()) {
-      prefs.showRebootButton = *file.uiShowRebootButton;
+    if (file.appearanceHideRebootButton.has_value()) {
+      prefs.hideRebootButton = *file.appearanceHideRebootButton;
     }
-    if (file.uiShowFirmwareButton.has_value()) {
-      prefs.showFirmwareButton = *file.uiShowFirmwareButton;
+    if (file.appearanceHideFirmwareButton.has_value()) {
+      prefs.hideFirmwareButton = *file.appearanceHideFirmwareButton;
     }
     prefs.session = sync.sessionLast;
     // greeter.toml is declarative and wins; sync.toml only carries the last UI pick.

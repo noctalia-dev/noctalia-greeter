@@ -683,9 +683,15 @@ void GreeterSurface::applyInitialUserSelection() {
 
 bool GreeterSurface::showsUserDropdown() const noexcept { return m_users.size() > 1; }
 
-bool GreeterSurface::showsSessionSelector() const noexcept { return m_showSessionSelector; }
+bool GreeterSurface::showsSessionSelector() const noexcept { return !m_hideSessionSelector; }
 
-bool GreeterSurface::showsThemeSelector() const noexcept { return m_showThemeSelector; }
+bool GreeterSurface::showsThemeSelector() const noexcept { return !m_hideThemeSelector; }
+
+bool GreeterSurface::showsShutdownButton() const { return !m_hideShutdownButton && power::hasSyncedAction("shutdown"); }
+
+bool GreeterSurface::showsRebootButton() const { return !m_hideRebootButton && power::hasSyncedAction("reboot"); }
+
+bool GreeterSurface::showsFirmwareButton() const noexcept { return !m_hideFirmwareButton; }
 
 void GreeterSurface::setKeyboardOwner(const bool owner) noexcept {
   m_isKeyboardOwner = owner;
@@ -2010,11 +2016,11 @@ void GreeterSurface::syncWallpaperTexture() {
 void GreeterSurface::loadPreferences() {
   const auto prefs = greeter::loadGreeterPreferences();
   m_allowEmptyPassword = prefs.allowEmptyPassword;
-  m_showSessionSelector = prefs.showSessionSelector;
-  m_showThemeSelector = prefs.showThemeSelector;
-  m_showShutdownButton = prefs.showShutdownButton;
-  m_showRebootButton = prefs.showRebootButton;
-  m_showFirmwareButton = prefs.showFirmwareButton;
+  m_hideSessionSelector = prefs.hideSessionSelector;
+  m_hideThemeSelector = prefs.hideThemeSelector;
+  m_hideShutdownButton = prefs.hideShutdownButton;
+  m_hideRebootButton = prefs.hideRebootButton;
+  m_hideFirmwareButton = prefs.hideFirmwareButton;
   const auto initialSession = greeter::resolveInitialSessionName(prefs);
 
   if (initialSession.has_value()) {
@@ -2212,20 +2218,16 @@ void GreeterSurface::rebuildFocusRing() {
     m_focusRing.push_back({m_schemeSelectArea, [this]() { toggleSchemeMenu(); }});
   }
 
-  if (m_showFirmwareButton && m_firmwareButton != nullptr && m_firmwareButton->inputArea() != nullptr
+  if (showsFirmwareButton() && m_firmwareButton != nullptr && m_firmwareButton->inputArea() != nullptr
       && m_firmwareButton->visible()) {
     m_focusRing.push_back({m_firmwareButton->inputArea(), []() { power::rebootToFirmwareSetup(); }});
   }
-  if (m_showRebootButton
-      && power::hasSyncedAction("reboot")
-      && m_rebootButton != nullptr
+  if (showsRebootButton() && m_rebootButton != nullptr
       && m_rebootButton->inputArea() != nullptr
       && m_rebootButton->visible()) {
     m_focusRing.push_back({m_rebootButton->inputArea(), []() { power::reboot(); }});
   }
-  if (m_showShutdownButton
-      && power::hasSyncedAction("shutdown")
-      && m_shutdownButton != nullptr
+  if (showsShutdownButton() && m_shutdownButton != nullptr
       && m_shutdownButton->inputArea() != nullptr
       && m_shutdownButton->visible()) {
     m_focusRing.push_back({m_shutdownButton->inputArea(), []() { power::powerOff(); }});
@@ -2599,23 +2601,23 @@ void GreeterSurface::layoutPowerButtons(float ox, float oy, float sw, float sh) 
   if (m_powerButtonsPosition == "bottom-left" || m_powerButtonsPosition == "top-left") {
     // Left-aligned: firmware, reboot, shutdown (left to right).
     float x = ox + margin;
-    if (place(m_firmwareButton, x, m_showFirmwareButton)) {
+    if (place(m_firmwareButton, x, showsFirmwareButton())) {
       x += size + gap;
     }
-    if (place(m_rebootButton, x, m_showRebootButton && power::hasSyncedAction("reboot"))) {
+    if (place(m_rebootButton, x, showsRebootButton())) {
       x += size + gap;
     }
-    (void)place(m_shutdownButton, x, m_showShutdownButton && power::hasSyncedAction("shutdown"));
+    (void)place(m_shutdownButton, x, showsShutdownButton());
   } else {
     // Right-aligned (default): shutdown, reboot, firmware (right to left).
     float x = ox + sw - size - margin;
-    if (place(m_shutdownButton, x, m_showShutdownButton && power::hasSyncedAction("shutdown"))) {
+    if (place(m_shutdownButton, x, showsShutdownButton())) {
       x -= size + gap;
     }
-    if (place(m_rebootButton, x, m_showRebootButton && power::hasSyncedAction("reboot"))) {
+    if (place(m_rebootButton, x, showsRebootButton())) {
       x -= size + gap;
     }
-    (void)place(m_firmwareButton, x, m_showFirmwareButton);
+    (void)place(m_firmwareButton, x, showsFirmwareButton());
   }
 }
 

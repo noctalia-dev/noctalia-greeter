@@ -14,19 +14,6 @@
 [session]
 # Session Name from `noctalia-greeter sessions` (picker label, not .desktop id).
 default = "niri"
-# Set false to hide the session picker. The CLI default, this default, or the
-# last session from sync.toml is still used; if none is available, the first
-# discovered session is started.
-show_selector = true
-
-[ui]
-# All UI controls below are shown by default when omitted.
-show_session_selector = true
-show_theme_selector = true
-show_shutdown_button = true
-show_reboot_button = true
-show_firmware_button = true
-
 [user]
 # Opens the password step for this account on startup.
 default = "lysec"
@@ -39,6 +26,12 @@ scheme = "Synced"
 password_style = "random"
 # Hide the Noctalia brand logo on the login screen.
 hide_logo = false
+# Hide individual controls. Omitted values default to false.
+hide_session_selector = false
+hide_theme_selector = false
+hide_shutdown_button = false
+hide_reboot_button = false
+hide_firmware_button = false
 # Power controls: bottom-right (default), bottom-left, top-left, top-right, or hidden.
 power_buttons_position = "bottom-right"
 # Scheme picker: top-right (default), top-left, bottom-left, bottom-right, or hidden.

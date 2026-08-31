@@ -50,18 +50,18 @@ After installation:
 
 ### UI controls
 
-To hide the session picker, set `ui.show_session_selector = false` in `greeter.toml`.
+To hide the session picker, set `appearance.hide_session_selector = true` in `greeter.toml`.
 The selected session still follows CLI default, configured default, and the last
 session from `sync.toml`; if none is available, the first discovered session is used.
 
-Individual UI controls can be hidden under `[ui]`; omitted options default to `true`:
+Individual UI controls can be hidden under `[appearance]`; omitted options default to `false`:
 
 ```toml
-[ui]
-show_theme_selector = false
-show_shutdown_button = false
-show_reboot_button = true
-show_firmware_button = true
+[appearance]
+hide_theme_selector = true
+hide_shutdown_button = true
+hide_reboot_button = false
+hide_firmware_button = false
 ```
 
 ## Scope

@@ -45,7 +45,6 @@ namespace {
   [[nodiscard]] bool isKnownTopLevelKey(std::string_view key) {
     return key == "session"
         || key == "user"
-        || key == "ui"
         || key == "appearance"
         || key == "output"
         || key == "cursor"
@@ -57,23 +56,20 @@ namespace {
   [[nodiscard]] bool isKnownSessionKey(std::string_view key) {
     // "power"/"actions" are Sync-only (sync.toml); recognized here only so parseConfig
     // does not warn about them when parsing sync.toml through the shared session-table loop.
-    return key == "default" || key == "show_selector" || key == "last" || key == "power" || key == "actions";
+    return key == "default" || key == "last" || key == "power" || key == "actions";
   }
 
   [[nodiscard]] bool isKnownUserKey(std::string_view key) { return key == "default"; }
-
-  [[nodiscard]] bool isKnownUiKey(std::string_view key) {
-    return key == "show_session_selector"
-        || key == "show_theme_selector"
-        || key == "show_shutdown_button"
-        || key == "show_reboot_button"
-        || key == "show_firmware_button";
-  }
 
   [[nodiscard]] bool isKnownAppearanceKey(std::string_view key) {
     return key == "scheme"
         || key == "password_style"
         || key == "hide_logo"
+        || key == "hide_session_selector"
+        || key == "hide_theme_selector"
+        || key == "hide_shutdown_button"
+        || key == "hide_reboot_button"
+        || key == "hide_firmware_button"
         || key == "power_buttons_position"
         || key == "scheme_selector_position"
         || key == "theme_mode"
@@ -213,12 +209,6 @@ namespace {
           }
           if (entryView == "default") {
             config.sessionDefault = stringValue(entryNode);
-          } else if (entryView == "show_selector") {
-            if (const auto value = entryNode.value<bool>()) {
-              config.sessionShowSelector = *value;
-            } else {
-              kLog.warn("{}: invalid session.show_selector value", path.string());
-            }
           } else if (entryView == "last") {
             config.sessionLast = stringValue(entryNode);
           }
@@ -229,27 +219,6 @@ namespace {
             continue;
           }
           config.userDefault = stringValue(entryNode);
-        } else if (keyView == "ui") {
-          if (!isKnownUiKey(entryView)) {
-            warnUnknownSectionKey(path, keyView, entryView);
-            continue;
-          }
-          const auto value = entryNode.value<bool>();
-          if (!value.has_value()) {
-            kLog.warn("{}: invalid ui.{} value", path.string(), entryView);
-            continue;
-          }
-          if (entryView == "show_session_selector") {
-            config.uiShowSessionSelector = *value;
-          } else if (entryView == "show_theme_selector") {
-            config.uiShowThemeSelector = *value;
-          } else if (entryView == "show_shutdown_button") {
-            config.uiShowShutdownButton = *value;
-          } else if (entryView == "show_reboot_button") {
-            config.uiShowRebootButton = *value;
-          } else if (entryView == "show_firmware_button") {
-            config.uiShowFirmwareButton = *value;
-          }
         } else if (keyView == "appearance") {
           if (!isKnownAppearanceKey(entryView)) {
             warnUnknownSectionKey(path, keyView, entryView);
@@ -262,6 +231,26 @@ namespace {
           } else if (entryView == "hide_logo") {
             if (const auto value = entryNode.value<bool>()) {
               config.appearanceHideLogo = *value;
+            }
+          } else if (entryView == "hide_session_selector") {
+            if (const auto value = entryNode.value<bool>()) {
+              config.appearanceHideSessionSelector = *value;
+            }
+          } else if (entryView == "hide_theme_selector") {
+            if (const auto value = entryNode.value<bool>()) {
+              config.appearanceHideThemeSelector = *value;
+            }
+          } else if (entryView == "hide_shutdown_button") {
+            if (const auto value = entryNode.value<bool>()) {
+              config.appearanceHideShutdownButton = *value;
+            }
+          } else if (entryView == "hide_reboot_button") {
+            if (const auto value = entryNode.value<bool>()) {
+              config.appearanceHideRebootButton = *value;
+            }
+          } else if (entryView == "hide_firmware_button") {
+            if (const auto value = entryNode.value<bool>()) {
+              config.appearanceHideFirmwareButton = *value;
             }
           } else if (entryView == "power_buttons_position") {
             config.appearancePowerButtonsPosition = stringValue(entryNode);
@@ -494,9 +483,6 @@ namespace {
           table.insert_or_assign(std::string(key), value);
         }
     );
-    if (config.sessionShowSelector.has_value()) {
-      session.insert_or_assign("show_selector", *config.sessionShowSelector);
-    }
     if (!session.empty()) {
       root.insert("session", std::move(session));
     }
@@ -509,26 +495,6 @@ namespace {
     );
     if (!user.empty()) {
       root.insert("user", std::move(user));
-    }
-
-    toml::table ui;
-    if (config.uiShowThemeSelector.has_value()) {
-      ui.insert_or_assign("show_theme_selector", *config.uiShowThemeSelector);
-    }
-    if (config.uiShowSessionSelector.has_value()) {
-      ui.insert_or_assign("show_session_selector", *config.uiShowSessionSelector);
-    }
-    if (config.uiShowShutdownButton.has_value()) {
-      ui.insert_or_assign("show_shutdown_button", *config.uiShowShutdownButton);
-    }
-    if (config.uiShowRebootButton.has_value()) {
-      ui.insert_or_assign("show_reboot_button", *config.uiShowRebootButton);
-    }
-    if (config.uiShowFirmwareButton.has_value()) {
-      ui.insert_or_assign("show_firmware_button", *config.uiShowFirmwareButton);
-    }
-    if (!ui.empty()) {
-      root.insert("ui", std::move(ui));
     }
 
     toml::table appearance = buildAppearanceTomlTable(config.appearance);
@@ -546,6 +512,21 @@ namespace {
     );
     if (config.appearanceHideLogo.has_value()) {
       appearance.insert_or_assign("hide_logo", *config.appearanceHideLogo);
+    }
+    if (config.appearanceHideSessionSelector.has_value()) {
+      appearance.insert_or_assign("hide_session_selector", *config.appearanceHideSessionSelector);
+    }
+    if (config.appearanceHideThemeSelector.has_value()) {
+      appearance.insert_or_assign("hide_theme_selector", *config.appearanceHideThemeSelector);
+    }
+    if (config.appearanceHideShutdownButton.has_value()) {
+      appearance.insert_or_assign("hide_shutdown_button", *config.appearanceHideShutdownButton);
+    }
+    if (config.appearanceHideRebootButton.has_value()) {
+      appearance.insert_or_assign("hide_reboot_button", *config.appearanceHideRebootButton);
+    }
+    if (config.appearanceHideFirmwareButton.has_value()) {
+      appearance.insert_or_assign("hide_firmware_button", *config.appearanceHideFirmwareButton);
     }
     insertString(
         appearance, "power_buttons_position", config.appearancePowerButtonsPosition,
@@ -975,11 +956,10 @@ namespace greeter::config {
     out << "# Last-used session lives in sync.toml; UI/Sync also fall back to sync.toml for scheme\n";
     out << "# and output layout/transforms when not set here. Session power actions/menu entries are\n";
     out << "# Sync-only (sync.toml [session.power]/[[session.actions]]) and are not settable here.\n";
-    out << "# [session] default, show_selector, [user] default\n";
-    out << "# [ui] show_session_selector, show_theme_selector, show_shutdown_button, show_reboot_button, "
-           "show_firmware_button\n";
-    out << "# [appearance] scheme, password_style, hide_logo, power_buttons_position, scheme_selector_position, "
-           "theme_mode, corner_radius_scale, font_family\n";
+    out << "# [session] default, [user] default\n";
+    out << "# [appearance] scheme, password_style, hide_logo, hide_session_selector, hide_theme_selector, "
+           "hide_shutdown_button, hide_reboot_button, hide_firmware_button, power_buttons_position, "
+           "scheme_selector_position, theme_mode, corner_radius_scale, font_family\n";
     out << "# [appearance.palette] full color role table, [appearance.wallpaper] path/fill_mode/fill_color\n";
     out << "# [appearance.wallpapers.<connector>] per-output wallpaper overrides\n";
     out << "# [output] name/layout/scale/scales/width/height/transforms, [idle] timeout, [cursor] theme/size/path\n";
