@@ -25,7 +25,7 @@ namespace greeter {
     std::optional<std::string> defaultSession;
     bool hideSessionSelector = false;
     std::optional<std::string> defaultUser;
-    bool hideThemeSelector = false;
+    bool hideSchemeSelector = false;
     bool hideShutdownButton = false;
     bool hideRebootButton = false;
     bool hideFirmwareButton = false;

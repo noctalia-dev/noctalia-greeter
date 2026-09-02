@@ -47,7 +47,7 @@ namespace greeter::config {
     std::optional<std::string> appearancePasswordStyle;
     std::optional<bool> appearanceHideLogo;
     std::optional<bool> appearanceHideSessionSelector;
-    std::optional<bool> appearanceHideThemeSelector;
+    std::optional<bool> appearanceHideSchemeSelector;
     std::optional<bool> appearanceHideShutdownButton;
     std::optional<bool> appearanceHideRebootButton;
     std::optional<bool> appearanceHideFirmwareButton;

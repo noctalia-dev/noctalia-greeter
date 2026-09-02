@@ -685,7 +685,9 @@ bool GreeterSurface::showsUserDropdown() const noexcept { return m_users.size() 
 
 bool GreeterSurface::showsSessionSelector() const noexcept { return !m_hideSessionSelector; }
 
-bool GreeterSurface::showsThemeSelector() const noexcept { return !m_hideThemeSelector; }
+bool GreeterSurface::showsSchemeSelector() const noexcept {
+  return !m_hideSchemeSelector && m_schemeSelectorPosition != "hidden";
+}
 
 bool GreeterSurface::showsShutdownButton() const { return !m_hideShutdownButton && power::hasSyncedAction("shutdown"); }
 
@@ -1227,7 +1229,7 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
   const float inputWidth = std::max(120.0f, contentWidth - buttonWidth - gap);
 
   const float selectorH = Style::controlHeightSm();
-  if (showsThemeSelector() && m_schemeSelectorPosition != "hidden") {
+  if (showsSchemeSelector()) {
     const float schemeW = measureIconSelectorWidth(m_schemeSelectIcon, m_schemeSelectGlyph);
     float schemeX;
     float schemeY;
@@ -2017,7 +2019,7 @@ void GreeterSurface::loadPreferences() {
   const auto prefs = greeter::loadGreeterPreferences();
   m_allowEmptyPassword = prefs.allowEmptyPassword;
   m_hideSessionSelector = prefs.hideSessionSelector;
-  m_hideThemeSelector = prefs.hideThemeSelector;
+  m_hideSchemeSelector = prefs.hideSchemeSelector;
   m_hideShutdownButton = prefs.hideShutdownButton;
   m_hideRebootButton = prefs.hideRebootButton;
   m_hideFirmwareButton = prefs.hideFirmwareButton;
@@ -2103,7 +2105,7 @@ void GreeterSurface::toggleSessionMenu() {
 }
 
 void GreeterSurface::toggleSchemeMenu() {
-  if (!showsThemeSelector() || m_schemeSelectorPosition == "hidden") {
+  if (!showsSchemeSelector()) {
     return;
   }
   m_schemeMenuOpen = !m_schemeMenuOpen;
@@ -2214,20 +2216,24 @@ void GreeterSurface::rebuildFocusRing() {
   if (showsSessionSelector() && m_sessionSelectArea != nullptr) {
     m_focusRing.push_back({m_sessionSelectArea, [this]() { toggleSessionMenu(); }});
   }
-  if (showsThemeSelector() && m_schemeSelectArea != nullptr) {
+  if (showsSchemeSelector() && m_schemeSelectArea != nullptr) {
     m_focusRing.push_back({m_schemeSelectArea, [this]() { toggleSchemeMenu(); }});
   }
 
-  if (showsFirmwareButton() && m_firmwareButton != nullptr && m_firmwareButton->inputArea() != nullptr
+  if (showsFirmwareButton()
+      && m_firmwareButton != nullptr
+      && m_firmwareButton->inputArea() != nullptr
       && m_firmwareButton->visible()) {
     m_focusRing.push_back({m_firmwareButton->inputArea(), []() { power::rebootToFirmwareSetup(); }});
   }
-  if (showsRebootButton() && m_rebootButton != nullptr
+  if (showsRebootButton()
+      && m_rebootButton != nullptr
       && m_rebootButton->inputArea() != nullptr
       && m_rebootButton->visible()) {
     m_focusRing.push_back({m_rebootButton->inputArea(), []() { power::reboot(); }});
   }
-  if (showsShutdownButton() && m_shutdownButton != nullptr
+  if (showsShutdownButton()
+      && m_shutdownButton != nullptr
       && m_shutdownButton->inputArea() != nullptr
       && m_shutdownButton->visible()) {
     m_focusRing.push_back({m_shutdownButton->inputArea(), []() { power::powerOff(); }});
@@ -2911,7 +2917,7 @@ bool GreeterSurface::handleNavigationKey(std::uint32_t sym, std::uint32_t utf32,
     return true;
   }
   if (KeySymbol::isF7(sym)) {
-    if (!showsThemeSelector() || m_schemeSelectorPosition == "hidden") {
+    if (!showsSchemeSelector()) {
       return true;
     }
     if (m_schemeMenuOpen) {
@@ -3476,7 +3482,7 @@ void GreeterSurface::rebuildSessionMenu() {
 
 void GreeterSurface::rebuildSchemeMenu() {
   clearSchemeMenu();
-  if (!showsThemeSelector() || !m_schemeMenuOpen || m_schemeNames.empty()) {
+  if (!showsSchemeSelector() || !m_schemeMenuOpen || m_schemeNames.empty()) {
     return;
   }
   // Open upward when selector is at the bottom, downward otherwise

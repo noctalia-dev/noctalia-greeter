@@ -155,7 +155,7 @@ private:
   [[nodiscard]] bool ownsInputArea(const InputArea* area) const;
   [[nodiscard]] bool showsUserDropdown() const noexcept;
   [[nodiscard]] bool showsSessionSelector() const noexcept;
-  [[nodiscard]] bool showsThemeSelector() const noexcept;
+  [[nodiscard]] bool showsSchemeSelector() const noexcept;
   [[nodiscard]] bool showsShutdownButton() const;
   [[nodiscard]] bool showsRebootButton() const;
   [[nodiscard]] bool showsFirmwareButton() const noexcept;
@@ -224,7 +224,7 @@ private:
 
   bool m_allowEmptyPassword = false;
   bool m_hideSessionSelector = false;
-  bool m_hideThemeSelector = false;
+  bool m_hideSchemeSelector = false;
   bool m_hideShutdownButton = false;
   bool m_hideRebootButton = false;
   bool m_hideFirmwareButton = false;

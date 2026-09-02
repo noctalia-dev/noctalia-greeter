@@ -53,7 +53,7 @@ Set these keys in `greeter.toml`. A command-line `--session` or `--user` value t
 | `[appearance].password_style` | Password mask: `default` or `random` |
 | `[appearance].hide_logo` | Hide the Noctalia brand logo |
 | `[appearance].hide_session_selector` | Hide the session selector (`true` / `false`; default `false`) |
-| `[appearance].hide_theme_selector` | Hide the theme selector (`true` / `false`; default `false`) |
+| `[appearance].hide_scheme_selector` | Hide the scheme selector (`true` / `false`; default `false`) |
 | `[appearance].hide_shutdown_button` | Hide the shutdown button (`true` / `false`; default `false`) |
 | `[appearance].hide_reboot_button` | Hide the reboot button (`true` / `false`; default `false`) |
 | `[appearance].hide_firmware_button` | Hide the firmware button (`true` / `false`; default `false`) |

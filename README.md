@@ -58,7 +58,7 @@ Individual UI controls can be hidden under `[appearance]`; omitted options defau
 
 ```toml
 [appearance]
-hide_theme_selector = true
+hide_scheme_selector = true
 hide_shutdown_button = true
 hide_reboot_button = false
 hide_firmware_button = false

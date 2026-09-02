@@ -66,7 +66,7 @@ namespace {
         || key == "password_style"
         || key == "hide_logo"
         || key == "hide_session_selector"
-        || key == "hide_theme_selector"
+        || key == "hide_scheme_selector"
         || key == "hide_shutdown_button"
         || key == "hide_reboot_button"
         || key == "hide_firmware_button"
@@ -236,9 +236,9 @@ namespace {
             if (const auto value = entryNode.value<bool>()) {
               config.appearanceHideSessionSelector = *value;
             }
-          } else if (entryView == "hide_theme_selector") {
+          } else if (entryView == "hide_scheme_selector") {
             if (const auto value = entryNode.value<bool>()) {
-              config.appearanceHideThemeSelector = *value;
+              config.appearanceHideSchemeSelector = *value;
             }
           } else if (entryView == "hide_shutdown_button") {
             if (const auto value = entryNode.value<bool>()) {
@@ -516,8 +516,8 @@ namespace {
     if (config.appearanceHideSessionSelector.has_value()) {
       appearance.insert_or_assign("hide_session_selector", *config.appearanceHideSessionSelector);
     }
-    if (config.appearanceHideThemeSelector.has_value()) {
-      appearance.insert_or_assign("hide_theme_selector", *config.appearanceHideThemeSelector);
+    if (config.appearanceHideSchemeSelector.has_value()) {
+      appearance.insert_or_assign("hide_scheme_selector", *config.appearanceHideSchemeSelector);
     }
     if (config.appearanceHideShutdownButton.has_value()) {
       appearance.insert_or_assign("hide_shutdown_button", *config.appearanceHideShutdownButton);
@@ -957,7 +957,7 @@ namespace greeter::config {
     out << "# and output layout/transforms when not set here. Session power actions/menu entries are\n";
     out << "# Sync-only (sync.toml [session.power]/[[session.actions]]) and are not settable here.\n";
     out << "# [session] default, [user] default\n";
-    out << "# [appearance] scheme, password_style, hide_logo, hide_session_selector, hide_theme_selector, "
+    out << "# [appearance] scheme, password_style, hide_logo, hide_session_selector, hide_scheme_selector, "
            "hide_shutdown_button, hide_reboot_button, hide_firmware_button, power_buttons_position, "
            "scheme_selector_position, theme_mode, corner_radius_scale, font_family\n";
     out << "# [appearance.palette] full color role table, [appearance.wallpaper] path/fill_mode/fill_color\n";

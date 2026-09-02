@@ -28,7 +28,7 @@ password_style = "random"
 hide_logo = false
 # Hide individual controls. Omitted values default to false.
 hide_session_selector = false
-hide_theme_selector = false
+hide_scheme_selector = false
 hide_shutdown_button = false
 hide_reboot_button = false
 hide_firmware_button = false

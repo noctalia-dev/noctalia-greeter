@@ -441,8 +441,8 @@ namespace greeter {
     if (file.appearanceHideSessionSelector.has_value()) {
       prefs.hideSessionSelector = *file.appearanceHideSessionSelector;
     }
-    if (file.appearanceHideThemeSelector.has_value()) {
-      prefs.hideThemeSelector = *file.appearanceHideThemeSelector;
+    if (file.appearanceHideSchemeSelector.has_value()) {
+      prefs.hideSchemeSelector = *file.appearanceHideSchemeSelector;
     }
     if (file.appearanceHideShutdownButton.has_value()) {
       prefs.hideShutdownButton = *file.appearanceHideShutdownButton;
