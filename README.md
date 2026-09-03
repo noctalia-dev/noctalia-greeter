@@ -166,7 +166,7 @@ The module enables greetd and sets the session command automatically. It also en
 to list valid names.
 
 `settings` writes `/var/lib/noctalia-greeter/greeter.toml` (full declarative config,
-including appearance/palette when you set them). Sync/UI mutable data lives in
+including appearance/palette when you set them). Sync mutable data lives in
 `sync.toml` (not managed by Nix). Full docs:
 **[docs.noctalia.dev/v5/greeter](https://docs.noctalia.dev/v5/greeter/)**.
 Commented example: [`examples/greeter.toml`](examples/greeter.toml).
@@ -236,6 +236,20 @@ Optional default session (must match a name from the session picker, e.g. `niri`
 
 ```toml
 command = "/usr/bin/noctalia-greeter-session -- --session niri"
+```
+
+To hide the session picker, set `appearance.hide_session_selector = true` in `greeter.toml`.
+The selected session still follows CLI default, configured default, and the last
+session from `sync.toml`; if none is available, the first discovered session is used.
+
+Individual UI controls can be hidden under `[appearance]`; omitted options default to `false`:
+
+```toml
+[appearance]
+hide_scheme_selector = true
+hide_shutdown_button = true
+hide_reboot_button = false
+hide_firmware_button = false
 ```
 
 List valid session names:

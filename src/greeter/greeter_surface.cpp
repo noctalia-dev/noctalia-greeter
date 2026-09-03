@@ -683,6 +683,18 @@ void GreeterSurface::applyInitialUserSelection() {
 
 bool GreeterSurface::showsUserDropdown() const noexcept { return m_users.size() > 1; }
 
+bool GreeterSurface::showsSessionSelector() const noexcept { return !m_hideSessionSelector; }
+
+bool GreeterSurface::showsSchemeSelector() const noexcept {
+  return !m_hideSchemeSelector && m_schemeSelectorPosition != "hidden";
+}
+
+bool GreeterSurface::showsShutdownButton() const { return !m_hideShutdownButton && power::hasSyncedAction("shutdown"); }
+
+bool GreeterSurface::showsRebootButton() const { return !m_hideRebootButton && power::hasSyncedAction("reboot"); }
+
+bool GreeterSurface::showsFirmwareButton() const noexcept { return !m_hideFirmwareButton; }
+
 void GreeterSurface::setKeyboardOwner(const bool owner) noexcept {
   m_isKeyboardOwner = owner;
   if (owner) {
@@ -1103,11 +1115,12 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
   const float headerBlockHeight = headerTopPadding + headerGlyphBlock + subtitleGap + headerToContentGap;
 
   const float sessionRowH = rowHeight;
-  const float sessionRowGap = rowGap;
+  const float sessionRowGap = showsSessionSelector() ? rowGap : 0.0f;
 
   const float userBlockHeight = showsUserDropdown() ? rowHeight : 0.0f;
-  const float userPickerContentHeight = userBlockHeight + sessionRowGap + sessionRowH;
-  const float passwordContentHeight = Style::controlHeight() + sessionRowGap + sessionRowH;
+  const float userPickerContentHeight = userBlockHeight + (showsSessionSelector() ? sessionRowGap + sessionRowH : 0.0f);
+  const float passwordContentHeight =
+      Style::controlHeight() + (showsSessionSelector() ? sessionRowGap + sessionRowH : 0.0f);
   const float contentBlockHeight = m_passwordVisible ? passwordContentHeight : userPickerContentHeight;
 
   const bool hasStatus = !m_status.empty();
@@ -1216,19 +1229,11 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
   const float inputWidth = std::max(120.0f, contentWidth - buttonWidth - gap);
 
   const float selectorH = Style::controlHeightSm();
-  const float schemeW = measureIconSelectorWidth(m_schemeSelectIcon, m_schemeSelectGlyph);
-
-  // Determine scheme selector position based on config
-  float schemeX;
-  float schemeY;
-  if (m_schemeSelectorPosition == "hidden") {
-    // Hide all selector parts (always non-null after initialize())
-    m_schemeSelectBox->setVisible(false);
-    m_schemeSelectIcon->setVisible(false);
-    m_schemeSelectGlyph->setVisible(false);
-    m_schemeSelectArea->setVisible(false);
-    m_schemeSelectLabel->setVisible(false);
-  } else {
+  if (showsSchemeSelector()) {
+    const float schemeW = measureIconSelectorWidth(m_schemeSelectIcon, m_schemeSelectGlyph);
+    float schemeX;
+    float schemeY;
+    // Determine scheme selector position based on config.
     if (m_schemeSelectorPosition == "top-left") {
       schemeX = ox + Style::spaceLg();
       schemeY = oy + Style::spaceLg();
@@ -1239,7 +1244,7 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
       schemeX = ox + sw - schemeW - Style::spaceLg();
       schemeY = oy + sh - selectorH - Style::spaceLg();
     } else {
-      // Default: top-right
+      // Default: top-right.
       schemeX = ox + sw - schemeW - Style::spaceLg();
       schemeY = oy + Style::spaceLg();
     }
@@ -1247,6 +1252,12 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
         m_schemeSelectBox, m_schemeSelectIcon, m_schemeSelectGlyph, m_schemeSelectArea, schemeX, schemeY, schemeW,
         selectorH
     );
+  } else {
+    m_schemeSelectBox->setVisible(false);
+    m_schemeSelectIcon->setVisible(false);
+    m_schemeSelectGlyph->setVisible(false);
+    m_schemeSelectArea->setVisible(false);
+    m_schemeSelectLabel->setVisible(false);
   }
   if (m_schemeSelectLabel != nullptr) {
     m_schemeSelectLabel->setVisible(false);
@@ -1314,9 +1325,17 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
     m_backButton->setVisible(false);
   }
 
-  const float sessionY = m_passwordVisible ? (contentTop + Style::controlHeight() + sessionRowGap)
-                                           : (contentTop + userBlockHeight + sessionRowGap);
-  layoutPanelSessionSelector(contentLeft, sessionY, contentWidth, sessionRowH);
+  if (showsSessionSelector()) {
+    const float sessionY = m_passwordVisible ? (contentTop + Style::controlHeight() + sessionRowGap)
+                                             : (contentTop + userBlockHeight + sessionRowGap);
+    layoutPanelSessionSelector(contentLeft, sessionY, contentWidth, sessionRowH);
+  } else {
+    m_sessionSelectBox->setVisible(false);
+    m_sessionSelectIcon->setVisible(false);
+    m_sessionSelectLabel->setVisible(false);
+    m_sessionSelectGlyph->setVisible(false);
+    m_sessionSelectArea->setVisible(false);
+  }
 
   if (hasStatus) {
     const float statusY = contentTop + contentBlockHeight + statusGap;
@@ -1999,6 +2018,11 @@ void GreeterSurface::syncWallpaperTexture() {
 void GreeterSurface::loadPreferences() {
   const auto prefs = greeter::loadGreeterPreferences();
   m_allowEmptyPassword = prefs.allowEmptyPassword;
+  m_hideSessionSelector = prefs.hideSessionSelector;
+  m_hideSchemeSelector = prefs.hideSchemeSelector;
+  m_hideShutdownButton = prefs.hideShutdownButton;
+  m_hideRebootButton = prefs.hideRebootButton;
+  m_hideFirmwareButton = prefs.hideFirmwareButton;
   const auto initialSession = greeter::resolveInitialSessionName(prefs);
 
   if (initialSession.has_value()) {
@@ -2066,6 +2090,9 @@ void GreeterSurface::openUserMenu() {
 }
 
 void GreeterSurface::toggleSessionMenu() {
+  if (!showsSessionSelector()) {
+    return;
+  }
   m_sessionMenuOpen = !m_sessionMenuOpen;
   if (m_sessionMenuOpen) {
     m_userMenuOpen = false;
@@ -2078,10 +2105,7 @@ void GreeterSurface::toggleSessionMenu() {
 }
 
 void GreeterSurface::toggleSchemeMenu() {
-  // Don't toggle the menu if the selector is hidden
-  if (m_schemeSelectorPosition == "hidden" && m_schemeMenuOpen) {
-    m_schemeMenuOpen = false;
-    requestLayout();
+  if (!showsSchemeSelector()) {
     return;
   }
   m_schemeMenuOpen = !m_schemeMenuOpen;
@@ -2189,20 +2213,29 @@ void GreeterSurface::rebuildFocusRing() {
                            }});
   }
 
-  if (m_sessionSelectArea != nullptr) {
+  if (showsSessionSelector() && m_sessionSelectArea != nullptr) {
     m_focusRing.push_back({m_sessionSelectArea, [this]() { toggleSessionMenu(); }});
   }
-  if (m_schemeSelectArea != nullptr && m_schemeSelectArea->visible()) {
+  if (showsSchemeSelector() && m_schemeSelectArea != nullptr) {
     m_focusRing.push_back({m_schemeSelectArea, [this]() { toggleSchemeMenu(); }});
   }
 
-  if (m_firmwareButton != nullptr && m_firmwareButton->inputArea() != nullptr && m_firmwareButton->visible()) {
+  if (showsFirmwareButton()
+      && m_firmwareButton != nullptr
+      && m_firmwareButton->inputArea() != nullptr
+      && m_firmwareButton->visible()) {
     m_focusRing.push_back({m_firmwareButton->inputArea(), []() { power::rebootToFirmwareSetup(); }});
   }
-  if (m_rebootButton != nullptr && m_rebootButton->inputArea() != nullptr && m_rebootButton->visible()) {
+  if (showsRebootButton()
+      && m_rebootButton != nullptr
+      && m_rebootButton->inputArea() != nullptr
+      && m_rebootButton->visible()) {
     m_focusRing.push_back({m_rebootButton->inputArea(), []() { power::reboot(); }});
   }
-  if (m_shutdownButton != nullptr && m_shutdownButton->inputArea() != nullptr && m_shutdownButton->visible()) {
+  if (showsShutdownButton()
+      && m_shutdownButton != nullptr
+      && m_shutdownButton->inputArea() != nullptr
+      && m_shutdownButton->visible()) {
     m_focusRing.push_back({m_shutdownButton->inputArea(), []() { power::powerOff(); }});
   }
 
@@ -2543,9 +2576,13 @@ void GreeterSurface::layoutPowerButtons(float ox, float oy, float sw, float sh) 
     y = oy + sh - size - margin;
   }
 
-  const auto place = [&](Button* btn, float x) {
+  const auto place = [&](Button* btn, float x, bool allowed) {
     if (btn == nullptr) {
-      return;
+      return false;
+    }
+    if (!allowed) {
+      btn->setVisible(false);
+      return false;
     }
     btn->setVisible(true);
     btn->setRadius(Style::scaledRadius(Style::controlHeightBase * 0.5f));
@@ -2563,29 +2600,30 @@ void GreeterSurface::layoutPowerButtons(float ox, float oy, float sw, float sh) 
       );
       glyph->setSize(std::max(glyphW, 1.0f), std::max(glyphH, 1.0f));
     }
+    return true;
   };
 
-  // Determine horizontal placement: right-aligned (default) or left-aligned
+  // Determine horizontal placement: right-aligned (default) or left-aligned.
   if (m_powerButtonsPosition == "bottom-left" || m_powerButtonsPosition == "top-left") {
-    // Left-aligned: firmware → reboot → shutdown (left to right)
+    // Left-aligned: firmware, reboot, shutdown (left to right).
     float x = ox + margin;
-    if (m_firmwareButton != nullptr) {
-      place(m_firmwareButton, x);
+    if (place(m_firmwareButton, x, showsFirmwareButton())) {
       x += size + gap;
     }
-    place(m_rebootButton, x);
-    x += size + gap;
-    place(m_shutdownButton, x);
-  } else {
-    // Right-aligned (default): shutdown → reboot → firmware (right to left)
-    float x = ox + sw - size - margin;
-    place(m_shutdownButton, x);
-    x -= size + gap;
-    place(m_rebootButton, x);
-    if (m_firmwareButton != nullptr) {
-      x -= size + gap;
-      place(m_firmwareButton, x);
+    if (place(m_rebootButton, x, showsRebootButton())) {
+      x += size + gap;
     }
+    (void)place(m_shutdownButton, x, showsShutdownButton());
+  } else {
+    // Right-aligned (default): shutdown, reboot, firmware (right to left).
+    float x = ox + sw - size - margin;
+    if (place(m_shutdownButton, x, showsShutdownButton())) {
+      x -= size + gap;
+    }
+    if (place(m_rebootButton, x, showsRebootButton())) {
+      x -= size + gap;
+    }
+    (void)place(m_firmwareButton, x, showsFirmwareButton());
   }
 }
 
@@ -2865,6 +2903,9 @@ bool GreeterSurface::handleNavigationKey(std::uint32_t sym, std::uint32_t utf32,
   // F3 / F7 jump straight to the session / color-scheme menus from anywhere
   // (even from inside the password field or with another menu open).
   if (KeySymbol::isF3(sym)) {
+    if (!showsSessionSelector()) {
+      return true;
+    }
     if (m_sessionMenuOpen) {
       closeMenusAndRestoreFocus();
     } else {
@@ -2876,8 +2917,7 @@ bool GreeterSurface::handleNavigationKey(std::uint32_t sym, std::uint32_t utf32,
     return true;
   }
   if (KeySymbol::isF7(sym)) {
-    // Don't respond if the scheme selector is hidden
-    if (m_schemeSelectorPosition == "hidden") {
+    if (!showsSchemeSelector()) {
       return true;
     }
     if (m_schemeMenuOpen) {
@@ -3425,7 +3465,7 @@ void GreeterSurface::buildMenu(
 
 void GreeterSurface::rebuildSessionMenu() {
   clearSessionMenu();
-  if (!m_sessionMenuOpen || m_sessions.empty()) {
+  if (!showsSessionSelector() || !m_sessionMenuOpen || m_sessions.empty()) {
     return;
   }
   std::vector<std::string> names;
@@ -3442,7 +3482,7 @@ void GreeterSurface::rebuildSessionMenu() {
 
 void GreeterSurface::rebuildSchemeMenu() {
   clearSchemeMenu();
-  if (!m_schemeMenuOpen || m_schemeNames.empty()) {
+  if (!showsSchemeSelector() || !m_schemeMenuOpen || m_schemeNames.empty()) {
     return;
   }
   // Open upward when selector is at the bottom, downward otherwise

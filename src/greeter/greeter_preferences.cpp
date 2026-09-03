@@ -430,6 +430,21 @@ namespace greeter {
     GreeterPreferences prefs;
     prefs.defaultSession = file.sessionDefault;
     prefs.defaultUser = file.userDefault;
+    if (file.appearanceHideSessionSelector.has_value()) {
+      prefs.hideSessionSelector = *file.appearanceHideSessionSelector;
+    }
+    if (file.appearanceHideSchemeSelector.has_value()) {
+      prefs.hideSchemeSelector = *file.appearanceHideSchemeSelector;
+    }
+    if (file.appearanceHideShutdownButton.has_value()) {
+      prefs.hideShutdownButton = *file.appearanceHideShutdownButton;
+    }
+    if (file.appearanceHideRebootButton.has_value()) {
+      prefs.hideRebootButton = *file.appearanceHideRebootButton;
+    }
+    if (file.appearanceHideFirmwareButton.has_value()) {
+      prefs.hideFirmwareButton = *file.appearanceHideFirmwareButton;
+    }
     prefs.session = sync.sessionLast;
     // greeter.toml is declarative and wins; sync.toml only carries the last UI pick.
     prefs.scheme = file.appearanceScheme.has_value() ? file.appearanceScheme : sync.appearanceScheme;

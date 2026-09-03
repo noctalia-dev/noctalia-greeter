@@ -43,15 +43,16 @@ in
       default = { };
       description = ''
         Full declarative greeter.toml, symlinked into the Nix store and replaced on every
-        activation. Configure everything here: session/user defaults, appearance (scheme,
+        activation. Configure everything here: session/user defaults, UI visibility, appearance (scheme,
         palette, wallpaper, font, ...), output, idle, cursor, keyboard, auth.
-        Sync/UI mutable data lives in sync.toml and is not managed by this option.
+         Sync/UI mutable data lives in sync.toml and is not managed by this option.
         Accepts a Nix attrset, raw TOML string, or path to a `.toml` file.
         See examples/greeter.toml in the noctalia-greeter repository.
       '';
       example = lib.literalExpression ''
         {
           session.default = "niri";
+          appearance.hide_session_selector = true;
           appearance = {
             scheme = "Synced";
             password_style = "default";

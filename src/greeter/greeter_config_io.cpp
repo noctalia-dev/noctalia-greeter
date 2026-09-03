@@ -60,6 +60,11 @@ namespace {
     return key == "scheme"
         || key == "password_style"
         || key == "hide_logo"
+        || key == "hide_session_selector"
+        || key == "hide_scheme_selector"
+        || key == "hide_shutdown_button"
+        || key == "hide_reboot_button"
+        || key == "hide_firmware_button"
         || key == "power_buttons_position"
         || key == "scheme_selector_position"
         || key == "theme_mode"
@@ -221,6 +226,26 @@ namespace {
           } else if (entryView == "hide_logo") {
             if (const auto value = entryNode.value<bool>()) {
               config.appearanceHideLogo = *value;
+            }
+          } else if (entryView == "hide_session_selector") {
+            if (const auto value = entryNode.value<bool>()) {
+              config.appearanceHideSessionSelector = *value;
+            }
+          } else if (entryView == "hide_scheme_selector") {
+            if (const auto value = entryNode.value<bool>()) {
+              config.appearanceHideSchemeSelector = *value;
+            }
+          } else if (entryView == "hide_shutdown_button") {
+            if (const auto value = entryNode.value<bool>()) {
+              config.appearanceHideShutdownButton = *value;
+            }
+          } else if (entryView == "hide_reboot_button") {
+            if (const auto value = entryNode.value<bool>()) {
+              config.appearanceHideRebootButton = *value;
+            }
+          } else if (entryView == "hide_firmware_button") {
+            if (const auto value = entryNode.value<bool>()) {
+              config.appearanceHideFirmwareButton = *value;
             }
           } else if (entryView == "power_buttons_position") {
             config.appearancePowerButtonsPosition = stringValue(entryNode);
@@ -482,6 +507,21 @@ namespace {
     );
     if (config.appearanceHideLogo.has_value()) {
       appearance.insert_or_assign("hide_logo", *config.appearanceHideLogo);
+    }
+    if (config.appearanceHideSessionSelector.has_value()) {
+      appearance.insert_or_assign("hide_session_selector", *config.appearanceHideSessionSelector);
+    }
+    if (config.appearanceHideSchemeSelector.has_value()) {
+      appearance.insert_or_assign("hide_scheme_selector", *config.appearanceHideSchemeSelector);
+    }
+    if (config.appearanceHideShutdownButton.has_value()) {
+      appearance.insert_or_assign("hide_shutdown_button", *config.appearanceHideShutdownButton);
+    }
+    if (config.appearanceHideRebootButton.has_value()) {
+      appearance.insert_or_assign("hide_reboot_button", *config.appearanceHideRebootButton);
+    }
+    if (config.appearanceHideFirmwareButton.has_value()) {
+      appearance.insert_or_assign("hide_firmware_button", *config.appearanceHideFirmwareButton);
     }
     insertString(
         appearance, "power_buttons_position", config.appearancePowerButtonsPosition,
@@ -833,8 +873,9 @@ namespace greeter::config {
     out << "# and output layout/transforms when not set here. Session power actions/menu entries are\n";
     out << "# Sync-only (sync.toml [session.power]/[[session.actions]]) and are not settable here.\n";
     out << "# [session] default, [user] default\n";
-    out << "# [appearance] scheme, password_style, hide_logo, power_buttons_position, scheme_selector_position, "
-           "theme_mode, corner_radius_scale, font_family\n";
+    out << "# [appearance] scheme, password_style, hide_logo, hide_session_selector, hide_scheme_selector, "
+           "hide_shutdown_button, hide_reboot_button, hide_firmware_button, power_buttons_position, "
+           "scheme_selector_position, theme_mode, corner_radius_scale, font_family\n";
     out << "# [appearance.palette] full color role table, [appearance.wallpaper] path/fill_mode/fill_color\n";
     out << "# [appearance.wallpapers.<connector>] per-output wallpaper overrides\n";
     out << "# [output] name/layout/scale/scales/width/height/transforms, [idle] timeout, [cursor] theme/size/path\n";

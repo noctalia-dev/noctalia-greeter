@@ -4,7 +4,7 @@
 # On NixOS: programs.noctalia-greeter.settings = { ... };  (symlinked into the Nix store, replaced every activation)
 #
 # This file is the full admin config. Sync and the login UI never write it.
-# Mutable Sync/UI data lives in sync.toml (lower priority when both set).
+# Mutable Sync data lives in sync.toml (lower priority when both set).
 # Sync merges palette/wallpaper/session into sync.toml; a complete [appearance.palette] here wins.
 #
 # Omit any key for the built-in default.
@@ -13,7 +13,6 @@
 [session]
 # Session Name from `noctalia-greeter sessions` (picker label, not .desktop id).
 default = "niri"
-
 [user]
 # Opens the password step for this account on startup.
 default = "lysec"
@@ -26,6 +25,12 @@ scheme = "Synced"
 password_style = "random"
 # Hide the Noctalia brand logo on the login screen.
 hide_logo = false
+# Hide individual controls. Omitted values default to false.
+hide_session_selector = false
+hide_scheme_selector = false
+hide_shutdown_button = false
+hide_reboot_button = false
+hide_firmware_button = false
 theme_mode = "dark"
 corner_radius_scale = 1.0
 # Optional; empty / omit keeps the greeter default font.

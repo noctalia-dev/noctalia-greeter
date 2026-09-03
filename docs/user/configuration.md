@@ -10,6 +10,8 @@ Configure **everything** in `/var/lib/noctalia-greeter/greeter.toml` (Nix: `prog
 
 The **Synced** scheme uses a complete `[appearance.palette]` from `greeter.toml` when present, otherwise the same keys from `sync.toml`. (Legacy live `appearance.json` is migrated into `sync.toml` once.)
 
+The `[appearance].hide_*` keys are declarative `greeter.toml` settings. They are not read from or written to `sync.toml`.
+
 If `greeter.toml` is missing, the greeter uses built-in defaults. Setup ensures `/var/lib/noctalia-greeter/` exists and is owned by the greetd session user.
 
 - [Keys the greeter remembers](#keys-the-greeter-remembers)
@@ -51,6 +53,11 @@ Set these in **`greeter.toml`**. The greeter UI and Sync do not change them. Whe
 | `[appearance].scheme` | Color scheme (`Synced`, builtin name such as `Noctalia`, …). Overrides last UI pick in `sync.toml`. |
 | `[appearance].password_style` | Password mask: `default` or `random` |
 | `[appearance].hide_logo` | Hide the Noctalia brand logo (`true` / `false`) |
+| `[appearance].hide_session_selector` | Hide the session selector (`true` / `false`; default `false`) |
+| `[appearance].hide_scheme_selector` | Hide the scheme selector (`true` / `false`; default `false`) |
+| `[appearance].hide_shutdown_button` | Hide the shutdown button (`true` / `false`; default `false`) |
+| `[appearance].hide_reboot_button` | Hide the reboot button (`true` / `false`; default `false`) |
+| `[appearance].hide_firmware_button` | Hide the firmware button (`true` / `false`; default `false`) |
 | `[appearance].power_buttons_position` | Power buttons: `bottom-right` (default), `bottom-left`, `top-left`, `top-right`, `hidden` |
 | `[appearance].scheme_selector_position` | Scheme selector: `top-right` (default), `top-left`, `bottom-left`, `bottom-right`, `hidden` |
 | `[appearance].theme_mode` | Theme mode string for Synced look (e.g. `dark`) |
@@ -84,7 +91,7 @@ Copy to `/var/lib/noctalia-greeter/greeter.toml` and drop any lines you do not n
 # On NixOS: programs.noctalia-greeter.settings = { ... };  (tmpfiles C+ overwrite)
 #
 # This file is the full admin config. Sync and the login UI never write it.
-# Mutable Sync/UI data lives in sync.toml (lower priority when both set).
+# Mutable Sync data lives in sync.toml (lower priority when both set).
 # Sync merges palette/wallpaper/session into sync.toml; a complete [appearance.palette] here wins.
 #
 # Omit any key for the built-in default.
@@ -107,6 +114,12 @@ scheme = "Synced"
 password_style = "random"
 # Hide the Noctalia brand logo on the login screen.
 hide_logo = false
+# Hide individual controls. Omitted values default to false.
+hide_session_selector = false
+hide_scheme_selector = false
+hide_shutdown_button = false
+hide_reboot_button = false
+hide_firmware_button = false
 # Power buttons position: "bottom-right" (default), "bottom-left", "top-left", "top-right", "hidden"
 power_buttons_position = "bottom-right"
 # Scheme selector position: "top-right" (default), "top-left", "bottom-left", "bottom-right", "hidden"
