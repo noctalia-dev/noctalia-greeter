@@ -1,4 +1,17 @@
-<!-- If this PR is not ready for review yet, please mark it as Draft. -->
+<!-- noctalia-greeter-pr-template:v1 -->
+<!-- Keep the marker line above this comment.
+
+     A bot closes pull requests whose description loses required template structure.
+     Draft pull requests may leave checkboxes incomplete. Before marking a pull request
+     ready for review:
+     - select at least one change type;
+     - check every item under Checklist.
+
+     An explanation does not replace a required check. If a required statement is not
+     true yet, keep the pull request as Draft.
+
+     Everything else, including these guidance comments, may be deleted. Required
+     headings and checklist wording must remain. -->
 
 ## Summary
 
@@ -44,8 +57,10 @@
 
 ## Checklist
 
+<!-- Before marking the pull request ready for review, check every item below. -->
+
 - [ ] This PR is ready for review, or it is marked as Draft.
-- [ ] I read and followed the relevant guidance in `AGENTS.md` and `README.md`.
+- [ ] I read and followed the relevant guidance in `CONTRIBUTING.md` and `README.md`.
 - [ ] I ran `just format` with clang-format v22+ installed, or this PR has no code changes.
 - [ ] I ran the relevant build or test commands, or explained why they were not run.
 - [ ] I self-reviewed the changes.

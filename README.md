@@ -443,10 +443,7 @@ It is **not** a desktop shell or compositor replacement.
 
 ## 🤝 Contributing
 
-Contributions are welcome: fixes, polish, docs, or UX improvements.
-
-- Open an issue for bugs and regressions
-- Open a PR for improvements
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contributor guidance.
 
 ---
 
