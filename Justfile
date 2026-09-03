@@ -32,6 +32,10 @@ format-check:
 lint:
   cppcheck --enable=all --suppress=missingIncludeSystem src/
 
+# Regressions for the GitHub workflow scripts. Pure Python, builds nothing.
+test-workflows:
+  python3 -m unittest discover -s .github/workflows/scripts -p 'test_*.py'
+
 # Install to system
 install: build
   sudo meson install -C build

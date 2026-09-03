@@ -104,10 +104,12 @@ runtime setup details in `README.md` when they apply to users rather than only c
 
 ## Pull request process
 
-Keep the required structure and exact checkbox wording in [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md).
-Pull request descriptions are checked automatically when they are opened, edited, reopened, or marked ready for review.
-Draft pull requests may leave boxes unchecked. Before marking a pull request ready for review, select at least one
-change type and check every item under Checklist.
+Pull request descriptions are checked automatically when they are opened, edited, reopened, or marked ready for
+review. Keep the `## Summary`, `## Motivation`, `## Type of Change`, `## Testing`, and `## Checklist` headings and the
+Checklist wording from [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md). The remaining sections
+are context only: fill them in, leave them empty, or delete them. In Type of Change, keep only the lines that apply.
 
-A description that loses required template structure is commented on and closed automatically. Restore the missing
-content and reopen the pull request to run the check again.
+Draft pull requests may leave checkboxes incomplete. Before marking a pull request ready for review, select at least one
+change type and check every item in the Checklist section. A pull request that is missing required template structure
+is commented on and converted back to a draft; add the missing content and mark it ready for review to run the check
+again. The check never closes a pull request.

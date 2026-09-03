@@ -1,17 +1,16 @@
-<!-- noctalia-greeter-pr-template:v1 -->
-<!-- Keep the marker line above this comment.
+<!-- A bot checks this description and converts the pull request back to a draft if
+     required structure is missing. It never closes the pull request.
 
-     A bot closes pull requests whose description loses required template structure.
-     Draft pull requests may leave checkboxes incomplete. Before marking a pull request
-     ready for review:
-     - select at least one change type;
-     - check every item under Checklist.
+     Required: the Summary, Motivation, Type of Change, Testing, and Checklist
+     headings, and the Checklist wording below. Before marking a pull request ready for
+     review, select at least one change type and check every Checklist item.
+
+     Everything else may be deleted, including these guidance comments and any of the
+     Related Issue, Manual Coverage, Screenshots / Videos, and Additional Notes sections.
+     In Type of Change, keep only the lines that apply.
 
      An explanation does not replace a required check. If a required statement is not
-     true yet, keep the pull request as Draft.
-
-     Everything else, including these guidance comments, may be deleted. Required
-     headings and checklist wording must remain. -->
+     true yet, keep the pull request as Draft. -->
 
 ## Summary
 

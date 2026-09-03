@@ -12,15 +12,15 @@ concurrency:
   group: enforce-pr-template-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
-  issues: write
-  pull-requests: write
-
 jobs:
   enforce:
     if: ${{ github.repository == 'noctalia-dev/noctalia-greeter' }}
     runs-on: ubuntu-latest
+    permissions:
+      # GitHub's GraphQL draft mutation requires both write permissions.
+      contents: write
+      issues: write
+      pull-requests: write
     steps:
       # pull_request_target has write access. Only execute this trusted script from
       # the default branch; never check out or run code from the pull request head.
