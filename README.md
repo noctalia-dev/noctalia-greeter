@@ -157,7 +157,7 @@ imports = [
   inputs.noctalia-greeter.nixosModules.default
 ];
 
-programs.noctalia-greeter = {
+services.displayManager.noctalia-greeter = {
   enable = true;
 
   # Optional configuration
@@ -336,7 +336,7 @@ By default the greeter never blanks the screen. Set `[idle].timeout` (seconds, `
 timeout = 300
 ```
 
-On NixOS: `programs.noctalia-greeter.settings.idle.timeout = 300;` (written to `greeter.toml`).
+On NixOS: `services.displayManager.noctalia-greeter.settings.idle.timeout = 300;` (written to `greeter.toml`).
 
 List connector names from a running Wayland session:
 
@@ -441,7 +441,7 @@ command = "env XCURSOR_THEME=Adwaita XCURSOR_SIZE=24 /usr/bin/noctalia-greeter-s
 If the theme is not under the default search path, also set
 `XCURSOR_PATH` (or `cursor.path`) to the directory that contains it.
 
-On NixOS, set `programs.noctalia-greeter.settings.cursor` (writes `greeter.toml`);
+On NixOS, set `services.displayManager.noctalia-greeter.settings.cursor` (writes `greeter.toml`);
 use `path = "${pkgs.<theme>}/share/icons"` for packaged themes. The module does not
 add a `package` option or wrap the greetd command with `XCURSOR_*`.
 
