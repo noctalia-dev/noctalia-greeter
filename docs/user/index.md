@@ -1,244 +1,42 @@
-# Installation
-
-[Noctalia Greeter](https://github.com/noctalia-dev/noctalia-greeter) is the screen you see before your desktop session starts. It lets you pick a user, enter your password, choose a Wayland session, and pick a color scheme - with the same visual language as Noctalia.
-
-It is built for **[greetd](https://github.com/kennylevinsen/greetd)**: greetd starts the bundled wlroots compositor (`noctalia-greeter-compositor`), and the greeter runs inside that session. It is a login UI only, not a desktop shell or compositor replacement.
-
-Pair it with **Noctalia** if you want your wallpaper, palette, and UI font copied from the shell to the login screen (optional).
-
-- [Installing](#installing)
-- [Setting up greetd](#setting-up-greetd)
-- [Matching your Noctalia desktop](#matching-your-noctalia-desktop)
-- [Logging](#logging)
-- [Keyboard](#keyboard)
-- [Troubleshooting](#troubleshooting)
-
+---
+title: Noctalia Greeter
+description: Install, configure, and use the Noctalia login greeter for greetd.
+sidebar:
+  order: 0
 ---
 
-## Installing
+# Noctalia Greeter
 
-Install **noctalia-greeter** from your distribution if a package is available. You also need **greetd**, **D-Bus**, and **polkit** on the machine where greetd runs.
+[Noctalia Greeter](https://github.com/noctalia-dev/noctalia-greeter) is a graphical login screen for **[greetd](https://github.com/kennylevinsen/greetd)**. It lets you select a user and Wayland session, authenticate, and choose a color scheme using the same visual language as Noctalia.
 
-For user avatars in the login picker, also install and enable **accountsservice** (usually the `accounts-daemon` service). Noctalia Greeter reads each user's avatar from `org.freedesktop.Accounts` and shows a fallback when that service is unavailable or has no `IconFile` set.
+greetd starts the bundled wlroots compositor, which runs the greeter UI. It is a focused login environment—not a desktop shell or a general-purpose compositor.
 
-Your desktop sessions (niri, Hyprland, and so on) are separate - install those as you normally would.
+## Start here
 
-If your distro does not package the greeter yet, see the [noctalia-greeter repository](https://github.com/noctalia-dev/noctalia-greeter) for build and install steps. After installing, run the included system setup script as root so `/var/lib/noctalia-greeter/` and `greeter.toml` are created for the greetd user.
+1. [Install the greeter and its runtime dependencies](installation.md).
+2. If your package or module did not configure greetd, [point it at `noctalia-greeter-session`](installation.md#configure-greetd-manually).
+3. [Choose any administrator-controlled defaults](configuration.md), such as the initial user, session, or cursor.
+4. Optionally [sync your Noctalia appearance](sync.md) to the login screen.
 
-### NixOS
+## Guides
 
-A flake and NixOS module live in the [noctalia-greeter repository](https://github.com/noctalia-dev/noctalia-greeter). Import `inputs.noctalia-greeter.nixosModules.default` and enable:
+| Guide | Use it for |
+|-------|------------|
+| [Installation](installation.md) | Distribution packages, source installation, NixOS modules, and greetd setup |
+| [Configuration](configuration.md) | Config-file precedence, remembered state, available keys, default user, and default session |
+| [Sync with Noctalia](sync.md) | Wallpapers, palette, monitor sync, Polkit, and passwordless authorization |
+| [Displays](displays.md) | Output selection, multi-monitor layout, modes, transforms, scale, and idle blanking |
+| [Keyboard and cursor](input.md) | Keyboard navigation, XKB layout, Num Lock, and cursor themes |
+| [Troubleshooting](troubleshooting.md) | Logs and fixes for startup, login, display, sync, and input problems |
 
-```nix
-programs.noctalia-greeter = {
-  enable = true;
-  # Optional: extra flags after `--` on noctalia-greeter-session
-  greeter-args = "";
-  # Full declarative greeter.toml (overwritten each activation). See examples/greeter.toml.
-  settings = {
-    cursor = {
-      theme = "Bibata-Modern-Ice";
-      size = 24;
-      path = "${pkgs.bibata-cursors}/share/icons";
-    };
-  };
-};
-```
+## Requirements
 
-The module enables greetd by default, enables `accounts-daemon` by default (for user avatars), and sets `default_session.command` to the package's `noctalia-greeter-session`. See [Configuration](configuration.md) for the full `greeter.toml` key list.
+The greeter requires **greetd**, **D-Bus**, and the packaged assets. Your Wayland desktop sessions are installed separately.
 
----
+The following integrations are optional:
 
-## Setting up greetd
+- **Polkit** and `pkexec` for appearance sync from Noctalia
+- **AccountsService** for user avatars
+- **Noctalia Shell** for copying wallpaper, palette, font, and output settings
 
-Point greetd at the installed session wrapper. Use the path on your system - do not assume `/usr/local` if you installed from a package:
-
-```sh
-which noctalia-greeter-session
-```
-
-Example for a manual install to `/usr/local` (replace the path if `which` shows something else, e.g. `/usr/bin/noctalia-greeter-session`):
-
-```toml
-[default_session]
-command = "/usr/local/bin/noctalia-greeter-session"
-user = "greeter"
-```
-
-Use the `user` value that matches your greetd config. The greeter setup script prints a ready-to-paste `config.toml` block with the path it finds.
-
-### Default session
-
-To open the greeter with a specific session already selected, pass `--session` (or set
-`[session].default` in [greeter.toml](configuration.md)). The value is the session's
-desktop-entry **`Name=`** — the same string the greeter picker shows and that
-`noctalia-greeter sessions` prints. It is **not** the `.desktop` file basename
-(for example use `Hyprland (uwsm-managed)`, not `hyprland-uwsm`).
-
-List the valid names on the machine that runs greetd:
-
-```sh
-noctalia-greeter sessions
-```
-
-Copy a line from that output exactly. A simple name without spaces can go on the greetd command:
-
-```toml
-command = "/usr/bin/noctalia-greeter-session -- --session niri"
-```
-
-Prefer **`[session].default` in `greeter.toml`** when the name has spaces or punctuation — TOML
-quoting is reliable, and a broken greetd `command` line (for example an unquoted
-`Hyprland (uwsm-managed)`) can leave the VT unusable:
-
-```toml
-# /var/lib/noctalia-greeter/greeter.toml
-[session]
-default = "Hyprland (uwsm-managed)"
-```
-
-`[session].default` overrides the last session you picked (`[session].last` in `sync.toml`) unless
-`--session` is also passed on the command line. An unknown name is ignored and the greeter falls
-back to last-used or the first discovered session.
-
-When you pick a session, the greeter tells greetd to start it with environment from the `.desktop` file **before** PAM opens the session (required for logind session type):
-
-- `XDG_SESSION_TYPE=wayland` for entries under `wayland-sessions`
-- `XDG_CURRENT_DESKTOP` / `XDG_SESSION_DESKTOP` from `DesktopNames=` (`;`-list converted to `:`-separated)
-
-That helps desktop environments that expect those variables (including GNOME). Full GNOME support is still **best-effort** compared to GDM, if login still fails with systemd user-target errors, use GDM for GNOME or a custom session wrapper.
-
-### Default user
-
-To skip the user list and open the password step for a specific account (similar to tuigreet's default user), set `[user].default` in [greeter.toml](configuration.md) or pass `--user` on the command line:
-
-```toml
-command = "/usr/bin/noctalia-greeter-session -- --user lysec"
-```
-
-Use the exact login name from `/etc/passwd`. **Esc** or the back button returns to the user list if you need another account.
-
-Restart greetd after changing its config:
-
-```sh
-sudo systemctl restart greetd
-```
-
-On runit:
-
-```sh
-sudo sv restart greetd
-```
-
----
-
-## Matching your Noctalia desktop
-
-With Noctalia and the greeter both installed, open **Settings → Security → Noctalia Greeter → Sync Now**. Noctalia copies:
-
-- wallpaper (including per-output wallpapers when configured)
-- palette and theme mode
-- corner radius scale (`[shell] corner_radius_scale`)
-- shell font (`[shell] font_family`)
-- enabled session actions and power command overrides (`shell.session` / `[shell.session.power]`)
-- monitor orientation into `[output].transforms`
-- per-output scale into `[output].scales` (so layout coordinates stay valid on the greeter)
-- multi-monitor layout into `[output].layout` when more than one ready output reports distinct positions
-
-You will be prompted for admin access via polkit (`pkexec` or `run0`).
-
-User avatars are not part of greeter appearance sync. They come from AccountsService, so keep **accountsservice** running if you want the avatar you picked in Noctalia to appear on the greeter too.
-
-The synced font is a Fontconfig family name only. The greeter user must be able to resolve that family (system-installed fonts work; fonts that exist only in your home directory often will not).
-
-Enable **Settings → Security → Auto-Sync Greeter** to automatically sync whenever your wallpaper, colors/theme mode, or shell font change. Syncing triggers after a short debounce so rapid changes (like dragging a color picker) are batched into one sync. Session action edits and corner-radius-only changes still need Sync Now (or another auto-sync trigger) unless they arrive with one of those changes.
-
-Sync Now shows a notification while it waits for that approval. If **logind** or **elogind** is running, enable **Settings → Security → Polkit agent** to approve from the desktop.
-
-**seatd without logind:** polkit has no graphical session to attach to, so Noctalia's polkit agent cannot register (`No session for pid` in the log). Sync Now stages files and shows the install command. Run it from a terminal:
-
-```sh
-pkexec noctalia-greeter-apply-appearance "$XDG_RUNTIME_DIR/noctalia-greeter-sync"
-```
-
-To run Sync Now from the desktop on seatd, set a custom privilege prefix (the apply helper path and staging directory are appended automatically):
-
-```toml
-[shell.greeter_sync]
-privilege_command = "ghostty -e pkexec"
-```
-
-Optional: install **elogind** if you want in-session polkit prompts without a terminal wrapper. seatd and elogind can coexist; elogind only provides session tracking for polkit, not power management.
-
-Synced data is installed under `/var/lib/noctalia-greeter/`: wallpaper image files, and a merge into `sync.toml` from a staged `sync.toml` fragment (palette, wallpaper refs, font, corner radius, session actions, scheme, layout/transforms/scales). Declarative `greeter.toml` is never overwritten by Sync; values set there win over Sync (including `[appearance.palette]` for the Synced scheme). See [Configuration](configuration.md).
-
-After syncing, log out or restart greetd to see the changes on the login screen.
-
-The greeter adds a **Synced** color scheme when `greeter.toml` or `sync.toml` has a complete palette. Session and scheme choices you make on the login screen are remembered in `/var/lib/noctalia-greeter/sync.toml` (unless scheme is pinned in `greeter.toml`).
-
-For monitor selection, output mode, idle blanking, UI scale, cursor theme, and other settings, see [Configuration](configuration.md).
-
----
-
-## Logging
-
-Under greetd, noctalia-greeter logs to **syslog** by default (journald on systemd; metalog, syslog-ng, and similar on OpenRC). That rides along with the greetd service instead of a dedicated greeter log file. The session wrapper parks stdout/stderr so wlroots/libseat messages do not flash on the VT before DRM takes over.
-
-On systemd:
-
-```sh
-journalctl -u greetd -b | grep noctalia-greeter
-```
-
-Overrides (optional):
-
-| Value | Effect |
-|-------|--------|
-| unset (default) | syslog; stdout/stderr parked |
-| `NOCTALIA_GREETER_LOG=stderr` | console debug (`INF`/`DBG` → stdout, `WRN`/`ERR` → stderr) |
-| `NOCTALIA_GREETER_LOG=/path/to/file` | append to that file (plus syslog) |
-
-Example console debug:
-
-```toml
-command = "env NOCTALIA_GREETER_LOG=stderr WLR_LOG=info /usr/bin/noctalia-greeter-session"
-```
-
----
-
-## Keyboard
-
-The greeter works without a mouse.
-
-| Key | Action |
-|-----|--------|
-| `Tab` / `Shift+Tab` | Move focus |
-| `↑` / `↓` | Move focus, or move in an open menu |
-| `Enter` | Submit password / activate / confirm menu |
-| `Space` | Activate focused control |
-| `Esc` | Close menu or leave password step |
-| `F3` | Session picker |
-| `F7` | Color scheme picker |
-| `Ctrl+Alt+F1`-`F12` | Switch to virtual terminal (TTY) |
-
----
-
-## Troubleshooting
-
-- **Blank screen** - Check greetd / system logs (`journalctl -u greetd` and the `noctalia-greeter` syslog identifier, or your OpenRC logger). If you set `NOCTALIA_GREETER_LOG`, check that file or console instead. Ensure `/var/lib/noctalia-greeter` exists (`just setup-log-dir` from the greeter source tree, or create it owned by the greetd user).
-- **`Failed to spawn client` / wrong path in greetd config** - `command` must be the full path from `which noctalia-greeter-session` (often `/usr/bin/...` on packaged installs, not `/usr/local/bin/...`).
-- **`WAYLAND_DISPLAY is not set`** - greetd must use `noctalia-greeter-session` (it starts `noctalia-greeter-compositor`). Fix `command` in `/etc/greetd/config.toml`.
-- **`Login service stopped responding`** - greetd did not reply within the configured timeout. Inspect the greetd journal for a stalled or crashed PAM/session worker, then restart greetd. `[auth].request_timeout` controls the watchdog (default `60` seconds; `0` disables it).
-- **Black screen after reboot** - Same as blank screen: greetd/syslog first. Confirm the state dir and synced appearance files are present.
-- **Wrong session on startup** - Use the desktop-entry **`Name=`** from `noctalia-greeter sessions` (picker label), not the `.desktop` basename. `[session].default` in `greeter.toml` wins over last-used `[session].last` in `sync.toml`; `--session` on the greetd command wins over both. Put names with spaces in `greeter.toml` rather than unquoted on the greetd `command` line.
-- **GNOME fails with `graphical-session-pre.target` / kicks back to greeter** - GNOME expects a systemd-managed user session. The greeter passes `XDG_SESSION_TYPE` and `DesktopNames`-derived desktop env via greetd; if that is not enough, use GDM for GNOME or a custom `wayland-sessions` wrapper. See [Default session](#default-session).
-- **Synced look missing** - Install Noctalia, the greeter, and the polkit policy; sync again from Settings; restart greetd or log out once.
-- **User avatars missing on the login screen** - Install and enable **accountsservice** / `accounts-daemon`. The greeter reads the avatar from the user's AccountsService `IconFile`; without it, the picker falls back to a placeholder.
-- **Sync fails with no privilege escalator** - Greeter sync needs `pkexec` or `run0` on `PATH` (for example when `pkexec` is disabled on NixOS, install `run0` from systemd ≥ 256). A polkit authentication agent must be running in your session.
-- **Sync Now does nothing / greeter look unchanged** - Sync stages `sync.toml` + wallpapers first, then waits for polkit to authorize `noctalia-greeter-apply-appearance` (merges into live `sync.toml`, installs wallpapers). On **seatd without logind**, Noctalia's polkit agent cannot register; run the `pkexec` command from the Sync Now notification in a terminal. Sync Now warns after 90 seconds if approval is still pending.
-- **Polkit agent: `No session for pid`** - Expected on seatd-only setups. Install elogind for in-session prompts, or use terminal/console `pkexec` for greeter sync.
-- **Blank flash or modeset at login** - The greeter may be using a different DRM mode than your desktop session. Set matching `[output].width` and `[output].height` in `greeter.toml`. See [Output mode](configuration.md#output-mode).
-- **Screen never blanks on the greeter** - Set `[idle].timeout` (seconds) in `greeter.toml`. Pointer motion alone does not count as activity. See [Idle blanking](configuration.md#idle-blanking).
-- **Blanked greeter will not wake** - Use a key press, mouse button, or touch. If outputs stay off, check greeter compositor logs for idle/output commit errors.
-- **UI too small or too large on a high-DPI monitor** - Set `[output].scale` in `greeter.toml`. See [Configuration](configuration.md#ui-scale).
-- **Wrong or default cursor theme** - Set `[cursor].theme` (and `[cursor].size`) in `greeter.toml`, or the `XCURSOR_*` variables in the greetd command. If the theme is not on the default search path, also set `[cursor].path` / `XCURSOR_PATH`. On NixOS use `programs.noctalia-greeter.settings.cursor` (writes `greeter.toml`; use `path` for packaged themes, there is no `package` option). See [Cursor theme](configuration.md#cursor-theme).
+For packager-specific dependencies and filesystem layout, see the repository's [packaging guide](https://github.com/noctalia-dev/noctalia-greeter/blob/main/PACKAGING.md).

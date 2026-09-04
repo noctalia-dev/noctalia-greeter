@@ -4,5 +4,5 @@ contact_links:
     url: https://discord.noctalia.dev
     about: Join the community for support, discussions, and quick help.
   - name: Noctalia Docs - Greeter
-    url: https://docs.noctalia.dev/v5/greeter/
+    url: https://docs.noctalia.dev/greeter/
     about: Browse greeter configuration, setup, and troubleshooting guides.

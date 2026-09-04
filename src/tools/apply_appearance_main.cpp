@@ -2,15 +2,18 @@
 #include "greeter/appearance_sync.h"
 #include "greeter/greetd_user.h"
 #include "greeter/greeter_preferences.h"
+#include "tools/secure_appearance_sync.h"
 
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
 #include <string>
+#include <string_view>
 
 namespace {
 
   constexpr Logger kLog("apply-appearance");
+  constexpr std::string_view kSecureSyncCapability = "secure-sync-v1";
 
   void printUsage(const char* programName) {
     std::cerr
@@ -19,20 +22,28 @@ namespace {
         << " <staging-directory>\n"
         << "       "
         << programName
+        << " --sync <staging-directory>\n"
+        << "       "
+        << programName
+        << " --supports secure-sync-v1\n"
+        << "       "
+        << programName
         << " --setup-system\n"
         << "       "
         << programName
         << " --print-greeter-user\n\n"
         << "Installs appearance into "
         << greeter::appearance::syncedDataDirectory().string()
-        << " (root, world-readable).\n"
-        << "Sync merges into sync.toml and chowns synced files to the greetd session user.\n"
+        << " (owned by the greetd session user).\n"
+        << "Sync validates and merges into sync.toml as the greetd session user.\n"
         << "--setup-system creates greeter.toml / sync.toml and chowns them to the "
            "greetd user.\n\n"
         << "Environment:\n"
         << "  "
         << greeter::appearance::kSyncedDataDirEnv
-        << "  synced data dir\n"
+        << "  synced data dir (setup/legacy modes; --sync always uses "
+        << greeter::appearance::kDefaultSyncedDataDir
+        << ")\n"
         << "  "
         << greeter::kGreeterUserEnv
         << "  greeter user\n"
@@ -42,6 +53,25 @@ namespace {
 } // namespace
 
 int main(int argc, char* argv[]) {
+  if (argc == 3 && std::string_view(argv[1]) == "--supports" && std::string_view(argv[2]) == kSecureSyncCapability) {
+    std::cout << kSecureSyncCapability << '\n';
+    return 0;
+  }
+
+  if (argc >= 2 && std::string_view(argv[1]) == "--sync") {
+    if (argc != 3) {
+      printUsage(argv[0] != nullptr ? argv[0] : "noctalia-greeter-apply-appearance");
+      return 2;
+    }
+    std::string error;
+    if (!greeter::secure_sync::applyFromStaging(argv[2], error)) {
+      kLog.error("{}", error);
+      return 1;
+    }
+    kLog.info("installed appearance into '{}'", greeter::appearance::syncedDataDirectory().string());
+    return 0;
+  }
+
   if (argc == 2 && std::string_view(argv[1]) == "--setup-system") {
     const auto greeterUser = greeter::resolveGreeterAccountName();
     if (!greeterUser.has_value()) {
@@ -72,19 +102,8 @@ int main(int argc, char* argv[]) {
     return 2;
   }
 
-  const std::filesystem::path stagingDirectory = argv[1];
   std::string error;
-  if (!greeter::appearance::installFromStaging(stagingDirectory, error)) {
-    kLog.error("{}", error);
-    return 1;
-  }
-
-  if (!greeter::appearance::applySyncedGreeterPreferences(stagingDirectory, error)) {
-    kLog.error("{}", error);
-    return 1;
-  }
-
-  if (!greeter::appearance::ensureSyncedDataOwnedByGreeter(error)) {
+  if (!greeter::secure_sync::applyLegacyFromStaging(argv[1], error)) {
     kLog.error("{}", error);
     return 1;
   }

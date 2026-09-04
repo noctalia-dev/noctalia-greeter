@@ -1,14 +1,15 @@
 # noctalia-greeter - full greeter.toml example (declarative / Nix-safe)
 #
 # Install as /var/lib/noctalia-greeter/greeter.toml (owned by the greetd user).
-# On NixOS: programs.noctalia-greeter.settings = { ... };  (symlinked into the Nix store, replaced every activation)
+# On NixOS: services.displayManager.noctalia-greeter.settings = { ... };  (nixpkgs)
+# or: programs.noctalia-greeter.settings = { ... };  (project flake)
 #
 # This file is the full admin config. Sync and the login UI never write it.
 # Mutable Sync/UI data lives in sync.toml (lower priority when both set).
-# Sync merges palette/wallpaper/session into sync.toml; a complete [appearance.palette] here wins.
+# Sync merges appearance/output into sync.toml; a complete [appearance.palette] here wins.
 #
 # Omit any key for the built-in default.
-# Docs: https://docs.noctalia.dev/v5/greeter/configuration/
+# Docs: https://docs.noctalia.dev/greeter/configuration/
 
 [session]
 # Session Name from `noctalia-greeter sessions` (picker label, not .desktop id).
@@ -26,6 +27,10 @@ scheme = "Synced"
 password_style = "random"
 # Hide the Noctalia brand logo on the login screen.
 hide_logo = false
+# Power controls: bottom-right (default), bottom-left, top-left, top-right, or hidden.
+power_buttons_position = "bottom-right"
+# Scheme picker: top-right (default), top-left, bottom-left, bottom-right, or hidden.
+scheme_selector_position = "top-right"
 theme_mode = "dark"
 corner_radius_scale = 1.0
 # Optional; empty / omit keeps the greeter default font.

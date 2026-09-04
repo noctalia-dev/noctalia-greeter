@@ -46,6 +46,16 @@ Install with the prefix you intend to ship. Greetd `command` must point at the i
 
 The shipped `assets/` tree is **required at runtime**. Copying only `noctalia-greeter` breaks fonts, icons, and UI resources.
 
+The conventional-distribution `passwordless-sync` policy manager is part of
+the main `noctalia-greeter` binary; it does not add another installed
+executable. It is usable only when the apply helper and Polkit action are also
+installed in their configured prefix paths.
+
+Install the policy in the action directory that polkitd actually loads,
+normally `/usr/share/polkit-1/actions`. The standard distribution prefix
+`--prefix=/usr` gives that layout. A policy under `/usr/local/share` is not
+normally discovered merely because the greeter was built with that prefix.
+
 Runtime override: `NOCTALIA_GREETER_ASSETS_DIR` points at an alternate assets tree.
 
 ## Dependencies
@@ -65,6 +75,8 @@ Notes packagers hit often:
   required. The compositor is not optional.
 - **stb** must provide `stb/stb_image_resize2.h` (older `stb_image_resize`
   only packages are not enough).
+- **libxml2** headers and pkg-config metadata are required to build the
+  installed-policy validator used by `passwordless-sync enable`.
 
 Optional at build time (only if you ship the matching feature):
 
@@ -87,15 +99,23 @@ the sources.
 | wlroots 0.20 | `noctalia-greeter-compositor` (KMS, libinput, xkbcommon, wayland-server) |
 | Mesa / EGL / GLES | Greeter client rendering (or epoxy where distros split packages that way) |
 | Cairo, Pango, Fontconfig, FreeType, HarfBuzz, librsvg, GLib | Text and UI rendering |
+| libxml2 | Validate the installed Polkit action before enabling passwordless sync |
 
 Optional:
 
 | Dependency | Role |
 |---|---|
-| **polkit** | `pkexec noctalia-greeter-apply-appearance` when Noctalia Shell syncs appearance |
+| **Polkit daemon and `pkexec`** | Authorize `noctalia-greeter-apply-appearance --sync`; some distributions package `pkexec` separately |
 | **libwebp** | WebP wallpaper decode for that sync path (Wuffs covers other raster formats) |
 
-Optional pairing with **[Noctalia v5](https://github.com/noctalia-dev/noctalia)** for wallpaper/palette sync from shell settings (needs polkit + `noctalia-greeter-apply-appearance` on the sync path).
+Optional pairing with **[Noctalia v5](https://github.com/noctalia-dev/noctalia)**
+for wallpaper/palette sync from shell settings. The constrained sync protocol
+requires Greeter 1.4.0 or newer together with the next Noctalia release after
+5.0.1; current `-git` packages, `main` checkouts, or manual builds from current
+`main` work when both projects are up to date. Older and mixed-version
+combinations retain the administrator-authenticated legacy protocol. Noctalia
+requires the installed helper and its directory chain to be root-owned and not
+group- or world-writable before either protocol is elevated.
 
 ## greetd integration
 
@@ -190,8 +210,13 @@ If your package uses a different session user, either override under
 | `/etc/greetd/config.toml` | root (readable by greeter user) | greetd session definition (bootstrap only for user resolution) |
 | `/etc/pam.d/greetd` | root | PAM stack; setup script adds elogind/systemd runtime dir module |
 
-Override state dir with `NOCTALIA_GREETER_STATE_DIR` (must match across greetd,
-setup scripts, and `noctalia-greeter-apply-appearance`).
+Override the runtime/setup state dir with `NOCTALIA_GREETER_STATE_DIR` (it must
+match across greetd, setup scripts, and legacy helper modes). The constrained
+`--sync` operation deliberately ignores this environment variable and supports
+only `/var/lib/noctalia-greeter`; packagers using another state path must keep
+sync administrator-authenticated. Use an absolute custom path and explicitly
+forward the variable through the privilege boundary when invoking the legacy
+helper.
 
 Logging under greetd defaults to **syslog** (journald / system logger). The
 session wrapper parks stdout/stderr; use `NOCTALIA_GREETER_LOG=stderr` or a file
@@ -202,15 +227,72 @@ path for debugging.
 Only needed for **Noctalia Shell appearance sync**. Login and local `greeter.toml`
 config work without polkit.
 
-Shell sync runs:
+With Greeter 1.4.0 or newer and the next Noctalia release after 5.0.1, Shell
+sync runs:
 
 ```text
-pkexec noctalia-greeter-apply-appearance <staging-dir>
+pkexec noctalia-greeter-apply-appearance --sync <staging-dir>
 ```
 
-Policy ships as `org.noctalia.greeter.apply-appearance` (admin auth). The helper
-installs synced files into the state dir and chowns them to the resolved greeter
-user.
+Current `-git` packages, `main` checkouts, or manual builds from current `main`
+use the same protocol when both projects are up to date. Older and
+mixed-version combinations use the permanently supported legacy positional
+call:
+
+```text
+noctalia-greeter-apply-appearance <staging-dir>
+```
+
+That legacy call must remain administrator-authenticated and may be launched
+through `run0`, `pkexec`, or Noctalia's configured privilege-command prefix. It
+must never be covered by a passwordless rule.
+
+The constrained staging directory is exactly
+`/run/user/$PKEXEC_UID/noctalia-greeter-sync`, on the caller's protected runtime
+filesystem. A logind/elogind-style `/run/user/<uid>` runtime directory is
+therefore required for this mode.
+
+Policy ships as `org.noctalia.greeter.sync-appearance` (admin auth by default)
+and matches only the helper's `--sync` mode. The constrained mode validates
+caller-owned staging files, drops to `/var/lib/noctalia-greeter`'s greeter
+owner, and applies appearance without accepting session commands. When the
+legacy helper is launched through `pkexec`, it receives Polkit's generic
+administrator authorization.
+
+Passwordless authorization is an explicit system-administrator choice. Do not ship
+a blanket `YES` rule or enable passwordless sync by default. The packaged policy
+must keep administrator authentication as its default; this is a supported
+long-term workflow, and omitting a site-local allow rule must produce an
+administrator prompt on every constrained sync.
+
+Conventional packages should expose the installed CLI used to manage the
+site-local rule:
+
+```text
+sudo noctalia-greeter passwordless-sync enable USER
+noctalia-greeter passwordless-sync status [USER]
+sudo noctalia-greeter passwordless-sync disable USER
+```
+
+Do not invoke `enable` from a package installation or upgrade script. The
+administrator must choose each allowed login account explicitly. The command
+must manage only its own rule under `/etc/polkit-1/rules.d`, preserve other
+administrator-authored policy, remove a user's managed authorization when it is
+disabled, and leave no stale allow rule after every managed user is disabled.
+Packages still need to ship the action XML and apply helper shown in the install
+layout above.
+
+Declarative integrations can generate the equivalent policy instead. The
+project NixOS module exposes `passwordless-sync-users` and enables
+Polkit/`pkexec` even when that list is empty. The
+[user sync guide](docs/user/sync.md#conventional-packaged-distributions)
+documents the conventional CLI, NixOS configuration, manual rule, and runtime
+requirements without treating any one packaging model as universal.
+
+Older packages do not provide the `org.noctalia.greeter.sync-appearance`
+action, so the new rule cannot authorize them. Never adapt it to the old
+`org.noctalia.greeter.apply-appearance` action: releases through 1.3.1 scope
+that action only by executable path and it also covers the positional helper.
 
 ## What Noctalia Greeter is not
 

@@ -3,6 +3,7 @@
 #include "greeter/greeter.h"
 #include "greeter/greeter_preferences.h"
 #include "greeter/greeter_sessions.h"
+#include "tools/passwordless_sync_policy.h"
 #include "wayland/wayland_client.h"
 
 #include <atomic>
@@ -78,6 +79,10 @@ namespace {
 } // namespace
 
 int main(int argc, char* argv[]) {
+  if (argc >= 2 && std::strcmp(argv[1], "passwordless-sync") == 0) {
+    return greeter::passwordless_sync::runCommand(argc - 2, argv + 2);
+  }
+
   if (argc >= 2 && std::strcmp(argv[1], "sessions") == 0) {
     for (const greeter::SessionOption& session : greeter::discoverSessions()) {
       std::printf("%s\n", session.name.c_str());
@@ -148,12 +153,16 @@ int main(int argc, char* argv[]) {
           "Usage: noctalia-greeter [OPTIONS]\n"
           "       noctalia-greeter sessions\n"
           "       noctalia-greeter outputs\n"
+          "       noctalia-greeter passwordless-sync enable USER\n"
+          "       noctalia-greeter passwordless-sync disable USER\n"
+          "       noctalia-greeter passwordless-sync status [USER]\n"
           "\n"
-          "Run as a Wayland client under noctalia-greeter-compositor.\n"
+          "Without a command, run as a Wayland client under noctalia-greeter-compositor.\n"
           "\n"
           "Commands:\n"
           "  sessions              List available session names and exit\n"
           "  outputs               List Wayland connector names and exit\n"
+          "  passwordless-sync     Manage constrained passwordless appearance sync\n"
           "\n"
           "Options:\n"
           "  -h, --help            Show this help message\n"

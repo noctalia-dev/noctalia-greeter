@@ -20,6 +20,7 @@
   libwebp,
   glib,
   librsvg,
+  libxml2,
   nlohmann_json,
   tomlplusplus,
   stb,
@@ -42,7 +43,17 @@ in
     pname = "noctalia-greeter";
     inherit version;
 
-    src = lib.cleanSource ./..;
+    src = lib.cleanSourceWith {
+      src = ./..;
+      filter =
+        path: type:
+        lib.cleanSourceFilter path type
+        && !(type == "directory" && builtins.elem (baseNameOf path) [
+          "build"
+          "build-asan"
+          "build-release"
+        ]);
+    };
 
     postPatch = ''
       # Remove -march=native and -mtune=native for reproducible builds
@@ -72,6 +83,7 @@ in
       libwebp
       glib
       librsvg
+      libxml2
       nlohmann_json
       tomlplusplus
       stbWithResize2

@@ -52,6 +52,7 @@ namespace greeter {
   // previously synced values wholesale (a staged sync.toml / legacy appearance.json is a full snapshot).
   struct GreeterSyncAppearanceUpdate {
     config::GreeterTomlAppearance appearance;
+    bool replaceSession = true;
     std::optional<std::string> sessionPowerSuspend;
     std::optional<std::string> sessionPowerReboot;
     std::optional<std::string> sessionPowerShutdown;
@@ -59,7 +60,8 @@ namespace greeter {
   };
 
   // Sets sync.toml scheme to Synced; updates layout/transforms/scales only when staged; replaces the
-  // Sync-owned appearance + session power/menu data when `appearanceUpdate` is set.
+  // Sync-owned appearance when `appearanceUpdate` is set. Session power/menu data is replaced
+  // only when `appearanceUpdate.replaceSession` is true.
   [[nodiscard]] bool applyAppearanceSyncGreeterConf(
       const std::optional<std::string>& stagedOutputLayout, const std::optional<std::string>& stagedOutputTransforms,
       const std::optional<std::string>& stagedOutputScales,

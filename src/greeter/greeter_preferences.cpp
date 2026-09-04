@@ -24,7 +24,7 @@ namespace {
 
   constexpr Logger kLog("greeter-prefs");
 
-  constexpr mode_t kSyncedDirMode = S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH;
+  constexpr mode_t kSyncedDirMode = S_IRWXU | S_IRGRP | S_IXGRP;
   constexpr mode_t kGreeterConfMode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
 
   [[nodiscard]] std::string trim(std::string_view value) {
@@ -389,7 +389,13 @@ namespace greeter {
     }
 
     migrateLegacyRuntimeKeysToSync();
-    config::GreeterSyncFile sync = config::loadSync(greeterSyncPath());
+    const auto syncPath = greeterSyncPath();
+    config::clearConfigDiagnostics();
+    config::GreeterSyncFile sync = config::loadSync(syncPath);
+    if (!config::configDiagnostics().empty()) {
+      kLog.warn("refusing to overwrite invalid sync.toml");
+      return false;
+    }
     sync.appearanceScheme = appearance::kSyncedSchemeDisplayName;
     if (stagedOutputLayout.has_value()) {
       if (stagedOutputLayout->empty() || parseOutputLayoutValue(*stagedOutputLayout).empty()) {
@@ -414,12 +420,14 @@ namespace greeter {
     }
     if (appearanceUpdate.has_value()) {
       sync.appearance = appearanceUpdate->appearance;
-      sync.sessionPowerSuspend = appearanceUpdate->sessionPowerSuspend;
-      sync.sessionPowerReboot = appearanceUpdate->sessionPowerReboot;
-      sync.sessionPowerShutdown = appearanceUpdate->sessionPowerShutdown;
-      sync.sessionActions = appearanceUpdate->sessionActions;
+      if (appearanceUpdate->replaceSession) {
+        sync.sessionPowerSuspend = appearanceUpdate->sessionPowerSuspend;
+        sync.sessionPowerReboot = appearanceUpdate->sessionPowerReboot;
+        sync.sessionPowerShutdown = appearanceUpdate->sessionPowerShutdown;
+        sync.sessionActions = appearanceUpdate->sessionActions;
+      }
     }
-    return config::writeSync(greeterSyncPath(), sync);
+    return config::writeSync(syncPath, sync);
   }
 
   GreeterPreferences loadGreeterPreferences() {

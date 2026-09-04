@@ -59,8 +59,10 @@ namespace greeter::appearance {
   [[nodiscard]] bool installFromStaging(const std::filesystem::path& stagingDirectory, std::string& errorOut);
 
   // Merges staged sync.toml (or legacy appearance.json) + optional layout/transforms/scales into live sync.toml.
-  [[nodiscard]] bool
-  applySyncedGreeterPreferences(const std::filesystem::path& stagingDirectory, std::string& errorOut);
+  // The constrained Polkit path leaves privileged session command configuration unchanged.
+  [[nodiscard]] bool applySyncedGreeterPreferences(
+      const std::filesystem::path& stagingDirectory, bool includeSessionCommands, std::string& errorOut
+  );
 
   // Root only: chown synced state dir, sync.toml, and wallpaper files to the greetd session user.
   [[nodiscard]] bool ensureSyncedDataOwnedByGreeter(std::string& errorOut);

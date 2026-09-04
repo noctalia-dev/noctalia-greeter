@@ -48,7 +48,7 @@ sudo pacman -S meson gcc just \
   cairo pango harfbuzz \
   libxkbcommon glib2 \
   tomlplusplus nlohmann-json stb \
-  libwebp librsvg
+  libwebp librsvg libxml2
 ```
 
 ### Fedora
@@ -62,7 +62,7 @@ sudo dnf install meson gcc-c++ just \
   cairo-devel pango-devel harfbuzz-devel \
   libxkbcommon-devel glib2-devel \
   tomlplusplus-devel json-devel stb_image_resize2-devel \
-  libwebp-devel librsvg2-devel
+  libwebp-devel librsvg2-devel libxml2-devel
 ```
 
 ### openSUSE Tumbleweed / Slowroll
@@ -76,7 +76,7 @@ sudo zypper install meson gcc-c++ just \
   cairo-devel pango-devel harfbuzz-devel \
   libxkbcommon-devel glib2-devel \
   tomlplusplus-devel nlohmann_json-devel stb-devel \
-  libwebp-devel librsvg-devel
+  libwebp-devel librsvg-devel libxml2-devel
 ```
 
 ### Debian / Ubuntu
@@ -90,7 +90,7 @@ sudo apt install meson g++ just \
   libcairo2-dev libpango1.0-dev libharfbuzz-dev \
   libxkbcommon-dev libglib2.0-dev \
   libtomlplusplus-dev nlohmann-json3-dev libstb-dev \
-  libwebp-dev librsvg2-dev
+  libwebp-dev librsvg2-dev libxml2-dev
 ```
 
 ### Void Linux
@@ -102,7 +102,7 @@ sudo xbps-install meson ninja pkg-config git \
   MesaLib-devel libglvnd-devel cairo-devel \
   pango-devel fontconfig-devel freetype-devel harfbuzz-devel \
   tomlplusplus-devel nlohmann-json-devel stb \
-  libxkbcommon-devel libwebp-devel librsvg-devel
+  libxkbcommon-devel libwebp-devel librsvg-devel libxml2-devel
 ```
 
 Vendored dependencies, with no system package needed: `Wuffs`.
@@ -116,7 +116,26 @@ Build requires `wlroots-0.20` and `wayland-server` development packages (see dis
 
 On Void Linux, `libepoxy-devel` is used when EGL/GLES pkg-config modules are not available.
 
-## NixOS
+Polkit and `pkexec` are optional for login, but required for appearance sync
+from Noctalia. Passwordless sync additionally requires the packaged constrained
+Polkit action.
+
+## Installation
+
+### Distribution packages
+
+Install `noctalia-greeter` from your distribution when available. A complete
+package provides the greeter, session wrapper, apply helper, assets, and the
+optional Polkit action used for appearance sync. The
+**[installation guide](https://docs.noctalia.dev/greeter/installation/)** has
+package-specific commands for Arch Linux, CachyOS, KaOS, Fedora, Debian, and
+Ubuntu, as well as the manual route for other distributions.
+
+After installation, point greetd at the packaged
+`noctalia-greeter-session` unless the package already did so. See
+[Setting up greetd](#setting-up-greetd).
+
+### NixOS
 
 A flake and NixOS module are provided.
 
@@ -143,6 +162,9 @@ programs.noctalia-greeter = {
 
   # Optional configuration
   greeter-args = "";
+  # Optional and empty by default: allow selected active local users to sync
+  # appearance without a password. Omit this to keep an admin prompt every time.
+  passwordless-sync-users = [ "alice" ];
   # Full declarative greeter.toml (overwritten on each activation).
   # See examples/greeter.toml for every key (appearance.palette, output, …).
   settings = {
@@ -159,7 +181,15 @@ programs.noctalia-greeter = {
 ```
 
 The module enables greetd and sets the session command automatically. It also enables
-`accounts-daemon` by default (user avatars on the login screen).
+`accounts-daemon` (user avatars), Polkit, and the `pkexec` wrapper where that
+option exists, keeping administrator-prompted sync available by default.
+
+`passwordless-sync-users` is optional. It requires Noctalia Greeter 1.4.0 or
+newer together with the next Noctalia release after 5.0.1. Current `-git`
+packages, `main` checkouts, or manual builds from current `main` work when both
+projects are up to date. Leave the option unset or empty to require
+administrator authentication for every sync. Older and mixed-version
+combinations continue to use the administrator-authenticated legacy sync path.
 
 `greeter-args` passes extra flags to `noctalia-greeter-session`, for example
 `--session <name>` to set a default session. Run `noctalia-greeter sessions`
@@ -168,30 +198,37 @@ to list valid names.
 `settings` writes `/var/lib/noctalia-greeter/greeter.toml` (full declarative config,
 including appearance/palette when you set them). Sync/UI mutable data lives in
 `sync.toml` (not managed by Nix). Full docs:
-**[docs.noctalia.dev/v5/greeter](https://docs.noctalia.dev/v5/greeter/)**.
+**[docs.noctalia.dev/greeter](https://docs.noctalia.dev/greeter/)**.
 Commented example: [`examples/greeter.toml`](examples/greeter.toml).
 
-## Building and installing
+### Build from source
 
 Requires [just](https://github.com/casey/just) and [meson](https://mesonbuild.com/).
 
 #### Release build
 
+For a system-wide manual install with managed passwordless appearance sync,
+use the root-owned `/usr` prefix so the Polkit action lands in the standard
+action directory:
+
 ```sh
-just configure-release
+meson setup build-release --prefix=/usr --buildtype=release
 just build-release
 sudo meson install -C build-release
 sudo ./scripts/setup_greeter_system.sh
 ```
 
-Pass a prefix when configuring to install somewhere other than `/usr/local`:
+To reconfigure an existing build directory:
 
 ```sh
-meson setup build-release --prefix="$HOME/.local" --buildtype=release --reconfigure
-just build-release
-sudo meson install -C build-release
-sudo ./scripts/setup_greeter_system.sh
+meson setup build-release --prefix=/usr --buildtype=release --reconfigure
 ```
+
+Meson's default `/usr/local` prefix is usable for the login greeter and the
+administrator-authenticated fallback, but Polkit normally loads action
+definitions from `/usr/share/polkit-1/actions`. Use `--prefix=/usr` for the
+dedicated passwordless action unless your distribution explicitly configures
+another action directory.
 
 #### Debug build
 
@@ -202,7 +239,7 @@ sudo just install
 
 `just install` runs the same system setup scripts after Meson install.
 
-Meson installs the greeter binary, session launcher and assets. With the default prefix that is under `/usr/local`; distro packages (e.g. AUR) usually install to `/usr/bin` instead.
+Meson installs the greeter binary, session launcher and assets. With the default prefix that is under `/usr/local`; distro packages and the passwordless-ready manual command above install to `/usr/bin` instead.
 
 ```text
 <prefix>/bin/noctalia-greeter
@@ -210,6 +247,7 @@ Meson installs the greeter binary, session launcher and assets. With the default
 <prefix>/bin/noctalia-greeter-session
 <prefix>/bin/noctalia-greeter-apply-appearance
 <prefix>/share/noctalia-greeter/assets/...
+<prefix>/share/polkit-1/actions/org.noctalia.greeter.apply-appearance.policy
 ```
 
 The greeter needs the shipped `assets/` tree at runtime. Copying only the `noctalia-greeter` binary is not enough.
@@ -265,7 +303,9 @@ layout = "DP-1:0,0; HDMI-A-1:1920,0; DP-2:3840,0"
 transforms = "DP-1:normal; HDMI-A-1:270"
 ```
 
-Coordinates are logical pixels from your desktop compositor. The greeter uses them for **order and row grouping**, then places outputs edge-to-edge at its own scale so the cursor can move between monitors.
+Coordinates are logical pixels from your desktop compositor. The greeter uses
+them as absolute positions; pair them with matching `[output].scales` values so
+the configured edges remain adjacent and the cursor can move between monitors.
 
 Test locally with:
 
@@ -282,7 +322,10 @@ To override auto scaling, set `[output].scale` in `greeter.toml` (read by the co
 scale = 1.5
 ```
 
-If `[output].scale` is missing or invalid, the compositor falls back to auto scaling.
+If `[output].scale` is missing or invalid, the compositor next checks
+per-output scales from `greeter.toml` or `sync.toml`. With an explicit layout,
+an output without a matching scale uses `1.0`; otherwise scaling falls back to
+the display's physical geometry and resolution.
 
 ### Idle blanking
 
@@ -337,9 +380,46 @@ On systemd, inspect greeter lines with `journalctl -u greetd` (or your greetd un
 
 ## Matching Noctalia Shell
 
-With [Noctalia v5](https://github.com/noctalia-dev/noctalia) installed, open **Settings → Security → Noctalia Greeter → Sync Now**. Sync stages a `sync.toml` fragment plus wallpaper files, then `noctalia-greeter-apply-appearance` installs the images and merges into live `sync.toml`. Declarative `greeter.toml` is never overwritten by Sync; keys set there win over Sync.
+With [Noctalia v5](https://github.com/noctalia-dev/noctalia) installed, open
+**Settings → Security → Noctalia Greeter → Sync Now**. Noctalia Greeter 1.4.0
+or newer together with the next Noctalia release after 5.0.1 uses the
+constrained `pkexec noctalia-greeter-apply-appearance --sync <staging-dir>`
+path. Current `-git` packages, `main` checkouts, or manual builds from current
+`main` also support it when both projects are up to date and the manual helper
+is installed into a root-owned, non-user-writable system prefix. This path
+accepts appearance, wallpaper, and display data, but not session power commands
+or custom actions.
 
-Full Sync payload, admin keys, cursor/keyboard, and troubleshooting: **[Greeter docs](https://docs.noctalia.dev/v5/greeter/)**.
+Passwordless authorization is optional. Without a site-local Polkit allow rule,
+the constrained path asks for administrator authentication every time. Older
+or mixed-version combinations continue to use the permanently supported legacy
+positional helper call, authenticated through `run0`, `pkexec`, or Noctalia's
+configured privilege-command prefix.
+
+On conventional packaged distributions, enable the narrow passwordless rule
+for a local login account with:
+
+```sh
+sudo noctalia-greeter passwordless-sync enable alice
+```
+
+Inspect it with `noctalia-greeter passwordless-sync status [USER]` (add `sudo`
+if your Polkit rules directory is not readable), and remove that account from
+the CLI-managed authorization with
+`sudo noctalia-greeter passwordless-sync disable alice`. Prompts resume when no
+other administrator-authored allow rule matches. NixOS users configure the same
+access declaratively with `passwordless-sync-users` in the project module, or
+an equivalent `security.polkit.extraConfig` rule.
+
+This setup affects only the constrained appearance-only action. It does not
+make the legacy helper passwordless and does not enable Noctalia's Auto-Sync
+setting.
+
+Both paths merge their data into live `sync.toml`; declarative `greeter.toml`
+is never overwritten, and keys set there win over Sync.
+
+Authorization, passwordless setup, runtime constraints, and troubleshooting:
+**[Sync with Noctalia](https://docs.noctalia.dev/greeter/sync/)**.
 
 ## Cursor theme
 

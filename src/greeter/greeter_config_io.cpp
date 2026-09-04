@@ -4,14 +4,19 @@
 #include "greeter/appearance_sync.h"
 #include "greeter/greeter_config_store.h"
 
+#include <cerrno>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fcntl.h>
 #include <fstream>
 #include <ranges>
 #include <sstream>
 #include <string_view>
+#include <sys/stat.h>
 #include <toml++/toml.hpp>
+#include <unistd.h>
 
 namespace {
 
@@ -777,6 +782,85 @@ namespace {
     return out.str();
   }
 
+  [[nodiscard]] bool writeAll(const int fd, std::string_view content, const std::filesystem::path& path) {
+    std::size_t written = 0;
+    while (written < content.size()) {
+      const ssize_t result = ::write(fd, content.data() + written, content.size() - written);
+      if (result < 0) {
+        if (errno == EINTR) {
+          continue;
+        }
+        kLog.warn("failed to write temporary '{}': {}", path.string(), std::strerror(errno));
+        return false;
+      }
+      if (result == 0) {
+        kLog.warn("failed to write temporary '{}': write returned zero", path.string());
+        return false;
+      }
+      written += static_cast<std::size_t>(result);
+    }
+    return true;
+  }
+
+  [[nodiscard]] bool writeFileAtomically(const std::filesystem::path& path, std::string_view content) {
+    std::error_code ec;
+    const auto parent = path.parent_path().empty() ? std::filesystem::path(".") : path.parent_path();
+    std::filesystem::create_directories(parent, ec);
+    if (ec) {
+      kLog.warn("failed to create '{}': {}", parent.string(), ec.message());
+      return false;
+    }
+
+    struct stat existing{};
+    const bool preserveMetadata = ::lstat(path.c_str(), &existing) == 0 && S_ISREG(existing.st_mode);
+    mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+    if (preserveMetadata) {
+      mode = existing.st_mode & (S_IRWXU | S_IRWXG | S_IRWXO);
+    }
+
+    std::string pathTemplate = (parent / ("." + path.filename().string() + ".tmp.XXXXXX")).string();
+    const int fd = ::mkstemp(pathTemplate.data());
+    if (fd < 0) {
+      kLog.warn("failed to create temporary file for '{}': {}", path.string(), std::strerror(errno));
+      return false;
+    }
+
+    bool success = writeAll(fd, content, pathTemplate);
+    if (success && preserveMetadata && ::geteuid() == 0 && ::fchown(fd, existing.st_uid, existing.st_gid) != 0) {
+      kLog.warn("failed to preserve ownership for '{}': {}", path.string(), std::strerror(errno));
+      success = false;
+    }
+    if (success && ::fchmod(fd, mode) != 0) {
+      kLog.warn("failed to set mode on temporary '{}': {}", pathTemplate, std::strerror(errno));
+      success = false;
+    }
+    if (success && ::fsync(fd) != 0) {
+      kLog.warn("failed to flush temporary '{}': {}", pathTemplate, std::strerror(errno));
+      success = false;
+    }
+    if (::close(fd) != 0 && success) {
+      kLog.warn("failed to close temporary '{}': {}", pathTemplate, std::strerror(errno));
+      success = false;
+    }
+    if (success && ::rename(pathTemplate.c_str(), path.c_str()) != 0) {
+      kLog.warn("failed to replace '{}': {}", path.string(), std::strerror(errno));
+      success = false;
+    }
+    if (!success) {
+      ::unlink(pathTemplate.c_str());
+      return false;
+    }
+
+    const int parentFd = ::open(parent.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (parentFd >= 0) {
+      if (::fsync(parentFd) != 0) {
+        kLog.warn("failed to flush directory '{}': {}", parent.string(), std::strerror(errno));
+      }
+      ::close(parentFd);
+    }
+    return true;
+  }
+
   void copyString(char* out, const std::size_t outSize, const std::optional<std::string>& value) {
     if (outSize == 0) {
       return;
@@ -869,9 +953,6 @@ namespace greeter::config {
   }
 
   bool writeSync(const std::filesystem::path& path, const GreeterSyncFile& sync) {
-    std::error_code ec;
-    std::filesystem::create_directories(path.parent_path(), ec);
-
     const toml::table table = buildSyncTomlTable(sync);
 
     std::ostringstream out;
@@ -884,14 +965,8 @@ namespace greeter::config {
     out << '\n';
     out << formatToml(table);
 
-    std::ofstream file(path, std::ios::binary | std::ios::trunc);
-    if (!file.is_open()) {
-      kLog.warn("failed to open '{}' for write", path.string());
-      return false;
-    }
     const std::string content = out.str();
-    file.write(content.data(), static_cast<std::streamsize>(content.size()));
-    return file.good();
+    return writeFileAtomically(path, content);
   }
 
   void clearConfigDiagnostics() { g_diagnostics.clear(); }

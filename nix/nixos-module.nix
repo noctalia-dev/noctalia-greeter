@@ -2,6 +2,7 @@
   lib,
   pkgs,
   config,
+  options,
   ...
 }:
 let
@@ -30,6 +31,18 @@ in
       type = lib.types.str;
       default = "";
       description = "Arguments to add onto noctalia-greeter-session command.";
+    };
+
+    passwordless-sync-users = lib.mkOption {
+      type = with lib.types; listOf str;
+      default = [ ];
+      description = ''
+        Local users allowed to apply the constrained appearance-only sync through
+        Polkit without authentication. The constrained sync operation never accepts
+        session command configuration. Leave empty to require administrator
+        authentication for every sync; that workflow remains fully supported.
+      '';
+      example = [ "alice" ];
     };
 
     settings = lib.mkOption {
@@ -79,36 +92,66 @@ in
       group =
         if config.users.users.${user}.group != "" then config.users.users.${user}.group else "greeter";
     in
-    lib.mkIf cfg.enable {
-      environment.systemPackages = [
-        cfg.package
-      ];
+    lib.mkIf cfg.enable (lib.mkMerge [
+      {
+        environment.systemPackages = [
+          cfg.package
+        ];
 
-      systemd.tmpfiles.settings."10-noctalia-greeter" = {
-        "/var/lib/noctalia-greeter".d = {
-          inherit user group;
-          mode = "0750";
+        systemd.tmpfiles.settings."10-noctalia-greeter" =
+          {
+            "/var/lib/noctalia-greeter".d = {
+              inherit user group;
+              mode = "0750";
+            };
+          }
+          // lib.optionalAttrs (cfg.settings != { }) {
+            "/var/lib/noctalia-greeter/greeter.toml"."L+" = {
+              argument = "${generateToml "greeter.toml" cfg.settings}";
+              inherit user group;
+            };
+          };
+
+        services.greetd = {
+          enable = lib.mkDefault true;
+          settings.default_session.command = lib.mkDefault "${cfg.package}/bin/noctalia-greeter-session -- ${cfg.greeter-args}";
         };
+
+        services.accounts-daemon.enable = lib.mkDefault true;
+
+        security.polkit =
+          {
+            enable = lib.mkDefault true;
+          }
+          // lib.optionalAttrs (options.security.polkit ? enablePkexecWrapper) {
+            enablePkexecWrapper = lib.mkDefault true;
+          };
+
+        assertions = [
+          {
+            assertion = (config.users.users.${user} or { }) != { };
+            message = "noctalia-greeter: user ${user} does not exist. Please create it before referencing it.";
+          }
+          {
+            assertion = lib.all (name: builtins.hasAttr name config.users.users) cfg.passwordless-sync-users;
+            message = "noctalia-greeter: every passwordless sync user must be a configured system user.";
+          }
+        ];
       }
-      // lib.optionalAttrs (cfg.settings != { }) {
-        "/var/lib/noctalia-greeter/greeter.toml"."L+" = {
-          argument = "${generateToml "greeter.toml" cfg.settings}";
-          inherit user group;
-        };
-      };
 
-      services.greetd = {
-        enable = lib.mkDefault true;
-        settings.default_session.command = lib.mkDefault "${cfg.package}/bin/noctalia-greeter-session -- ${cfg.greeter-args}";
-      };
-
-      services.accounts-daemon.enable = lib.mkDefault true;
-
-      assertions = [
-        {
-          assertion = (config.users.users.${user} or { }) != { };
-          message = "noctalia-greeter: user ${user} does not exist. Please create it before referencing it.";
-        }
-      ];
-    };
+      (lib.mkIf (cfg.passwordless-sync-users != [ ]) {
+        security.polkit.extraConfig = lib.mkAfter ''
+          polkit.addRule(function(action, subject) {
+            var allowedUsers = ${builtins.toJSON cfg.passwordless-sync-users};
+            if (action.id == "org.noctalia.greeter.sync-appearance" &&
+                action.lookup("program") == "${cfg.package}/bin/noctalia-greeter-apply-appearance" &&
+                action.lookup("user") == "root" &&
+                subject.local && subject.active &&
+                allowedUsers.indexOf(subject.user) >= 0) {
+              return polkit.Result.YES;
+            }
+          });
+        '';
+      })
+    ]);
 }

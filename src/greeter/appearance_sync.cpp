@@ -5,9 +5,13 @@
 #include "greeter/greeter_preferences.h"
 #include "greeter/privileged_state_paths.h"
 
+#include <array>
 #include <cctype>
 #include <cerrno>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <fcntl.h>
 #include <filesystem>
 #include <fstream>
 #include <nlohmann/json.hpp>
@@ -15,6 +19,7 @@
 #include <string>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <unordered_set>
 #include <vector>
 
 namespace greeter::appearance {
@@ -22,8 +27,9 @@ namespace greeter::appearance {
   namespace {
 
     constexpr Logger kLog("greeter-appearance-sync");
-    constexpr mode_t kSyncedDirMode = S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH;
+    constexpr mode_t kSyncedDirMode = S_IRWXU | S_IRGRP | S_IXGRP;
     constexpr mode_t kSyncedFileMode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+    constexpr std::string_view kWallpaperTemporaryPrefix = ".wallpaper.tmp.";
 
     [[nodiscard]] bool isWallpaperFileName(std::string_view name) {
       // wallpaper, wallpaper.webp, wallpaper-DP-2.webp, wallpaper-HDMI-A-1.jpg
@@ -36,24 +42,153 @@ namespace greeter::appearance {
           || (name.size() > kDash.size() && name.substr(0, kDash.size()) == kDash);
     }
 
-    [[nodiscard]] bool installRegularFile(
-        const std::filesystem::path& source, const std::filesystem::path& destination, mode_t mode,
-        std::string& errorOut
-    ) {
-      if (::geteuid() == 0) {
-        if (!greeter::privileged_state::removeSymlinkIfPresent(destination, errorOut)) {
+    struct PendingWallpaperInstall {
+      std::filesystem::path temporary;
+      std::filesystem::path destination;
+    };
+
+    void cleanupPendingWallpapers(const std::vector<PendingWallpaperInstall>& pending) {
+      for (const auto& install : pending) {
+        if (!install.temporary.empty()) {
+          ::unlink(install.temporary.c_str());
+        }
+      }
+    }
+
+    [[nodiscard]] bool isAbandonedWallpaperTemporary(std::string_view name) {
+      if (!name.starts_with(kWallpaperTemporaryPrefix) || name.size() != kWallpaperTemporaryPrefix.size() + 6U) {
+        return false;
+      }
+      for (const unsigned char ch : name.substr(kWallpaperTemporaryPrefix.size())) {
+        if (!((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9'))) {
           return false;
         }
       }
+      return true;
+    }
 
+    void cleanupAbandonedWallpaperTemporaries(const std::filesystem::path& directory) {
       std::error_code ec;
-      std::filesystem::copy_file(source, destination, std::filesystem::copy_options::overwrite_existing, ec);
+      std::filesystem::directory_iterator iterator(directory, ec);
+      const std::filesystem::directory_iterator end;
       if (ec) {
-        errorOut =
-            std::string("failed to copy '") + source.string() + "' to '" + destination.string() + "': " + ec.message();
+        kLog.warn("failed to inspect abandoned wallpaper temporaries in '{}': {}", directory.string(), ec.message());
+        return;
+      }
+      while (iterator != end) {
+        const auto entry = *iterator;
+        const std::string name = entry.path().filename().string();
+        if (isAbandonedWallpaperTemporary(name)) {
+          const auto status = entry.symlink_status(ec);
+          if (ec) {
+            kLog.warn("failed to inspect abandoned wallpaper temporary '{}': {}", entry.path().string(), ec.message());
+            return;
+          }
+          if (std::filesystem::is_regular_file(status) || std::filesystem::is_symlink(status)) {
+            std::filesystem::remove(entry.path(), ec);
+            if (ec) {
+              kLog.warn("failed to remove abandoned wallpaper temporary '{}': {}", entry.path().string(), ec.message());
+              return;
+            }
+          }
+        }
+        iterator.increment(ec);
+        if (ec) {
+          kLog.warn("failed to enumerate wallpaper directory '{}': {}", directory.string(), ec.message());
+          return;
+        }
+      }
+    }
+
+    [[nodiscard]] bool stageWallpaperFile(
+        const std::filesystem::path& source, const std::filesystem::path& destination,
+        PendingWallpaperInstall& installOut, std::string& errorOut
+    ) {
+      const int sourceFd = ::open(source.c_str(), O_RDONLY | O_CLOEXEC);
+      if (sourceFd < 0) {
+        errorOut = "failed to open staged wallpaper '" + source.string() + "': " + std::strerror(errno);
         return false;
       }
-      return greeter::privileged_state::setMode(destination, mode, errorOut);
+      struct stat sourceState{};
+      if (::fstat(sourceFd, &sourceState) != 0) {
+        const int savedErrno = errno;
+        ::close(sourceFd);
+        errorOut = "failed to inspect staged wallpaper '" + source.string() + "': " + std::strerror(savedErrno);
+        return false;
+      }
+      if (!S_ISREG(sourceState.st_mode)) {
+        ::close(sourceFd);
+        errorOut = "staged wallpaper is not a regular file: '" + source.string() + "'";
+        return false;
+      }
+
+      std::string temporary = (destination.parent_path() / ".wallpaper.tmp.XXXXXX").string();
+      const int destinationFd = ::mkstemp(temporary.data());
+      if (destinationFd < 0) {
+        const int savedErrno = errno;
+        ::close(sourceFd);
+        errno = savedErrno;
+        errorOut = "failed to create a temporary wallpaper for '" + destination.string() + "': " + std::strerror(errno);
+        return false;
+      }
+
+      bool success = true;
+      std::array<char, 64U * 1024U> buffer{};
+      while (success) {
+        const ssize_t count = ::read(sourceFd, buffer.data(), buffer.size());
+        if (count < 0) {
+          if (errno == EINTR) {
+            continue;
+          }
+          errorOut = "failed to read staged wallpaper '" + source.string() + "': " + std::strerror(errno);
+          success = false;
+          break;
+        }
+        if (count == 0) {
+          break;
+        }
+
+        std::size_t written = 0;
+        while (written < static_cast<std::size_t>(count)) {
+          const ssize_t result =
+              ::write(destinationFd, buffer.data() + written, static_cast<std::size_t>(count) - written);
+          if (result < 0) {
+            if (errno == EINTR) {
+              continue;
+            }
+            errorOut = "failed to stage wallpaper '" + destination.string() + "': " + std::strerror(errno);
+            success = false;
+            break;
+          }
+          if (result == 0) {
+            errorOut = "failed to stage wallpaper '" + destination.string() + "': write returned zero";
+            success = false;
+            break;
+          }
+          written += static_cast<std::size_t>(result);
+        }
+      }
+
+      if (success && ::fchmod(destinationFd, kSyncedFileMode) != 0) {
+        errorOut = "failed to set mode on temporary wallpaper '" + temporary + "': " + std::strerror(errno);
+        success = false;
+      }
+      if (success && ::fsync(destinationFd) != 0) {
+        errorOut = "failed to flush temporary wallpaper '" + temporary + "': " + std::strerror(errno);
+        success = false;
+      }
+      ::close(sourceFd);
+      if (::close(destinationFd) != 0 && success) {
+        errorOut = "failed to close temporary wallpaper '" + temporary + "': " + std::strerror(errno);
+        success = false;
+      }
+      if (!success) {
+        ::unlink(temporary.c_str());
+        return false;
+      }
+
+      installOut = PendingWallpaperInstall{temporary, destination};
+      return true;
     }
 
     [[nodiscard]] bool validatePaletteObject(const nlohmann::json& palette, std::string& errorOut) {
@@ -71,7 +206,9 @@ namespace greeter::appearance {
       return true;
     }
 
-    [[nodiscard]] bool removeInstalledWallpapers(const std::filesystem::path& syncedDir, std::string& errorOut) {
+    [[nodiscard]] bool removeInstalledWallpapers(
+        const std::filesystem::path& syncedDir, const std::unordered_set<std::string>& retained, std::string& errorOut
+    ) {
       std::error_code ec;
       if (!std::filesystem::is_directory(syncedDir, ec) || ec) {
         return true;
@@ -83,7 +220,7 @@ namespace greeter::appearance {
           return false;
         }
         const auto name = entry.path().filename().string();
-        if (!isWallpaperFileName(name)) {
+        if (!isWallpaperFileName(name) || retained.contains(name)) {
           continue;
         }
         std::filesystem::remove(entry.path(), ec);
@@ -95,24 +232,60 @@ namespace greeter::appearance {
       return true;
     }
 
-    [[nodiscard]] std::vector<std::filesystem::path>
-    stagingWallpaperFiles(const std::filesystem::path& stagingDirectory) {
-      std::vector<std::filesystem::path> files;
+    [[nodiscard]] bool stagingWallpaperFiles(
+        const std::filesystem::path& stagingDirectory, std::vector<std::filesystem::path>& files, std::string& errorOut
+    ) {
+      files.clear();
       std::error_code ec;
       if (!std::filesystem::is_directory(stagingDirectory, ec) || ec) {
-        return files;
+        errorOut = "failed to inspect staging directory '" + stagingDirectory.string() + "'";
+        return false;
       }
 
-      for (const auto& entry : std::filesystem::directory_iterator(stagingDirectory, ec)) {
-        if (ec || !entry.is_regular_file(ec)) {
-          continue;
+      std::filesystem::directory_iterator iterator(stagingDirectory, ec);
+      const std::filesystem::directory_iterator end;
+      if (ec) {
+        errorOut = "failed to enumerate staging directory '" + stagingDirectory.string() + "': " + ec.message();
+        return false;
+      }
+      while (iterator != end) {
+        const auto entry = *iterator;
+        const bool regular = entry.is_regular_file(ec);
+        if (ec) {
+          errorOut = "failed to inspect staged entry '" + entry.path().string() + "': " + ec.message();
+          return false;
         }
-        const auto name = entry.path().filename().string();
-        if (isWallpaperFileName(name)) {
-          files.push_back(entry.path());
+        if (regular) {
+          const auto name = entry.path().filename().string();
+          if (isWallpaperFileName(name)) {
+            files.push_back(entry.path());
+          }
+        }
+        iterator.increment(ec);
+        if (ec) {
+          errorOut = "failed to enumerate staging directory '" + stagingDirectory.string() + "': " + ec.message();
+          return false;
         }
       }
-      return files;
+      return true;
+    }
+
+    void cleanupStaleWallpapers(const std::filesystem::path& stagingDirectory) {
+      std::vector<std::filesystem::path> wallpaperSources;
+      std::string cleanupError;
+      if (!stagingWallpaperFiles(stagingDirectory, wallpaperSources, cleanupError)) {
+        kLog.warn("leaving stale wallpapers in place: {}", cleanupError);
+        return;
+      }
+
+      std::unordered_set<std::string> retained;
+      retained.reserve(wallpaperSources.size());
+      for (const auto& source : wallpaperSources) {
+        retained.emplace(source.filename().string());
+      }
+      if (!removeInstalledWallpapers(syncedDataDirectory(), retained, cleanupError)) {
+        kLog.warn("leaving some stale wallpapers in place: {}", cleanupError);
+      }
     }
 
     [[nodiscard]] std::optional<std::string>
@@ -361,37 +534,47 @@ namespace greeter::appearance {
     if (!greeter::privileged_state::setMode(destination, kSyncedDirMode, errorOut)) {
       return false;
     }
+    cleanupAbandonedWallpaperTemporaries(destination);
 
-    if (!removeInstalledWallpapers(destination, errorOut)) {
+    std::vector<std::filesystem::path> wallpaperSources;
+    if (!stagingWallpaperFiles(stagingDirectory, wallpaperSources, errorOut)) {
       return false;
     }
-
-    for (const auto& wallpaperSource : stagingWallpaperFiles(stagingDirectory)) {
+    std::vector<PendingWallpaperInstall> pending;
+    pending.reserve(wallpaperSources.size());
+    for (const auto& wallpaperSource : wallpaperSources) {
       const auto wallpaperDestination = destination / wallpaperSource.filename();
-      if (!installRegularFile(wallpaperSource, wallpaperDestination, kSyncedFileMode, errorOut)) {
+      PendingWallpaperInstall install;
+      if (!stageWallpaperFile(wallpaperSource, wallpaperDestination, install, errorOut)) {
+        cleanupPendingWallpapers(pending);
         return false;
       }
+      pending.push_back(std::move(install));
     }
 
-    // appearance.json is legacy; palette/wallpaper/session data is merged into sync.toml by
-    // applySyncedGreeterPreferences instead. Drop any stale live copy from an older release.
-    const auto legacyManifest = manifestPath();
-    if (::geteuid() == 0) {
-      if (!greeter::privileged_state::removeSymlinkIfPresent(legacyManifest, errorOut)) {
+    for (auto& install : pending) {
+      if (::rename(install.temporary.c_str(), install.destination.c_str()) != 0) {
+        errorOut = "failed to install wallpaper '" + install.destination.string() + "': " + std::strerror(errno);
+        cleanupPendingWallpapers(pending);
         return false;
       }
+      install.temporary.clear();
     }
-    if (std::filesystem::is_regular_file(legacyManifest, ec) && !ec) {
-      std::filesystem::remove(legacyManifest, ec);
-      if (ec) {
-        kLog.warn("failed to remove legacy '{}': {}", legacyManifest.string(), ec.message());
+
+    const int destinationFd = ::open(destination.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    if (destinationFd >= 0) {
+      if (::fsync(destinationFd) != 0) {
+        kLog.warn("failed to flush wallpaper directory '{}': {}", destination.string(), std::strerror(errno));
       }
+      ::close(destinationFd);
     }
 
     return true;
   }
 
-  bool applySyncedGreeterPreferences(const std::filesystem::path& stagingDirectory, std::string& errorOut) {
+  bool applySyncedGreeterPreferences(
+      const std::filesystem::path& stagingDirectory, const bool includeSessionCommands, std::string& errorOut
+  ) {
     auto readStagedText = [&](std::string_view fileName, std::optional<std::string>& out) -> bool {
       const auto path = stagingDirectory / fileName;
       std::error_code ec;
@@ -440,6 +623,7 @@ namespace greeter::appearance {
     const auto stagedSyncPath = stagingSyncTomlPath(stagingDirectory);
     std::error_code ec;
     greeter::GreeterSyncAppearanceUpdate appearanceUpdate;
+    appearanceUpdate.replaceSession = includeSessionCommands;
     if (std::filesystem::is_regular_file(stagedSyncPath, ec) && !ec) {
       const config::GreeterSyncFile staged = config::loadSync(stagedSyncPath);
       if (!staged.appearance.hasCompletePalette()) {
@@ -447,10 +631,12 @@ namespace greeter::appearance {
         return false;
       }
       appearanceUpdate.appearance = staged.appearance;
-      appearanceUpdate.sessionPowerSuspend = staged.sessionPowerSuspend;
-      appearanceUpdate.sessionPowerReboot = staged.sessionPowerReboot;
-      appearanceUpdate.sessionPowerShutdown = staged.sessionPowerShutdown;
-      appearanceUpdate.sessionActions = staged.sessionActions;
+      if (includeSessionCommands) {
+        appearanceUpdate.sessionPowerSuspend = staged.sessionPowerSuspend;
+        appearanceUpdate.sessionPowerReboot = staged.sessionPowerReboot;
+        appearanceUpdate.sessionPowerShutdown = staged.sessionPowerShutdown;
+        appearanceUpdate.sessionActions = staged.sessionActions;
+      }
     } else {
       const auto manifestFile = stagingManifestPath(stagingDirectory);
       auto manifestPayload = parseManifestForSync(manifestFile);
@@ -459,10 +645,12 @@ namespace greeter::appearance {
         return false;
       }
       appearanceUpdate.appearance = std::move(manifestPayload->appearance);
-      appearanceUpdate.sessionPowerSuspend = std::move(manifestPayload->sessionPowerSuspend);
-      appearanceUpdate.sessionPowerReboot = std::move(manifestPayload->sessionPowerReboot);
-      appearanceUpdate.sessionPowerShutdown = std::move(manifestPayload->sessionPowerShutdown);
-      appearanceUpdate.sessionActions = std::move(manifestPayload->sessionActions);
+      if (includeSessionCommands) {
+        appearanceUpdate.sessionPowerSuspend = std::move(manifestPayload->sessionPowerSuspend);
+        appearanceUpdate.sessionPowerReboot = std::move(manifestPayload->sessionPowerReboot);
+        appearanceUpdate.sessionPowerShutdown = std::move(manifestPayload->sessionPowerShutdown);
+        appearanceUpdate.sessionActions = std::move(manifestPayload->sessionActions);
+      }
     }
 
     if (!greeter::applyAppearanceSyncGreeterConf(
@@ -470,6 +658,24 @@ namespace greeter::appearance {
         )) {
       errorOut = "failed to update sync.toml after appearance sync";
       return false;
+    }
+
+    cleanupStaleWallpapers(stagingDirectory);
+
+    // appearance.json is legacy; remove a stale live copy only after sync.toml
+    // successfully commits, so a failed merge leaves all prior state usable.
+    const auto legacyManifest = manifestPath();
+    std::string manifestCleanupError;
+    if (!greeter::privileged_state::removeSymlinkIfPresent(legacyManifest, manifestCleanupError)) {
+      kLog.warn("failed to clean legacy appearance manifest: {}", manifestCleanupError);
+      return true;
+    }
+    std::error_code cleanupError;
+    if (std::filesystem::is_regular_file(legacyManifest, cleanupError) && !cleanupError) {
+      std::filesystem::remove(legacyManifest, cleanupError);
+      if (cleanupError) {
+        kLog.warn("failed to remove legacy '{}': {}", legacyManifest.string(), cleanupError.message());
+      }
     }
     return true;
   }

@@ -1,5 +1,5 @@
 project('noctalia-greeter', ['c', 'cpp'],
-  version: '1.3.1',
+  version: '1.4.0',
   default_options: [
     'cpp_std=c++20',
     'cpp_extensions=false',
@@ -35,6 +35,7 @@ pango_dep          = dependency('pango')
 pangocairo_dep     = dependency('pangocairo')
 pangoft2_dep       = dependency('pangoft2')
 librsvg_dep        = dependency('librsvg-2.0')
+libxml2_dep        = dependency('libxml-2.0')
 glib_dep           = dependency('glib-2.0')
 gobject_dep        = dependency('gobject-2.0')
 gio_dep            = dependency('gio-2.0')
@@ -165,6 +166,8 @@ _greeter_sources = files(
   'src/greeter/logind_resume.cpp',
   'src/greeter/power_actions.cpp',
   'src/greeter/greeter.cpp',
+  'src/tools/passwordless_sync_policy.cpp',
+  'src/tools/passwordless_sync_policy_xml.cpp',
   'src/main.cpp',
 ) + _protocol_sources
 
@@ -173,7 +176,7 @@ _greeter_inc = [
   include_directories('third_party/wuffs', is_system: true),
 ]
 
-executable('noctalia-greeter',
+noctalia_greeter_executable = executable('noctalia-greeter',
   sources: _greeter_sources,
   dependencies: [
     wayland_client_dep,
@@ -189,6 +192,7 @@ executable('noctalia-greeter',
     pangocairo_dep,
     pangoft2_dep,
     librsvg_dep,
+    libxml2_dep,
     glib_dep,
     gobject_dep,
     gio_dep,
@@ -202,6 +206,7 @@ executable('noctalia-greeter',
     '-DNOCTALIA_GREETER_VERSION="' + meson.project_version() + '"',
     '-DNOCTALIA_GREETER_ASSETS_DIR="' + meson.project_source_root() / 'assets' + '"',
     '-DNOCTALIA_GREETER_INSTALLED_ASSETS_DIR="' + get_option('datadir') / 'noctalia-greeter' / 'assets' + '"',
+    '-DNOCTALIA_GREETER_INSTALLED_POLICY_PATH="' + get_option('prefix') / get_option('datadir') / 'polkit-1' / 'actions' / 'org.noctalia.greeter.apply-appearance.policy' + '"',
   ],
   install: true,
 )
@@ -233,19 +238,21 @@ install_data(
   install_mode: 'rwxr-xr-x',
 )
 
-_apply_appearance_sources = files(
+_apply_appearance_support_sources = files(
   'src/core/log.cpp',
   'src/greeter/appearance_sync.cpp',
   'src/greeter/greetd_user.cpp',
   'src/greeter/privileged_state_paths.cpp',
   'src/greeter/greeter_config_io.cpp',
   'src/greeter/greeter_preferences.cpp',
-  'src/tools/apply_appearance_main.cpp',
+  'src/tools/secure_appearance_sync.cpp',
 )
+
+_apply_appearance_sources = _apply_appearance_support_sources + files('src/tools/apply_appearance_main.cpp')
 
 _greeter_tools_inc = include_directories('src')
 
-executable('noctalia-greeter-apply-appearance',
+apply_appearance_executable = executable('noctalia-greeter-apply-appearance',
   sources: _apply_appearance_sources,
   dependencies: [nlohmann_dep, tomlplusplus_dep],
   include_directories: _greeter_tools_inc,
@@ -255,7 +262,7 @@ executable('noctalia-greeter-apply-appearance',
   install: true,
 )
 
-configure_file(
+installed_polkit_policy = configure_file(
   input: 'data/org.noctalia.greeter.apply-appearance.policy.in',
   output: 'org.noctalia.greeter.apply-appearance.policy',
   configuration: {
@@ -293,3 +300,52 @@ executable('noctalia-greeter-compositor',
   ],
   install: true,
 )
+
+passwordless_sync_policy_xml_test = executable(
+  'passwordless-sync-policy-xml-test',
+  sources: files(
+    'tests/passwordless_sync_policy_xml_test.cpp',
+    'src/tools/passwordless_sync_policy_xml.cpp',
+  ),
+  dependencies: [libxml2_dep],
+  include_directories: include_directories('src'),
+  build_by_default: false,
+)
+
+test(
+  'passwordless-sync-policy-xml',
+  passwordless_sync_policy_xml_test,
+  args: [
+    installed_polkit_policy,
+    get_option('prefix') / get_option('bindir') / 'noctalia-greeter-apply-appearance',
+  ],
+)
+
+test(
+  'passwordless-sync-help',
+  noctalia_greeter_executable,
+  args: ['passwordless-sync', '--help'],
+)
+
+test(
+  'apply-appearance-compatibility',
+  find_program('sh'),
+  args: [
+    meson.project_source_root() / 'tests/apply_appearance_compatibility_test.sh',
+    apply_appearance_executable,
+  ],
+)
+
+legacy_staging_compatibility_test = executable(
+  'legacy-staging-compatibility-test',
+  sources: _apply_appearance_support_sources + files('tests/legacy_staging_compatibility_test.cpp'),
+  dependencies: [nlohmann_dep, tomlplusplus_dep],
+  include_directories: _greeter_tools_inc,
+  cpp_args: [
+    '-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow',
+    '-DNOCTALIA_GREETER_TESTING',
+  ],
+  build_by_default: false,
+)
+
+test('legacy-staging-compatibility', legacy_staging_compatibility_test)
