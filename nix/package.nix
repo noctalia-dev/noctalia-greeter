@@ -44,11 +44,6 @@ in
 
     src = lib.cleanSource ./..;
 
-    postPatch = ''
-      # Remove -march=native and -mtune=native for reproducible builds
-      sed -i "s/'-march=native', '-mtune=native',//" meson.build
-    '';
-
     nativeBuildInputs = [
         meson
         ninja
