@@ -114,7 +114,11 @@ in
 
         services.greetd = {
           enable = lib.mkDefault true;
-          settings.default_session.command = lib.mkDefault "${cfg.package}/bin/noctalia-greeter-session -- ${cfg.greeter-args}";
+          settings.default_session.command = lib.mkDefault (
+            "${lib.getExe' pkgs.coreutils "env"} "
+            + "XDG_DATA_DIRS=${config.services.displayManager.sessionData.desktops}/share "
+            + "${cfg.package}/bin/noctalia-greeter-session -- ${cfg.greeter-args}"
+          );
         };
 
         services.accounts-daemon.enable = lib.mkDefault true;
