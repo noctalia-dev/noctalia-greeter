@@ -6,7 +6,7 @@
   ...
 }:
 let
-  cfg = config.programs.noctalia-greeter;
+  cfg = config.services.displayManager.noctalia-greeter;
   tomlFormat = pkgs.formats.toml { };
 
   generateToml =
@@ -19,7 +19,8 @@ let
       tomlFormat.generate name value;
 in
 {
-  options.programs.noctalia-greeter = {
+  disabledModules = [ "services/display-managers/noctalia-greeter.nix" ];
+  options.services.displayManager.noctalia-greeter = {
     enable = lib.mkEnableOption "Whether to enable Noctalia Greeter, A minimal login greeter for greetd.";
 
     package = lib.mkOption {
