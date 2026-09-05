@@ -10,7 +10,7 @@ sidebar:
 Noctalia Shell can copy its current appearance and monitor arrangement to the login screen. Install both **Noctalia** and **Noctalia Greeter**, including the packaged apply helper and Polkit action.
 
 :::caution[Passwordless version requirement]
-Passwordless sync requires **Noctalia Greeter 1.4.0 or newer** together with
+Passwordless sync requires **Noctalia Greeter 1.5.0 or newer** together with
 **the next Noctalia release after 5.0.1**. Current `-git` packages or current
 manual builds from `main` also work when both components are up to date.
 
@@ -73,12 +73,12 @@ When the same value exists in both files, `greeter.toml` wins. In particular, a 
 
 With a current Shell and greeter:
 
-| On disk / in config | Purpose |
-|---------------------|---------|
-| `wallpaper` / `wallpaper.<ext>` and `[appearance.wallpaper]` | Default image or fallback |
-| `wallpaper-<connector>.*` and `[appearance.wallpapers.<connector>]` | Per-output wallpaper, such as `DP-2` |
-| `[appearance.palette]`, `theme_mode`, `corner_radius_scale`, `font_family` | Synced colors and UI styling |
-| `[output].layout`, `transforms`, `scales` | Synced monitor arrangement |
+| On disk / in config                                                        | Purpose                              |
+| -------------------------------------------------------------------------- | ------------------------------------ |
+| `wallpaper` / `wallpaper.<ext>` and `[appearance.wallpaper]`               | Default image or fallback            |
+| `wallpaper-<connector>.*` and `[appearance.wallpapers.<connector>]`        | Per-output wallpaper, such as `DP-2` |
+| `[appearance.palette]`, `theme_mode`, `corner_radius_scale`, `font_family` | Synced colors and UI styling         |
+| `[output].layout`, `transforms`, `scales`                                  | Synced monitor arrangement           |
 
 Each greeter view uses the wallpaper for its connector when one exists, then falls back to `[appearance.wallpaper]`. A connector pinned with `[output].name` uses its matching entry. See [Displays](displays.md) for connector and layout settings.
 
@@ -163,7 +163,7 @@ managed authorization; prompted sync remains available.
 If another administrator-authored Polkit rule also allows that account, remove
 or update that separate rule before prompts resume.
 
-Use these commands with a packaged or system-installed Greeter 1.4.0 or newer.
+Use these commands with a packaged or system-installed Greeter 1.5.0 or newer.
 They intentionally reject an untrusted helper installation rather than writing
 a rule for a checkout, build directory, or user-writable prefix. Packages must
 also include the dedicated `org.noctalia.greeter.sync-appearance` Polkit action.
@@ -240,14 +240,17 @@ mode `0644`. Replace `alice` and
 printed above:
 
 ```js
-polkit.addRule(function(action, subject) {
+polkit.addRule(function (action, subject) {
   var allowedUsers = ["alice"];
 
-  if (action.id == "org.noctalia.greeter.sync-appearance" &&
-      action.lookup("program") == "/usr/bin/noctalia-greeter-apply-appearance" &&
-      action.lookup("user") == "root" &&
-      subject.local && subject.active &&
-      allowedUsers.indexOf(subject.user) >= 0) {
+  if (
+    action.id == "org.noctalia.greeter.sync-appearance" &&
+    action.lookup("program") == "/usr/bin/noctalia-greeter-apply-appearance" &&
+    action.lookup("user") == "root" &&
+    subject.local &&
+    subject.active &&
+    allowedUsers.indexOf(subject.user) >= 0
+  ) {
     return polkit.Result.YES;
   }
 });

@@ -29,11 +29,11 @@ The service may have a different unit name on a distribution-provided setup. On 
 
 `NOCTALIA_GREETER_LOG` changes the destination:
 
-| Value | Effect |
-|-------|--------|
-| Unset | Log through syslog; keep stdout and stderr parked |
-| `stderr` | Send informational and debug messages to stdout, and warnings and errors to stderr |
-| An absolute file path | Append to that file and continue logging through syslog |
+| Value                 | Effect                                                                             |
+| --------------------- | ---------------------------------------------------------------------------------- |
+| Unset                 | Log through syslog; keep stdout and stderr parked                                  |
+| `stderr`              | Send informational and debug messages to stdout, and warnings and errors to stderr |
+| An absolute file path | Append to that file and continue logging through syslog                            |
 
 For temporary console diagnostics, add the variable to the greetd session command:
 
@@ -121,7 +121,7 @@ GNOME expects a systemd-managed user session and may fail with a `graphical-sess
 ### Appearance sync
 
 If the synced look is missing, first check the installed versions. The
-constrained `--sync` path requires Noctalia Greeter 1.4.0 or newer together
+constrained `--sync` path requires Noctalia Greeter 1.5.0 or newer together
 with the next Noctalia release after 5.0.1; current `-git` packages, `main`
 checkouts, or manual builds from current `main` work when both projects are up
 to date. Older and mixed-version combinations use the permanently supported
@@ -159,7 +159,7 @@ rules directory.
 
 If needed, add it with
 `sudo noctalia-greeter passwordless-sync enable alice`. The installed Greeter
-must be 1.4.0 or newer, the package must include the dedicated
+must be 1.5.0 or newer, the package must include the dedicated
 `org.noctalia.greeter.sync-appearance` action, and Polkit must see the caller as
 an active local session. A seatd-only session without logind or elogind cannot
 match this rule.

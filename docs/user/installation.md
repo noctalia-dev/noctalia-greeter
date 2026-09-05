@@ -25,7 +25,7 @@ The Noctalia team maintains the source build, project flake, and AUR packages. D
 Every installation needs **greetd** and **D-Bus** on the machine where the greeter runs. The **Polkit daemon and `pkexec`** are optional for login, but required to sync appearance from Noctalia; some distributions package `pkexec` separately.
 
 :::note[Sync compatibility]
-Passwordless sync is optional and requires Noctalia Greeter 1.4.0 or newer
+Passwordless sync is optional and requires Noctalia Greeter 1.5.0 or newer
 together with the next Noctalia release after 5.0.1. Current `-git` packages,
 `main` checkouts, or manual builds from current `main` work when both projects
 are up to date. Older and mixed-version combinations continue to use the
