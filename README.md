@@ -48,6 +48,13 @@ After installation:
 - [Set up optional Sync with Noctalia](docs/user/sync.md)
 - [Troubleshoot a login or display problem](docs/user/troubleshooting.md)
 
+### NixOS settings
+
+`settings` writes `/var/lib/noctalia-greeter/greeter.toml` (full declarative config,
+including appearance/palette when you set them). Sync + UI mutable data lives in
+`sync.toml` (not managed by Nix).
+Commented example: [`examples/greeter.toml`](examples/greeter.toml).
+
 ### UI controls
 
 To hide the session picker, set `appearance.hide_session_selector = true` in `greeter.toml`.
