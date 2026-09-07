@@ -104,6 +104,25 @@ public:
     markPaintDirty();
   }
 
+  [[nodiscard]] float blurRadius() const noexcept { return m_blurRadius; }
+  [[nodiscard]] const Color& tintColor() const noexcept { return m_tintColor; }
+
+  void setBlurRadius(float radius) {
+    if (m_blurRadius == radius) {
+      return;
+    }
+    m_blurRadius = radius;
+    markPaintDirty();
+  }
+
+  void setTintColor(const Color& tintColor) {
+    if (m_tintColor == tintColor) {
+      return;
+    }
+    m_tintColor = tintColor;
+    markPaintDirty();
+  }
+
 private:
   WallpaperSourceKind m_sourceKind1 = WallpaperSourceKind::Image;
   WallpaperSourceKind m_sourceKind2 = WallpaperSourceKind::Image;
@@ -120,4 +139,6 @@ private:
   WallpaperFillMode m_fillMode = WallpaperFillMode::Crop;
   Color m_fillColor = rgba(0.0f, 0.0f, 0.0f, 1.0f);
   TransitionParams m_params;
+  float m_blurRadius = 0.0f;
+  Color m_tintColor = rgba(0.0f, 0.0f, 0.0f, 0.0f);
 };
