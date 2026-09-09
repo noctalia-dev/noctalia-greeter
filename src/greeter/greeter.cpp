@@ -161,7 +161,24 @@ int Greeter::run(WaylandClient& client, const std::atomic<bool>& shutdownRequest
 
     const int repeatMs = client.repeatPollTimeoutMs();
     const int requestMs = m_greetdClient.requestPollTimeoutMs();
-    const int timeoutMs = repeatMs < 0 ? requestMs : requestMs < 0 ? repeatMs : std::min(repeatMs, requestMs);
+    int timeoutMs = repeatMs < 0 ? requestMs : requestMs < 0 ? repeatMs : std::min(repeatMs, requestMs);
+
+    // An animated wallpaper has no external frame clock (frame callbacks stall
+    // when the scene is otherwise idle, and nested backends never tick), so pace
+    // it from this loop: wake at roughly one frame interval while it plays.
+    bool animatingBackground = false;
+    for (auto& view : m_views) {
+      if (view.surface == nullptr) {
+        continue;
+      }
+      const int frameMs = view.surface->animationPollTimeoutMs();
+      if (frameMs < 0) {
+        continue;
+      }
+      animatingBackground = true;
+      const int clamped = std::max(frameMs, 4); // floor to avoid a busy loop
+      timeoutMs = timeoutMs < 0 ? clamped : std::min(timeoutMs, clamped);
+    }
 
     while (wl_display_prepare_read(display) != 0) {
       if (wl_display_dispatch_pending(display) < 0) {
@@ -227,6 +244,18 @@ int Greeter::run(WaylandClient& client, const std::atomic<bool>& shutdownRequest
     if (wl_display_dispatch_pending(display) < 0) {
       logWaylandDispatchError(display, "dispatch_pending");
       return 1;
+    }
+
+    // Drive the animated background from the main loop: advance on wall-clock
+    // time and repaint only when a new frame was actually decoded, so it renders
+    // at the clip's rate rather than the display's. Safe here (not inside
+    // prepareFrame), so requestRedraw cannot recurse.
+    if (animatingBackground) {
+      for (auto& view : m_views) {
+        if (view.surface != nullptr && view.surface->advanceAnimation() && view.window != nullptr) {
+          view.window->requestRedraw();
+        }
+      }
     }
   }
 

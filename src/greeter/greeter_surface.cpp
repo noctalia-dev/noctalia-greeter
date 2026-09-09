@@ -178,6 +178,7 @@ GreeterSurface::GreeterSurface() = default;
 
 GreeterSurface::~GreeterSurface() {
   if (m_renderContext != nullptr) {
+    m_animatedBackground.stop();
     if (m_brandLogoTexture.id != 0) {
       m_renderContext->textureManager().unload(m_brandLogoTexture);
     }
@@ -1953,8 +1954,115 @@ void GreeterSurface::syncHeaderUserAvatar(
   m_headerUserAvatar->setVisible(true);
 }
 
+bool GreeterSurface::pathLooksLikeWebp(const std::string& path) {
+  if (path.size() < 5) {
+    return false;
+  }
+  std::string suffix = path.substr(path.size() - 5);
+  for (char& c : suffix) {
+    if (c >= 'A' && c <= 'Z') {
+      c = static_cast<char>(c - 'A' + 'a');
+    }
+  }
+  return suffix == ".webp";
+}
+
+// Streams the wallpaper as an animated WebP when the configured path is one.
+// Returns true when the animated background owns the wallpaper node; false tells
+// the caller to fall through to the static image/color path.
+bool GreeterSurface::applyAnimatedWallpaper() {
+  const bool wantAnimated = pathLooksLikeWebp(m_wallpaperPath);
+
+  if (m_animatedBackground.active() && (!wantAnimated || m_animatedBackground.path() != m_wallpaperPath)) {
+    m_animatedBackground.stop();
+    m_wallpaper->setTextures({}, {}, 0.0f, 0.0f, 0.0f, 0.0f);
+  }
+
+  if (!wantAnimated || m_renderContext == nullptr) {
+    return false;
+  }
+  if (m_animatedBackground.active() && m_animatedBackground.path() == m_wallpaperPath) {
+    return true; // already streaming this clip
+  }
+  if (m_animatedBackgroundRuledOut == m_wallpaperPath) {
+    return false; // known still/broken WebP -> static path
+  }
+
+  if (m_wallpaperTexture.id != 0) {
+    m_renderContext->textureManager().unload(m_wallpaperTexture);
+    m_wallpaperTexture = {};
+  }
+
+  switch (m_animatedBackground.start(*m_renderContext, m_wallpaperPath, [this] { onAnimatedBackgroundFailed(); })) {
+  case AnimatedWebpBackground::StartResult::Started:
+    m_animatedBackgroundRuledOut.clear();
+    m_bgTickInitialized = false; // restart the pacing clock so a long gap does not skip frames
+    onAnimatedBackgroundFrame(); // bind the first frame
+    m_wallpaper->setTransition(WallpaperTransition::Fade, 0.0f, TransitionParams{});
+    m_wallpaper->setFillMode(m_wallpaperFillMode);
+    m_wallpaper->setFillColor(m_wallpaperFillColor);
+    return true;
+  case AnimatedWebpBackground::StartResult::NotAnimated:
+    m_animatedBackgroundRuledOut = m_wallpaperPath; // still/broken WebP -> static path, do not re-probe
+    return false;
+  case AnimatedWebpBackground::StartResult::TransientFailure:
+    return false; // unreadable right now; fall through to the static path
+  }
+  return false;
+}
+
+// Rebinds the node to the streaming texture (idempotent once the id is stable).
+bool GreeterSurface::advanceAnimation() {
+  if (!m_animatedBackground.active()) {
+    return false;
+  }
+  const auto now = std::chrono::steady_clock::now();
+  if (!m_bgTickInitialized) {
+    m_lastBgTick = now;
+    m_bgTickInitialized = true;
+    return false;
+  }
+  const float deltaMs = std::chrono::duration<float, std::milli>(now - m_lastBgTick).count();
+  m_lastBgTick = now;
+  if (deltaMs <= 0.0f) {
+    return false;
+  }
+  const bool uploaded = m_animatedBackground.advance(deltaMs);
+  if (uploaded && m_wallpaper != nullptr) {
+    m_wallpaper->markPaintDirty();
+  }
+  return uploaded;
+}
+
+void GreeterSurface::onAnimatedBackgroundFrame() {
+  if (m_wallpaper == nullptr) {
+    return;
+  }
+  const TextureHandle texture = m_animatedBackground.texture();
+  m_wallpaper->setTextures(
+      texture.id, {}, static_cast<float>(texture.width), static_cast<float>(texture.height), 0.0f, 0.0f
+  );
+}
+
+// The streaming decoder stopped on a mid-clip error; drop the now-stale node
+// texture and fall back to the static path.
+void GreeterSurface::onAnimatedBackgroundFailed() {
+  // Playback stopped mid-clip (the streaming texture is already gone); clear the
+  // node so it falls back to the fill colour. This runs from advance() inside
+  // prepareFrame, so it must not trigger a synchronous redraw.
+  if (m_wallpaper != nullptr) {
+    m_wallpaper->setTextures({}, {}, 0.0f, 0.0f, 0.0f, 0.0f);
+  }
+  m_animatedBackgroundRuledOut = m_wallpaperPath;
+}
+
 void GreeterSurface::syncWallpaperTexture() {
   if (!m_wallpaperDirty || m_wallpaper == nullptr || m_renderContext == nullptr) {
+    return;
+  }
+
+  if (applyAnimatedWallpaper()) {
+    m_wallpaperDirty = false;
     return;
   }
 
