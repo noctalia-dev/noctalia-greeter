@@ -80,7 +80,7 @@ With a current Shell and greeter:
 
 Each greeter view uses the wallpaper for its connector when one exists, then falls back to `[appearance.wallpaper]`. A connector pinned with `[output].name` uses its matching entry. See [Displays](displays.md) for connector and layout settings.
 
-You do not need to add wallpaper keys to `greeter.toml` for Sync. To override them declaratively, use an absolute image path or `color:#RRGGBB`; `fill_mode` accepts `center`, `crop`, `fit`, `stretch`, or `repeat`:
+You do not need to add wallpaper keys to `greeter.toml` for Sync. To override them declaratively, use an absolute image path or `color:#RRGGBB`; `fill_mode` accepts `center`, `crop`, `fit`, `stretch`, `repeat`, or `span`:
 
 ```toml
 [appearance.wallpaper]
@@ -91,6 +91,14 @@ fill_mode = "crop"
 path = "/var/lib/noctalia-greeter/wallpaper-DP-2.webp"
 fill_mode = "crop"
 ```
+
+`span` treats all active greeter outputs as one logical desktop and gives each
+output the slice matching its configured position. It honors negative and
+staggered coordinates as well as the default side-by-side layout. On a pinned
+or single-output greeter, or when complete span geometry is unavailable, it
+behaves like `crop`. Keep the layout and per-output scales synchronized so the
+slices line up with the physical monitor arrangement. This affects only the
+wallpaper; every output keeps its own normally scaled greeter UI.
 
 The greeter exposes the **Synced** scheme when either config file contains a complete palette. Session and scheme choices made on the login screen are also remembered in `sync.toml`; see [Configuration](configuration.md#keys-the-greeter-remembers).
 

@@ -7,6 +7,7 @@
 #include "render/animation/animation_manager.h"
 #include "render/core/color.h"
 #include "render/core/texture_handle.h"
+#include "render/core/wallpaper_types.h"
 #include "render/scene/input_dispatcher.h"
 #include "render/scene/node.h"
 
@@ -44,6 +45,7 @@ public:
 
   void setWindow(GreeterWindow* window);
   void setBoundOutputName(std::string outputName);
+  void setWallpaperSpanParams(const WallpaperSpanParams& params);
   void setGreetdClient(GreetdClient* client);
   void setUsername(const std::string& username);
   void setOnExitRequested(std::function<void()> callback);
@@ -254,6 +256,7 @@ private:
   std::string m_wallpaperPath;
   WallpaperFillMode m_wallpaperFillMode = WallpaperFillMode::Crop;
   Color m_wallpaperFillColor = rgba(0.0f, 0.0f, 0.0f, 0.0f);
+  WallpaperSpanParams m_wallpaperSpanParams;
   bool m_wallpaperDirty = false;
   bool m_hasSyncedWallpaper = false;
   bool m_hideLogo = false;

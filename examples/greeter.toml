@@ -57,7 +57,9 @@ hover = "#9BFECE"
 on_hover = "#0e0e43"
 
 [appearance.wallpaper]
-# Absolute path, or color:#RRGGBB. fill_mode: center | crop | fit | stretch | repeat
+# Absolute path, or color:#RRGGBB.
+# fill_mode: center | crop | fit | stretch | repeat | span
+# span projects one image across the logical multi-monitor layout; with one pinned output it behaves like crop.
 path = "/var/lib/noctalia-greeter/wallpaper.webp"
 fill_mode = "crop"
 # fill_color = "#070722"

@@ -56,8 +56,8 @@ Set these keys in `greeter.toml`. A command-line `--session` or `--user` value t
 | `[appearance].corner_radius_scale` | Corner-radius scale for the Synced appearance |
 | `[appearance].font_family` | Fontconfig family for the Synced appearance |
 | `[appearance.palette]` | Complete Synced palette; takes precedence over Sync appearance |
-| `[appearance.wallpaper]` | Default wallpaper `path`, `fill_mode`, and `fill_color` |
-| `[appearance.wallpapers.<connector>]` | Per-output wallpaper override |
+| `[appearance.wallpaper]` | Default wallpaper `path`, `fill_mode`, and `fill_color`; `fill_mode` accepts `center`, `crop`, `fit`, `stretch`, `repeat`, or `span` |
+| `[appearance.wallpapers.<connector>]` | Per-output wallpaper override using the same fill modes |
 | `[output].name` | Connector on which to pin the greeter |
 | `[output].layout` | Multi-monitor positions; overrides synced layout |
 | `[output].width` / `.height` | Preferred DRM mode size |

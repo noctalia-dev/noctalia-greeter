@@ -4,6 +4,7 @@
 #include "fractional-scale-v1-client-protocol.h"
 #include "greeter/greeter_preferences.h"
 #include "viewporter-client-protocol.h"
+#include "wayland/output_span_layout.h"
 #include "xdg-shell-client-protocol.h"
 
 #include <algorithm>
@@ -13,6 +14,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <dirent.h>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <sys/stat.h>
@@ -22,6 +24,11 @@
 
 namespace {
   constexpr Logger kLog("wayland");
+
+  static_assert(WL_OUTPUT_TRANSFORM_90 == 1);
+  static_assert(WL_OUTPUT_TRANSFORM_270 == 3);
+  static_assert(WL_OUTPUT_TRANSFORM_FLIPPED_90 == 5);
+  static_assert(WL_OUTPUT_TRANSFORM_FLIPPED_270 == 7);
 
   void releaseOutput(wl_output* output) {
     if (wl_output_get_version(output) >= WL_OUTPUT_RELEASE_SINCE_VERSION) {
@@ -62,17 +69,18 @@ namespace {
       return std::nullopt;
     }
 
+    const auto [pixelWidth, pixelHeight] =
+        greeter::orientedOutputPixelSize(out.pixelWidth, out.pixelHeight, out.transform);
+
     const float scale = outputScaleFactor(out);
     if (scale <= 1.01f) {
-      return std::pair{static_cast<std::uint32_t>(out.pixelWidth), static_cast<std::uint32_t>(out.pixelHeight)};
+      return std::pair{static_cast<std::uint32_t>(pixelWidth), static_cast<std::uint32_t>(pixelHeight)};
     }
 
-    const auto logicalWidth = static_cast<std::uint32_t>(
-        std::max(1, static_cast<int32_t>(std::lround(static_cast<float>(out.pixelWidth) / scale)))
-    );
-    const auto logicalHeight = static_cast<std::uint32_t>(
-        std::max(1, static_cast<int32_t>(std::lround(static_cast<float>(out.pixelHeight) / scale)))
-    );
+    const auto logicalWidth =
+        static_cast<std::uint32_t>(std::max(1, static_cast<std::int32_t>(static_cast<float>(pixelWidth) / scale)));
+    const auto logicalHeight =
+        static_cast<std::uint32_t>(std::max(1, static_cast<std::int32_t>(static_cast<float>(pixelHeight) / scale)));
     return std::pair{logicalWidth, logicalHeight};
   }
 
@@ -100,8 +108,9 @@ namespace {
     return -1;
   }
 
-  [[nodiscard]] std::optional<WaylandOutputLayout>
-  chainedLayoutForOutput(const WaylandOutputInfo& output, const std::vector<greeter::GreeterOutputPlacement>& layout) {
+  [[nodiscard]] std::optional<WaylandOutputLayout> configuredLayoutForOutput(
+      const WaylandOutputInfo& output, const std::vector<greeter::GreeterOutputPlacement>& layout
+  ) {
     if (layout.empty()) {
       return std::nullopt;
     }
@@ -516,49 +525,69 @@ std::optional<WaylandOutputLayout> WaylandClient::layoutForOutput(const WaylandO
     return std::nullopt;
   }
 
-  int32_t x = output.x;
-  int32_t y = output.y;
-  if (!allReadyOutputsShareOrigin(m_outputs)) {
-    // Compositor layout coordinates already account for greeter output scale.
-  } else if (const auto chained = chainedLayoutForOutput(output, m_outputLayout)) {
-    x = chained->x;
-    y = chained->y;
+  if (const auto configured = configuredLayoutForOutput(output, m_outputLayout)) {
     kLog.info(
-        "output '{}' chained layout at ({},{}) {}x{} (compositor reported overlapping origins)",
-        output.name.empty() ? "?" : output.name.c_str(), x, y, chained->width, chained->height
+        "output '{}' configured layout at ({},{}) {}x{}", output.name.empty() ? "?" : output.name.c_str(),
+        configured->x, configured->y, configured->width, configured->height
     );
-    return chained;
-  } else if (allReadyOutputsShareOrigin(m_outputs)) {
-    std::vector<const WaylandOutputInfo*> ordered;
-    ordered.reserve(m_outputs.size());
-    for (const auto& candidate : m_outputs) {
-      if (!candidate.done || candidate.pixelWidth <= 0 || candidate.pixelHeight <= 0) {
+    return configured;
+  }
+
+  const bool synthesizeLayout = !m_outputLayout.empty() || allReadyOutputsShareOrigin(m_outputs);
+  if (synthesizeLayout) {
+    const std::vector<const WaylandOutputInfo*> ordered = readyOutputsSorted();
+    std::int64_t syntheticX = 0;
+
+    // Match the compositor's placement of connectors omitted from a partial
+    // configured layout: start them after the rightmost configured output,
+    // then chain the omitted connectors by name.
+    if (!m_outputLayout.empty()) {
+      for (const WaylandOutputInfo* candidate : ordered) {
+        const int placementIndex = outputLayoutIndex(m_outputLayout, candidate->name);
+        if (placementIndex < 0) {
+          continue;
+        }
+        if (const auto candidateLogical = logicalSizeForOutputInfo(*candidate)) {
+          syntheticX = std::max(
+              syntheticX,
+              static_cast<std::int64_t>(m_outputLayout[static_cast<std::size_t>(placementIndex)].x)
+                  + static_cast<std::int64_t>(candidateLogical->first)
+          );
+        }
+      }
+    }
+
+    for (const WaylandOutputInfo* candidate : ordered) {
+      if (outputLayoutIndex(m_outputLayout, candidate->name) >= 0) {
         continue;
       }
-      ordered.push_back(&candidate);
-    }
-    std::sort(ordered.begin(), ordered.end(), [](const WaylandOutputInfo* lhs, const WaylandOutputInfo* rhs) {
-      return lhs->name < rhs->name;
-    });
-    x = 0;
-    for (const WaylandOutputInfo* candidate : ordered) {
       if (candidate->output == output.output) {
         break;
       }
       if (const auto candidateLogical = logicalSizeForOutputInfo(*candidate)) {
-        x += static_cast<int32_t>(candidateLogical->first);
+        syntheticX += static_cast<std::int64_t>(candidateLogical->first);
       }
     }
+    if (syntheticX < std::numeric_limits<std::int32_t>::min()
+        || syntheticX > std::numeric_limits<std::int32_t>::max()) {
+      return std::nullopt;
+    }
+    const auto x = static_cast<std::int32_t>(syntheticX);
     kLog.info(
-        "output '{}' synthetic layout at ({},{}) {}x{} (compositor "
-        "reported overlapping origins)",
-        output.name.empty() ? "?" : output.name.c_str(), x, y, logical->first, logical->second
+        "output '{}' synthetic layout at ({},0) {}x{}", output.name.empty() ? "?" : output.name.c_str(), x,
+        logical->first, logical->second
     );
+    return WaylandOutputLayout{
+        .x = x,
+        .y = 0,
+        .width = logical->first,
+        .height = logical->second,
+    };
   }
 
   return WaylandOutputLayout{
-      .x = x,
-      .y = y,
+      .x = output.x,
+      .y = output.y,
       .width = logical->first,
       .height = logical->second,
   };
@@ -700,6 +729,19 @@ WaylandClient::logicalSizeForOutput(const wl_output* output) const noexcept {
   return std::nullopt;
 }
 
+std::optional<WaylandOutputLayout> WaylandClient::logicalLayoutForOutput(const wl_output* output) const noexcept {
+  if (output == nullptr) {
+    return std::nullopt;
+  }
+
+  for (const auto& out : m_outputs) {
+    if (out.output == output) {
+      return layoutForOutput(out);
+    }
+  }
+  return std::nullopt;
+}
+
 void WaylandClient::notifyOutputsChanged() {
   if (m_outputsChangedCallback) {
     m_outputsChangedCallback();
@@ -708,19 +750,23 @@ void WaylandClient::notifyOutputsChanged() {
 
 void WaylandClient::handleOutputGeometry(
     void* data, wl_output* wlOut, std::int32_t x, std::int32_t y, std::int32_t physWidth, std::int32_t physHeight,
-    std::int32_t /*subpixel*/, const char* /*make*/, const char* /*model*/, std::int32_t /*transform*/
+    std::int32_t /*subpixel*/, const char* /*make*/, const char* /*model*/, std::int32_t transform
 ) {
   auto* client = static_cast<WaylandClient*>(data);
   for (auto& out : client->m_outputs) {
     if (out.output != wlOut) {
       continue;
     }
-    const bool changed =
-        out.x != x || out.y != y || out.physicalWidthMm != physWidth || out.physicalHeightMm != physHeight;
+    const bool changed = out.x != x
+        || out.y != y
+        || out.physicalWidthMm != physWidth
+        || out.physicalHeightMm != physHeight
+        || out.transform != transform;
     out.x = x;
     out.y = y;
     out.physicalWidthMm = physWidth;
     out.physicalHeightMm = physHeight;
+    out.transform = transform;
     if (changed && out.done) {
       client->notifyOutputsChanged();
     }
@@ -753,8 +799,9 @@ void WaylandClient::handleOutputDone(void* data, wl_output* wlOut) {
     if (out.output == wlOut && !out.done) {
       out.done = true;
       kLog.info(
-          "output '{}' ready {}x{} at ({},{}) scale={} phys={}x{}mm", out.name.empty() ? "?" : out.name.c_str(),
-          out.pixelWidth, out.pixelHeight, out.x, out.y, out.scale, out.physicalWidthMm, out.physicalHeightMm
+          "output '{}' ready {}x{} at ({},{}) scale={} transform={} phys={}x{}mm",
+          out.name.empty() ? "?" : out.name.c_str(), out.pixelWidth, out.pixelHeight, out.x, out.y, out.scale,
+          out.transform, out.physicalWidthMm, out.physicalHeightMm
       );
       client->notifyOutputsChanged();
       break;
