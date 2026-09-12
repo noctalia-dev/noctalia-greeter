@@ -452,6 +452,9 @@ namespace greeter::appearance {
     if (value == "repeat") {
       return WallpaperFillMode::Repeat;
     }
+    if (value == "span") {
+      return WallpaperFillMode::Span;
+    }
     return std::nullopt;
   }
 

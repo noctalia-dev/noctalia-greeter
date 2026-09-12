@@ -5,8 +5,6 @@ sidebar:
   order: 6
 ---
 
-# Troubleshooting
-
 Start with the greetd and Noctalia Greeter logs. The message immediately before a blank screen, failed login, or failed sync is usually more useful than the visible symptom.
 
 - [Logging](#logging)
@@ -29,11 +27,11 @@ The service may have a different unit name on a distribution-provided setup. On 
 
 `NOCTALIA_GREETER_LOG` changes the destination:
 
-| Value | Effect |
-|-------|--------|
-| Unset | Log through syslog; keep stdout and stderr parked |
-| `stderr` | Send informational and debug messages to stdout, and warnings and errors to stderr |
-| An absolute file path | Append to that file and continue logging through syslog |
+| Value                 | Effect                                                                             |
+| --------------------- | ---------------------------------------------------------------------------------- |
+| Unset                 | Log through syslog; keep stdout and stderr parked                                  |
+| `stderr`              | Send informational and debug messages to stdout, and warnings and errors to stderr |
+| An absolute file path | Append to that file and continue logging through syslog                            |
 
 For temporary console diagnostics, add the variable to the greetd session command:
 
@@ -50,7 +48,7 @@ greetd does not interpret a bare environment assignment as a command, so keep th
 
 Check the logs first. Confirm that `/var/lib/noctalia-greeter` exists, is mode `0750`, and is owned by the account configured as greetd's greeter user. Also verify that the greeter package's required `assets/` tree was installed.
 
-For a source checkout, `sudo ./scripts/setup_greeter_system.sh` performs the complete system setup; `just setup-log-dir` repairs only the state directory. Those commands are available only from the source tree. Packaged installations should use their distribution's setup or reinstall procedure. See [Installation](installation.md#configure-greetd-manually).
+For a source checkout, `sudo ./scripts/setup_greeter_system.sh` performs the complete system setup; `just setup-log-dir` repairs only the state directory. Those commands are available only from the source tree. Packaged installations should use their distribution's setup or reinstall procedure. See [Installation](installation.md#3-configure-greetd).
 
 ### Black screen after reboot
 
@@ -64,7 +62,7 @@ The greetd `command` must use the full installed path to `noctalia-greeter-sessi
 command -v noctalia-greeter-session
 ```
 
-Update `/etc/greetd/config.toml` as shown in [Configure greetd manually](installation.md#configure-greetd-manually).
+Update `/etc/greetd/config.toml` as shown in [Configure greetd](installation.md#3-configure-greetd).
 
 ### `WAYLAND_DISPLAY is not set`
 
@@ -121,7 +119,7 @@ GNOME expects a systemd-managed user session and may fail with a `graphical-sess
 ### Appearance sync
 
 If the synced look is missing, first check the installed versions. The
-constrained `--sync` path requires Noctalia Greeter 1.4.0 or newer together
+constrained `--sync` path requires Noctalia Greeter 1.5.0 or newer together
 with the next Noctalia release after 5.0.1; current `-git` packages, `main`
 checkouts, or manual builds from current `main` work when both projects are up
 to date. Older and mixed-version combinations use the permanently supported
@@ -159,7 +157,7 @@ rules directory.
 
 If needed, add it with
 `sudo noctalia-greeter passwordless-sync enable alice`. The installed Greeter
-must be 1.4.0 or newer, the package must include the dedicated
+must be 1.5.0 or newer, the package must include the dedicated
 `org.noctalia.greeter.sync-appearance` action, and Polkit must see the caller as
 an active local session. A seatd-only session without logind or elogind cannot
 match this rule.

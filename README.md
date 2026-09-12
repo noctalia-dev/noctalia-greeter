@@ -30,15 +30,19 @@ A minimal login greeter for [greetd](https://github.com/kennylevinsen/greetd) th
 
 Noctalia Greeter is the screen you see before your desktop session starts. It lets you pick a user, enter your password, choose a Wayland session, and pick a color scheme - with the same visual language as Noctalia Shell.
 
-It is built for **greetd**: greetd starts the bundled wlroots compositor (`noctalia-greeter-compositor`), and the greeter runs inside that session.
+It is built for **greetd**: greetd launches `noctalia-greeter-session`, which starts the bundled wlroots compositor and runs the greeter inside that session.
 
 Pair it with **[Noctalia v5](https://github.com/noctalia-dev/noctalia)** if you want wallpaper and palette synced from the shell settings (optional).
 
-## Dependencies
+## Get started
 
-Install everything below on the machine where greetd will run. Each list covers build tools and libraries, plus **greetd** and **D-Bus** (used by `noctalia-greeter-session`). You still need your desktop sessions separately (niri, Hyprland, and so on).
+Follow the **[installation guide](docs/user/installation.md)** for distribution
+packages, NixOS, greetd configuration, and a safe handoff from another display
+manager. If no package is available, use the separate
+**[source-build guide](docs/user/building-from-source.md)**, then return to the
+main installation flow.
 
-### Arch
+After installation:
 
 ```sh
 sudo pacman -S meson gcc just \
@@ -512,6 +516,9 @@ just recover
 ```
 
 ---
+- [Configure the greeter](docs/user/configuration.md)
+- [Set up optional Sync with Noctalia](docs/user/sync.md)
+- [Troubleshoot a login or display problem](docs/user/troubleshooting.md)
 
 ## Scope
 

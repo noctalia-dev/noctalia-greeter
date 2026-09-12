@@ -5,8 +5,6 @@ sidebar:
   order: 5
 ---
 
-# Keyboard and cursor
-
 Noctalia Greeter supports keyboard-only navigation and lets administrators configure the keyboard layout, Num Lock state, and cursor theme used on the login screen.
 
 - [Keyboard controls](#keyboard-controls)

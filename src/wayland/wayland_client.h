@@ -38,6 +38,7 @@ struct WaylandOutputInfo {
   int32_t pixelWidth = 0;
   int32_t pixelHeight = 0;
   int32_t scale = 1;
+  int32_t transform = 0;
   float preferredScale = 0.0f;
   bool done = false;
 };
@@ -97,6 +98,7 @@ public:
   [[nodiscard]] std::optional<std::pair<std::uint32_t, std::uint32_t>> combinedLogicalSize() const noexcept;
   [[nodiscard]] std::optional<std::pair<std::uint32_t, std::uint32_t>>
   logicalSizeForOutput(const wl_output* output) const noexcept;
+  [[nodiscard]] std::optional<WaylandOutputLayout> logicalLayoutForOutput(const wl_output* output) const noexcept;
   void setOutputPreferredScale(wl_output* output, float scale) noexcept;
 
   static void

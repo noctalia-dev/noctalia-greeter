@@ -5,69 +5,56 @@ sidebar:
   order: 1
 ---
 
-# Installation
+For most users, the shortest path is to install a distribution package, point
+greetd at the installed session wrapper, and then switch display managers. The
+steps below put those changes in the order they should be made.
 
-Noctalia Greeter is available from these package sources:
+## 1. Check prerequisites and choose an installation method
 
-- [Arch Linux (AUR)](#arch-linux)
-- [CachyOS](#cachyos)
-- [KaOS](#kaos)
-- [Fedora](#fedora)
-- [Debian and Ubuntu](#debian-and-ubuntu)
-- [NixOS](#nixos)
+Every installation needs **greetd** and **D-Bus** on the machine where the
+greeter runs. Install desktop sessions such as niri or Hyprland separately.
 
-You can also [build it manually](#manual-installation) on another Linux distribution.
+Choose the method for your system:
+
+- [Install a distribution package](#2-install-noctalia-greeter) on Arch Linux,
+  CachyOS, KaOS, Fedora, Debian, or Ubuntu.
+- [Build from source](building-from-source.md) if no package is available.
+- Follow the separate [NixOS declarative setup](#nixos-declarative-setup) on
+  NixOS. Do not follow the imperative service steps in sections 3–6.
+
+Sections 3–6 assume systemd. With another init system, configure greetd in
+section 3, then skip to [Other init systems](#other-init-systems).
 
 :::note[Package ownership]
-The Noctalia team maintains the source build, project flake, and AUR packages. Distribution packages and packages from other repositories follow their maintainers' own packaging processes. Review a third-party repository before installing from it.
+The Noctalia team maintains the source build, project flake, and AUR packages.
+Distribution packages and packages from other repositories follow their
+maintainers' own packaging processes. Review a third-party repository before
+installing from it.
 :::
 
-Every installation needs **greetd** and **D-Bus** on the machine where the greeter runs. The **Polkit daemon and `pkexec`** are optional for login, but required to sync appearance from Noctalia; some distributions package `pkexec` separately.
+## 2. Install Noctalia Greeter
 
-:::note[Sync compatibility]
-Passwordless sync is optional and requires Noctalia Greeter 1.4.0 or newer
-together with the next Noctalia release after 5.0.1. Current `-git` packages,
-`main` checkouts, or manual builds from current `main` work when both projects
-are up to date. Older and mixed-version combinations continue to use the
-permanently supported administrator-authenticated legacy path. Without a
-site-local Polkit allow rule, sync requests administrator authentication every
-time.
-:::
-
-After installing a compatible package on a distribution with a conventional
-mutable `/etc`, passwordless sync can be enabled for a selected login account
-with:
-
-```sh
-sudo noctalia-greeter passwordless-sync enable alice
-```
-
-This is optional; without it, administrator-prompted sync remains fully
-supported. Use
-`sudo noctalia-greeter passwordless-sync disable alice` to undo it. NixOS users
-declare the equivalent users in their system configuration instead. See
-[Sync with Noctalia](sync.md#authorization) for status commands, NixOS examples,
-the manual Polkit alternative, and security constraints.
-
-For user avatars in the login picker, optionally install and enable **accountsservice** (usually the `accounts-daemon` service). Noctalia Greeter reads each user's avatar from `org.freedesktop.Accounts` and shows a fallback when the service is unavailable or no `IconFile` is set.
-
-Desktop sessions such as niri or Hyprland are separate packages; install them as you normally would.
-
-## Package sources
+Use one of the package options below. After it finishes, continue to
+[Configure greetd](#3-configure-greetd).
 
 ### Arch Linux
 
-Tagged releases are available as [`noctalia-greeter`](https://aur.archlinux.org/packages/noctalia-greeter) in the AUR. Install it with an AUR helper of your choice, for example:
+Tagged releases are available as
+[`noctalia-greeter`](https://aur.archlinux.org/packages/noctalia-greeter) in the
+AUR. Install it with an AUR helper of your choice, for example:
 
 ```sh
 paru -S noctalia-greeter
 ```
 
-To follow development snapshots from `main`, install [`noctalia-greeter-git`](https://aur.archlinux.org/packages/noctalia-greeter-git) instead.
+To follow development snapshots from `main`, install
+[`noctalia-greeter-git`](https://aur.archlinux.org/packages/noctalia-greeter-git)
+instead.
 
 ### CachyOS
 
-Noctalia Greeter is available from the [official CachyOS repository](https://packages.cachyos.org/package/cachyos/x86_64/noctalia-greeter):
+Noctalia Greeter is available from the
+[official CachyOS repository](https://packages.cachyos.org/package/cachyos/x86_64/noctalia-greeter):
 
 ```sh
 sudo pacman -Syu noctalia-greeter
@@ -75,7 +62,8 @@ sudo pacman -Syu noctalia-greeter
 
 ### KaOS
 
-Noctalia Greeter is available from the [KaOS `apps` repository](https://kaosx.us/packages/packages.php?exact=1&search=noctalia-greeter):
+Noctalia Greeter is available from the
+[KaOS `apps` repository](https://kaosx.us/packages/packages.php?exact=1&search=noctalia-greeter):
 
 ```sh
 sudo pacman -Syu noctalia-greeter
@@ -83,27 +71,130 @@ sudo pacman -Syu noctalia-greeter
 
 ### Fedora
 
-For Fedora 44 and newer, tagged releases are available from the community-maintained [Terra repository](https://terrapkg.com). Add Terra, then install the greeter:
+For Fedora 44 and newer, tagged releases are available from the
+community-maintained [Terra repository](https://terrapkg.com). Add Terra, then
+install the greeter:
 
 ```sh
 sudo dnf install --nogpgcheck --repofrompath 'terra,https://repos.fyralabs.com/terra$releasever' terra-release
 sudo dnf install noctalia-greeter
 ```
 
-Automated development snapshots are also available from the [LionHeartP Copr](https://copr.fedorainfracloud.org/coprs/lionheartp/Hyprland/). The snapshot package is being renamed to distinguish it from stable builds, so check the Copr package page for its current name. Fedora's default repositories do not currently carry Noctalia Greeter.
+Automated development snapshots are also available from the
+[LionHeartP Copr](https://copr.fedorainfracloud.org/coprs/lionheartp/Hyprland/).
+The snapshot package is being renamed to distinguish it from stable builds, so
+check the Copr package page for its current name. Fedora's default repositories
+do not currently carry Noctalia Greeter.
 
 ### Debian and Ubuntu
 
-The community-maintained Noctalia APT repository provides `noctalia-greeter` for Debian Trixie, Debian Sid, and Ubuntu 26.04. Follow the shared [Debian repository setup instructions](https://docs.noctalia.dev/noctalia/getting-started/installation/#debian), then install:
+The community-maintained Noctalia APT repository provides `noctalia-greeter`
+for Debian Trixie, Debian Sid, and Ubuntu 26.04. Follow the shared
+[Debian repository setup instructions](https://docs.noctalia.dev/noctalia/getting-started/installation/#debian),
+then install:
 
 ```sh
 sudo apt update
 sudo apt install noctalia-greeter
 ```
 
-### NixOS
+## 3. Configure greetd
 
-Noctalia Greeter is packaged in [nixpkgs unstable](https://search.nixos.org/packages?channel=unstable&show=noctalia-greeter&query=noctalia-greeter). The nixpkgs module installs the package, enables greetd, Polkit, and AccountsService, and configures the greeter session:
+greetd must launch **`noctalia-greeter-session`**, not the
+`noctalia-greeter` executable. Find the wrapper installed on your system:
+
+```sh
+command -v noctalia-greeter-session
+```
+
+Open `/etc/greetd/config.toml` and merge the following values into its existing
+`[default_session]` section. Do not blindly overwrite an existing greetd
+configuration:
+
+```toml
+[default_session]
+command = "/usr/bin/noctalia-greeter-session"
+user = "greeter"
+```
+
+Replace `command` with the full path reported above. Distribution packages
+commonly install it under `/usr/bin`; the path may differ for another prefix.
+Keep the existing greeter account if your configuration uses a user other than
+`greeter`.
+
+Some packages configure greetd automatically. In that case, verify that the
+existing `command` points to `noctalia-greeter-session` and leave the rest of
+the configuration intact.
+
+## 4. Replace the current display manager safely
+
+:::caution
+Changing display managers can stop the graphical login immediately. Before
+continuing, switch to a TTY or keep another root-capable shell open so you can
+recover if greetd does not start.
+:::
+
+On a systemd distribution, first identify the display manager currently behind
+the `display-manager.service` alias:
+
+```sh
+systemctl status display-manager.service
+```
+
+Service unit names vary. The actual unit may be `gdm.service`, `sddm.service`,
+`lightdm.service`, or something else. Disable the unit shown on your system;
+do not copy one of these examples without checking:
+
+```sh
+sudo systemctl disable --now UNIT.service
+```
+
+If no other display manager is installed or enabled, there is nothing to
+disable. Do not leave another display manager enabled alongside greetd: both
+can compete for the login screen on the next boot.
+
+## 5. Enable greetd
+
+After the previous display manager is disabled, enable and start greetd:
+
+```sh
+sudo systemctl enable --now greetd
+```
+
+## 6. Reboot and verify
+
+Reboot to confirm greetd starts cleanly:
+
+```sh
+sudo reboot
+```
+
+The Noctalia Greeter login screen should appear and list the desktop sessions
+installed on the system. If it does not, return to the TTY or root shell you
+kept available and inspect greetd:
+
+```sh
+systemctl status greetd
+```
+
+See [Troubleshooting](troubleshooting.md) for recovery steps and logging
+details.
+
+## NixOS declarative setup
+
+NixOS users should configure both the package and display-manager selection in
+their system configuration. Do not use the imperative systemd cutover from
+sections 4–5. Keep a TTY or another root-capable shell available while applying
+the change. Remove or disable any other display-manager module in the same
+configuration, enable exactly one Noctalia Greeter module, and rebuild the
+system through the normal NixOS workflow.
+
+### nixpkgs module
+
+Noctalia Greeter is packaged in
+[nixpkgs unstable](https://search.nixos.org/packages?channel=unstable&show=noctalia-greeter&query=noctalia-greeter).
+The nixpkgs module installs the package, enables greetd, Polkit, and
+AccountsService, and configures the greeter session:
 
 ```nix
 services.displayManager.noctalia-greeter = {
@@ -119,7 +210,11 @@ services.displayManager.noctalia-greeter = {
 };
 ```
 
-The project flake is an alternative for channels that do not yet contain the package or for following the greeter repository directly. Add it to `flake.nix`:
+### Project flake module
+
+The project flake is an alternative for channels that do not yet contain the
+package or for following the greeter repository directly. Add it to
+`flake.nix`:
 
 ```nix
 inputs.noctalia-greeter = {
@@ -128,20 +223,12 @@ inputs.noctalia-greeter = {
 };
 ```
 
-Import `inputs.noctalia-greeter.nixosModules.default`, then enable the project module:
+Import `inputs.noctalia-greeter.nixosModules.default`, then enable the project
+module:
 
 ```nix
 programs.noctalia-greeter = {
   enable = true;
-
-  # Optional: passwordless appearance sync for selected active local users.
-  # Leave empty or omit to require an administrator prompt for every sync.
-  passwordless-sync-users = [ "alice" ];
-
-  # Optional: extra flags after `--` on noctalia-greeter-session.
-  greeter-args = "";
-
-  # Full declarative greeter.toml, overwritten on each activation.
   settings = {
     cursor = {
       theme = "Bibata-Modern-Ice";
@@ -152,77 +239,45 @@ programs.noctalia-greeter = {
 };
 ```
 
-The project module enables greetd, AccountsService, Polkit, and the `pkexec`
-wrapper (where that wrapper option exists), and configures greetd to launch the
-packaged `noctalia-greeter-session`. This keeps the normal administrator-prompted
-sync available. When `passwordless-sync-users` is non-empty, the module also adds
-a Polkit rule limited to those users in active local sessions.
+The project module enables greetd, AccountsService, and Polkit, and configures
+greetd to launch the packaged `noctalia-greeter-session`. The two modules use
+different option paths and cursor-theme interfaces, so enable only one.
 
-Leaving `passwordless-sync-users` unset or empty keeps the packaged policy's
-administrator prompt for every constrained sync.
+Rebuild and reboot through the normal NixOS workflow to verify that the greeter
+starts and lists the installed desktop sessions.
 
-Because NixOS owns the generated Polkit configuration declaratively, prefer the
-module option or an equivalent `security.polkit.extraConfig` rule over the
-imperative `passwordless-sync` CLI on NixOS.
+## Build from source
 
-The modules use different option paths and cursor-theme interfaces: nixpkgs uses `services.displayManager.noctalia-greeter` and `cursorTheme.package`, while the project module uses `programs.noctalia-greeter` and writes cursor `theme` and `path` through `settings`. Enable only one module.
+If no package is available for your distribution, follow
+[Building from source](building-from-source.md). After installing, return to
+[Configure greetd](#3-configure-greetd) to complete the setup.
 
-See [Configuration](configuration.md) for all settings and [Sync with Noctalia](sync.md) for passwordless sync details.
+## Other init systems
 
-### Manual installation
+Disable any other display manager through your init system before enabling its
+greetd service. Service setup varies by distribution.
 
-If no package is available for your distribution, follow the repository's [build-from-source instructions](https://github.com/noctalia-dev/noctalia-greeter#build-from-source). After installing from source, run the setup script as root so `/var/lib/noctalia-greeter/` and `greeter.toml` are created for the greetd user:
-
-```sh
-sudo ./scripts/setup_greeter_system.sh
-```
-
-For a manual build that will use passwordless sync, configure Meson with
-`--prefix=/usr`. Standard Polkit installations load actions from
-`/usr/share/polkit-1/actions`; a default `/usr/local` build can run the login
-greeter and retain administrator-authenticated sync, but its dedicated action
-is not normally discovered.
-
-Packaged integrations may perform this setup automatically. Continue below to verify the greetd session command on your system.
-
-## Configure greetd manually
-
-Point greetd at the installed session wrapper. Find its path rather than assuming `/usr/local`:
+On runit, restart greetd after changing `/etc/greetd/config.toml`:
 
 ```sh
-command -v noctalia-greeter-session
+sudo sv restart greetd
 ```
 
-For example, a manual installation under `/usr/local` uses:
-
-```toml
-[default_session]
-command = "/usr/local/bin/noctalia-greeter-session"
-user = "greeter"
-```
-
-Replace the command with the path reported on your system, commonly `/usr/bin/noctalia-greeter-session` for distribution packages. Set `user` to the account that runs greetd's greeter session. The included system setup script prints a ready-to-paste `config.toml` block using the path and user it detects.
-
-The greetd `command` is not interpreted as a shell command. To set environment variables, invoke `env` explicitly:
-
-```toml
-command = "env WLR_LOG=info /usr/bin/noctalia-greeter-session"
-```
-
-For selecting the initial desktop session or user, see [Configuration](configuration.md).
-
-## Restart greetd
-
-Restart greetd after changing `/etc/greetd/config.toml`.
-
-On systemd:
+On systemd, restart greetd after later configuration changes with:
 
 ```sh
 sudo systemctl restart greetd
 ```
 
-On runit:
+## Optional next steps
 
-```sh
-sudo sv restart greetd
-```
+- Install and enable **accountsservice** (usually the `accounts-daemon`
+  service) to show user avatars. A fallback appears when it is unavailable or
+  no `IconFile` is set.
+- Adjust the greeter in [Configuration](configuration.md), including the
+  initial desktop session or user.
+- Set up optional appearance sharing in
+  [Sync with Noctalia](sync.md). That guide is the source of truth for
+  compatibility, authorization, and security details.
+- See [Displays](displays.md) and [Input and keyboard](input.md) for
+  platform-specific customization.

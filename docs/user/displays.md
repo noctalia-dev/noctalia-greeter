@@ -5,8 +5,6 @@ sidebar:
   order: 4
 ---
 
-# Displays
-
 Noctalia Greeter uses its bundled wlroots compositor to configure displays. Put
 the settings on this page under `[output]` in
 `/var/lib/noctalia-greeter/greeter.toml`. On NixOS, use

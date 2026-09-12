@@ -5,24 +5,24 @@ sidebar:
   order: 0
 ---
 
-# Noctalia Greeter
-
 [Noctalia Greeter](https://github.com/noctalia-dev/noctalia-greeter) is a graphical login screen for **[greetd](https://github.com/kennylevinsen/greetd)**. It lets you select a user and Wayland session, authenticate, and choose a color scheme using the same visual language as Noctalia.
 
-greetd starts the bundled wlroots compositor, which runs the greeter UI. It is a focused login environment—not a desktop shell or a general-purpose compositor.
+greetd launches `noctalia-greeter-session`, which starts the bundled wlroots compositor and runs the greeter UI. It is a focused login environment, not a desktop shell or a general-purpose compositor.
 
 ## Start here
 
-1. [Install the greeter and its runtime dependencies](installation.md).
-2. If your package or module did not configure greetd, [point it at `noctalia-greeter-session`](installation.md#configure-greetd-manually).
-3. [Choose any administrator-controlled defaults](configuration.md), such as the initial user, session, or cursor.
-4. Optionally [sync your Noctalia appearance](sync.md) to the login screen.
+1. [Install a distribution package or configure NixOS](installation.md).
+2. If no package is available, [build the greeter from source](building-from-source.md).
+3. If your package or module did not configure greetd, [point it at `noctalia-greeter-session`](installation.md#3-configure-greetd).
+4. [Choose any administrator-controlled defaults](configuration.md), such as the initial user, session, or cursor.
+5. Optionally [sync your Noctalia appearance](sync.md) to the login screen.
 
 ## Guides
 
 | Guide | Use it for |
 |-------|------------|
-| [Installation](installation.md) | Distribution packages, source installation, NixOS modules, and greetd setup |
+| [Installation](installation.md) | Distribution packages, NixOS modules, greetd setup, and display-manager cutover |
+| [Building from source](building-from-source.md) | Build dependencies and manual installation for distributions without a package |
 | [Configuration](configuration.md) | Config-file precedence, remembered state, available keys, default user, and default session |
 | [Sync with Noctalia](sync.md) | Wallpapers, palette, monitor sync, Polkit, and passwordless authorization |
 | [Displays](displays.md) | Output selection, multi-monitor layout, modes, transforms, scale, and idle blanking |

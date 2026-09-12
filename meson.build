@@ -1,5 +1,5 @@
 project('noctalia-greeter', ['c', 'cpp'],
-  version: '1.4.0',
+  version: '1.5.0',
   default_options: [
     'cpp_std=c++20',
     'cpp_extensions=false',
@@ -349,3 +349,32 @@ legacy_staging_compatibility_test = executable(
 )
 
 test('legacy-staging-compatibility', legacy_staging_compatibility_test)
+
+wallpaper_span_geometry_test = executable(
+  'wallpaper-span-geometry-test',
+  sources: files('tests/wallpaper_span_geometry_test.cpp'),
+  include_directories: include_directories('src'),
+  cpp_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow'],
+  build_by_default: false,
+)
+
+test('wallpaper-span-geometry', wallpaper_span_geometry_test)
+
+wallpaper_program_pixel_test = executable(
+  'wallpaper-program-pixel-test',
+  sources: files(
+    'tests/wallpaper_program_pixel_test.cpp',
+    'src/render/programs/wallpaper_program.cpp',
+    'src/render/core/shader_program.cpp',
+  ),
+  dependencies: [egl_dep, gles2_dep],
+  include_directories: include_directories('src'),
+  cpp_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow'],
+  build_by_default: false,
+)
+
+test(
+  'wallpaper-program-pixels',
+  wallpaper_program_pixel_test,
+  env: ['LIBGL_ALWAYS_SOFTWARE=1'],
+)

@@ -206,6 +206,7 @@ void GreeterSurface::initialize(RenderContext* context) {
   auto wallpaper = std::make_unique<WallpaperNode>();
   m_wallpaper = wallpaper.get();
   m_wallpaper->setZIndex(0);
+  m_wallpaper->setSpan(m_wallpaperSpanParams);
   m_root.addChild(std::move(wallpaper));
 
   auto backdrop = std::make_unique<RectNode>();
@@ -1849,6 +1850,17 @@ void GreeterSurface::setBoundOutputName(std::string outputName) {
     applyScheme(m_selectedScheme);
     requestLayout();
   }
+}
+
+void GreeterSurface::setWallpaperSpanParams(const WallpaperSpanParams& params) {
+  if (m_wallpaperSpanParams == params) {
+    return;
+  }
+  m_wallpaperSpanParams = params;
+  if (m_wallpaper != nullptr) {
+    m_wallpaper->setSpan(params);
+  }
+  requestRedraw();
 }
 
 void GreeterSurface::clearWallpaperDisplay() {

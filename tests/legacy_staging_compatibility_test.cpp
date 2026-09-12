@@ -1,3 +1,5 @@
+#include "greeter/appearance_sync.h"
+#include "greeter/greeter_config_io.h"
 #include "tools/secure_appearance_sync.h"
 
 #include <algorithm>
@@ -93,6 +95,51 @@ namespace {
     passed = false;
   }
 
+  void expectFillMode(
+      const std::string_view name, const std::string_view value, const std::optional<WallpaperFillMode> expected,
+      bool& passed
+  ) {
+    const auto actual = greeter::appearance::parseFillMode(value);
+    if (actual == expected) {
+      return;
+    }
+    std::cerr << name << ": unexpected fill-mode parse result\n";
+    passed = false;
+  }
+
+  void writeSpanSyncToml(const std::filesystem::path& path) {
+    std::ofstream(path, std::ios::trunc) << R"toml(
+[appearance]
+scheme = "Synced"
+
+[appearance.wallpaper]
+path = "color:#010203"
+fill_mode = "span"
+
+[appearance.wallpapers.DP-1]
+path = "color:#040506"
+fill_mode = "span"
+
+[appearance.palette]
+primary = "#010101"
+on_primary = "#020202"
+secondary = "#030303"
+on_secondary = "#040404"
+tertiary = "#050505"
+on_tertiary = "#060606"
+error = "#070707"
+on_error = "#080808"
+surface = "#090909"
+on_surface = "#101010"
+surface_variant = "#111111"
+on_surface_variant = "#121212"
+outline = "#131313"
+shadow = "#141414"
+hover = "#151515"
+on_hover = "#161616"
+)toml";
+  }
+
 } // namespace
 
 int main() {
@@ -100,6 +147,40 @@ int main() {
   std::string error;
 
   try {
+    expectFillMode("center fill mode", "center", WallpaperFillMode::Center, passed);
+    expectFillMode("crop fill mode", "crop", WallpaperFillMode::Crop, passed);
+    expectFillMode("fit fill mode", "fit", WallpaperFillMode::Fit, passed);
+    expectFillMode("stretch fill mode", "stretch", WallpaperFillMode::Stretch, passed);
+    expectFillMode("repeat fill mode", "repeat", WallpaperFillMode::Repeat, passed);
+    expectFillMode("span fill mode", "span", WallpaperFillMode::Span, passed);
+    expectFillMode("invalid fill mode", "tile", std::nullopt, passed);
+
+    {
+      Fixture fixture(0700, 0600);
+      writeSpanSyncToml(fixture.syncFile);
+      greeter::config::clearConfigDiagnostics();
+      const auto sync = greeter::config::loadSync(fixture.syncFile);
+      expect("span sync.toml parses cleanly", greeter::config::configDiagnostics().empty(), true, {}, passed);
+
+      const bool defaultSpan = sync.appearance.wallpaper.has_value()
+          && sync.appearance.wallpaper->fillMode.has_value()
+          && greeter::appearance::parseFillMode(*sync.appearance.wallpaper->fillMode) == WallpaperFillMode::Span;
+      expect("default staged span wallpaper", defaultSpan, true, {}, passed);
+
+      const auto outputWallpaper = sync.appearance.wallpapers.find("DP-1");
+      const bool outputSpan = outputWallpaper != sync.appearance.wallpapers.end()
+          && outputWallpaper->second.fillMode.has_value()
+          && greeter::appearance::parseFillMode(*outputWallpaper->second.fillMode) == WallpaperFillMode::Span;
+      expect("per-output staged span wallpaper", outputSpan, true, {}, passed);
+
+      error.clear();
+      expect(
+          "constrained sync accepts default and per-output span",
+          greeter::secure_sync::detail::validateConstrainedPayloadForTesting(fixture.stagingDirectory, error), true,
+          error, passed
+      );
+    }
+
     {
       // Noctalia 5.0.1 inherits umask. With umask 0002 it creates this
       // 0775 directory and 0664 payload beneath its private 0700 runtime dir.

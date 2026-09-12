@@ -30,6 +30,11 @@ namespace greeter::secure_sync {
         uid_t runtimeParentOwner, uid_t callerUid, std::string& errorOut
     );
 
+    // Snapshots and validates a constrained payload through the same parser and
+    // semantic checks used by the privileged apply path.
+    [[nodiscard]] bool
+    validateConstrainedPayloadForTesting(const std::filesystem::path& stagingDirectory, std::string& errorOut);
+
   } // namespace detail
 #endif
 

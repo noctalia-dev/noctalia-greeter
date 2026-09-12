@@ -2,9 +2,10 @@
 # Sync docs/user/*.md into ../noctalia-docs/src/content/docs/greeter/ as .mdx.
 # Existing .mdx files keep their hand-written frontmatter (title, description,
 # and sidebar metadata); only the body is refreshed from the source .md.
-# New files get a title derived from their first H1. Stale .mdx files without a
-# source document are removed after a successful sync. A leading H1 is dropped
-# from the body. Relative links to sibling docs are rewritten to site URLs.
+# New files keep their source frontmatter, falling back to a title derived from
+# the first H1 when none exists. Stale .mdx files without a source document are
+# removed after a successful sync. A leading H1 is dropped from the body.
+# Relative links to sibling docs are rewritten to site URLs.
 # Usage: tools/sync-docs.sh [docs-site-root]
 set -euo pipefail
 
@@ -35,6 +36,8 @@ for md in "$repo_root"/docs/user/*.md; do
     route="$(site_route "$base")"
     mdx="$dest_dir/$route.mdx"
 
+    source_frontmatter="$(awk 'NR == 1 && $0 == "---" { fm = 1; print; next } fm && $0 == "---" { print; exit } fm { print }' "$md")"
+    source_title="$(printf '%s\n' "$source_frontmatter" | awk '/^title: / { sub(/^title: /, ""); print; exit }')"
     h1="$(awk '/^# / { sub(/^# /, ""); print; exit }' "$md")"
 
     frontmatter=""
@@ -46,7 +49,10 @@ for md in "$repo_root"/docs/user/*.md; do
     if [[ -n "$frontmatter" ]]; then
         title="$(printf '%s\n' "$frontmatter" | awk '/^title: / { sub(/^title: /, ""); print; exit }')"
     fi
-    if [[ -z "$title" ]]; then
+    if [[ -z "$title" && -n "$source_title" ]]; then
+        title="$source_title"
+        frontmatter="$source_frontmatter"
+    elif [[ -z "$title" ]]; then
         title="$h1"
         frontmatter="---
 title: $title

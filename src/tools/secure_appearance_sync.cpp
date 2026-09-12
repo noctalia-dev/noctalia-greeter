@@ -571,7 +571,7 @@ namespace greeter::secure_sync {
       bool foundLegacyManifest = false;
       errno = 0;
       while (const dirent* entry = ::readdir(rawDirectory)) {
-        const std::string_view name(entry->d_name);
+        const std::string name(entry->d_name);
         if (name == "." || name == "..") {
           continue;
         }
@@ -1121,6 +1121,28 @@ namespace greeter::secure_sync {
           staging.get(), callerUid, snapshots, wallpaperFiles, /*allowLegacyManifest=*/false,
           WritableEntryPolicy::Reject, errorOut
       );
+    }
+
+    bool validateConstrainedPayloadForTesting(const std::filesystem::path& stagingDirectory, std::string& errorOut) {
+      UniqueFd staging(::open(stagingDirectory.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW));
+      if (!staging.valid()) {
+        return setErrnoError("failed to open the sync staging directory", errorOut);
+      }
+
+      std::vector<StagedFileSnapshot> snapshots;
+      std::unordered_set<std::string> wallpaperFiles;
+      if (!snapshotStagingFiles(
+              staging.get(), ::getuid(), snapshots, wallpaperFiles, /*allowLegacyManifest=*/false,
+              WritableEntryPolicy::Reject, errorOut
+          )) {
+        return false;
+      }
+
+      TemporaryDirectory privateStaging;
+      if (!privateStaging.create(errorOut) || !materializeSnapshots(privateStaging, snapshots, errorOut)) {
+        return false;
+      }
+      return validatePayload(privateStaging, wallpaperFiles, errorOut);
     }
 
   } // namespace detail
