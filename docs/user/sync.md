@@ -180,7 +180,7 @@ NixOS users configure the same authorization declaratively. With the project
 module, list trusted login users directly:
 
 ```nix
-programs.noctalia-greeter.passwordless-sync-users = [ "alice" ];
+services.displayManager.noctalia-greeter.passwordless-sync-users = [ "alice" ];
 ```
 
 The option defaults to an empty list, which keeps every sync authenticated. The

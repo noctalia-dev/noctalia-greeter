@@ -154,10 +154,10 @@ services.displayManager.noctalia-greeter = {
 
 ### Project flake module
 
-The project flake module uses `programs.noctalia-greeter.settings`. It does not have a cursor package option, so point `cursor.path` at the package's `share/icons` directory:
+The project flake module does not have a cursor package option, so point `cursor.path` at the package's `share/icons` directory:
 
 ```nix
-programs.noctalia-greeter = {
+services.displayManager.noctalia-greeter = {
   enable = true;
 
   settings = {

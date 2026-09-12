@@ -9,7 +9,7 @@ Noctalia Greeter uses its bundled wlroots compositor to configure displays. Put
 the settings on this page under `[output]` in
 `/var/lib/noctalia-greeter/greeter.toml`. On NixOS, use
 `services.displayManager.noctalia-greeter.settings.output` with the nixpkgs
-module or `programs.noctalia-greeter.settings.output` with the project flake.
+and project flake modules.
 
 - [Find connector names](#find-connector-names)
 - [Choose which monitors show the greeter](#choose-which-monitors-show-the-greeter)
@@ -186,18 +186,10 @@ session command with `env`:
 command = "env NOCTALIA_GREETER_IDLE_TIMEOUT=300 /usr/bin/noctalia-greeter-session"
 ```
 
-On NixOS with the nixpkgs module:
+On NixOS with the nixpkgs and project flake modules:
 
 ```nix
 services.displayManager.noctalia-greeter.settings = {
-  idle.timeout = 300;
-};
-```
-
-With the project flake module instead:
-
-```nix
-programs.noctalia-greeter.settings = {
   idle.timeout = 300;
 };
 ```
