@@ -158,7 +158,7 @@ in
       }
 
       (lib.mkIf (cfg.cursorTheme.package != null) {
-        programs.noctalia-greeter.settings.cursor.path = lib.mkDefault "${cfg.cursorTheme.package}/share/icons";
+        services.displayManager.noctalia-greeter.settings.cursor.path = lib.mkDefault "${cfg.cursorTheme.package}/share/icons";
       })
 
       (lib.mkIf (cfg.passwordless-sync-users != [ ]) {
