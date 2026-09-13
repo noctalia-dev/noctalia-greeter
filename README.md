@@ -48,6 +48,29 @@ After installation:
 - [Set up optional Sync with Noctalia](docs/user/sync.md)
 - [Troubleshoot a login or display problem](docs/user/troubleshooting.md)
 
+### NixOS settings
+
+`settings` writes `/var/lib/noctalia-greeter/greeter.toml` (full declarative config,
+including appearance/palette when you set them). Sync + UI mutable data lives in
+`sync.toml` (not managed by Nix).
+Commented example: [`examples/greeter.toml`](examples/greeter.toml).
+
+### UI controls
+
+To hide the session picker, set `appearance.hide_session_selector = true` in `greeter.toml`.
+The selected session still follows CLI default, configured default, and the last
+session from `sync.toml`; if none is available, the first discovered session is used.
+
+Individual UI controls can be hidden under `[appearance]`; omitted options default to `false`:
+
+```toml
+[appearance]
+hide_scheme_selector = true
+hide_shutdown_button = true
+hide_reboot_button = false
+hide_firmware_button = false
+```
+
 ## Scope
 
 Noctalia Greeter is a **display/login greeter** for greetd. It handles user/session selection and authentication UI.
