@@ -50,7 +50,13 @@
       lib,
       ...
     }: {
-      imports = [./nix/nixos-module.nix];
+      imports = [
+        ./nix/nixos-module.nix
+        (lib.mkRenamedOptionModule
+          [ "programs" "noctalia-greeter" ]
+          [ "services" "displayManager" "noctalia-greeter" ]
+        )
+      ];
       services.displayManager.noctalia-greeter.package = lib.mkDefault self.packages.${pkgs.stdenv.hostPlatform.system}.default;
     };
   };
