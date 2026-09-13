@@ -154,17 +154,18 @@ services.displayManager.noctalia-greeter = {
 
 ### Project flake module
 
-The project flake module does not have a cursor package option, so point `cursor.path` at the package's `share/icons` directory:
+The project flake module provides a `cursorTheme.package` convenience option. It fills `cursor.path`, while other cursor values like `theme` and `size` go under `settings.cursor`:
 
 ```nix
 services.displayManager.noctalia-greeter = {
   enable = true;
 
+  cursorTheme.package = pkgs.bibata-cursors;
+
   settings = {
     cursor = {
       theme = "Bibata-Modern-Ice";
       size = 24;
-      path = "${pkgs.bibata-cursors}/share/icons";
     };
     keyboard = {
       layout = "us,cz";
