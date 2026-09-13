@@ -51,7 +51,7 @@
       ...
     }: {
       imports = [./nix/nixos-module.nix];
-      programs.noctalia-greeter.package = lib.mkDefault self.packages.${pkgs.stdenv.hostPlatform.system}.default;
+      services.displayManager.noctalia-greeter.package = lib.mkDefault self.packages.${pkgs.stdenv.hostPlatform.system}.default;
     };
   };
 }

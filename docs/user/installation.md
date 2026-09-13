@@ -227,7 +227,7 @@ Import `inputs.noctalia-greeter.nixosModules.default`, then enable the project
 module:
 
 ```nix
-programs.noctalia-greeter = {
+services.displayManager.noctalia-greeter = {
   enable = true;
   settings = {
     cursor = {

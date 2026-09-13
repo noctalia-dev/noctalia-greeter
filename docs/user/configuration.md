@@ -24,7 +24,7 @@ Administrator-controlled settings live in `/var/lib/noctalia-greeter/greeter.tom
 
 If `greeter.toml` is missing, the greeter uses built-in defaults. System setup creates the state directory and files owned by the greetd session user.
 
-On NixOS, use `services.displayManager.noctalia-greeter.settings` with the nixpkgs module or `programs.noctalia-greeter.settings` with the project flake. Both materialize `greeter.toml` using a tmpfiles `L+` entry.
+On NixOS, use `services.displayManager.noctalia-greeter.settings` with both the nixpkgs, and project flake modules. Both materialize `greeter.toml` using a tmpfiles `L+` entry.
 
 The **Synced** scheme uses a complete `[appearance.palette]` from `greeter.toml` when present, otherwise the same keys from `sync.toml`. Legacy live `appearance.json` is migrated into `sync.toml` once. See [Sync with Noctalia](sync.md) for the complete precedence and authorization model.
 
