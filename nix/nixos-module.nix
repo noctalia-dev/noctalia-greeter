@@ -52,6 +52,17 @@ in
       example = [ "alice" ];
     };
 
+    cursorTheme.package = lib.mkPackageOption pkgs "cursor theme" {
+      nullable = true;
+      default = null;
+    }
+    // {
+      description = ''
+        Cursor theme package. Defaults settings.cursor.path to
+        "''${package}/share/icons"; set it directly if needed.
+      '';
+    };
+
     settings = lib.mkOption {
       type =
         with lib.types;
@@ -145,6 +156,10 @@ in
           }
         ];
       }
+
+      (lib.mkIf (cfg.cursorTheme.package != null) {
+        programs.noctalia-greeter.settings.cursor.path = lib.mkDefault "${cfg.cursorTheme.package}/share/icons";
+      })
 
       (lib.mkIf (cfg.passwordless-sync-users != [ ]) {
         security.polkit.extraConfig = lib.mkAfter ''
