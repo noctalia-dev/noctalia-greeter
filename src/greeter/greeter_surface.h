@@ -2,6 +2,7 @@
 
 #include "config/config_types.h"
 #include "greetd/greetd_client.h"
+#include "greeter/animated_webp_background.h"
 #include "greeter/appearance_config.h"
 #include "greeter/greeter_sessions.h"
 #include "render/animation/animation_manager.h"
@@ -78,6 +79,8 @@ public:
   [[nodiscard]] bool handleNavigationKey(std::uint32_t sym, std::uint32_t utf32, std::uint32_t modifiers);
   void requestLayout();
   void requestRedraw();
+  [[nodiscard]] int animationPollTimeoutMs() const noexcept { return m_animatedBackground.millisUntilNextFrame(); }
+  bool advanceAnimation();
   void flushDeferredFrameRequests();
 
   void prepareFrame(std::uint32_t width, std::uint32_t height, bool needsLayout);
@@ -163,6 +166,10 @@ private:
   [[nodiscard]] bool isSyncedScheme(std::size_t schemeIndex) const;
   [[nodiscard]] std::optional<std::size_t> findSchemeIndex(std::string_view name) const;
   void syncWallpaperTexture();
+  [[nodiscard]] bool applyAnimatedWallpaper();
+  void onAnimatedBackgroundFrame();
+  void onAnimatedBackgroundFailed();
+  [[nodiscard]] static bool pathLooksLikeWebp(const std::string& path);
   void syncHeaderUserAvatar(class Renderer& renderer, float size, float panelX, float panelWidth, float headerY);
 
   // Nodes unregister animations while being destroyed, so the manager must
@@ -254,6 +261,8 @@ private:
   std::string m_loadedHeaderAvatarPath;
   std::string m_boundOutputName;
   std::string m_wallpaperPath;
+  AnimatedWebpBackground m_animatedBackground;
+  std::string m_animatedBackgroundRuledOut;
   WallpaperFillMode m_wallpaperFillMode = WallpaperFillMode::Crop;
   Color m_wallpaperFillColor = rgba(0.0f, 0.0f, 0.0f, 0.0f);
   WallpaperSpanParams m_wallpaperSpanParams;
@@ -265,6 +274,8 @@ private:
   std::string m_schemeSelectorPosition;
   std::chrono::steady_clock::time_point m_lastAnimTick{};
   bool m_animTickInitialized = false;
+  std::chrono::steady_clock::time_point m_lastBgTick{};
+  bool m_bgTickInitialized = false;
   bool m_inInputDispatch = false;
   bool m_inLayout = false;
   bool m_deferredLayoutRequest = false;
