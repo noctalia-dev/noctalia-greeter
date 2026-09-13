@@ -10,7 +10,7 @@ build: configure
 
 # Configure release build dir
 configure-release:
-  meson setup build-release --buildtype=release --reconfigure
+  meson setup build-release --buildtype=release -Dnative_optimizations=true --reconfigure
 
 # Release build
 build-release: configure-release
