@@ -19,7 +19,13 @@ let
       tomlFormat.generate name value;
 in
 {
-  disabledModules = [ "services/display-managers/noctalia-greeter.nix" ];
+  imports = [
+    (lib.mkRenamedOptionModule
+      [ "programs" "noctalia-greeter" ]
+      [ "services" "displayManager" "noctalia-greeter" ]
+    )
+  ];
+  disabledModules = ["services/display-managers/noctalia-greeter.nix"];
   options.services.displayManager.noctalia-greeter = {
     enable = lib.mkEnableOption "Whether to enable Noctalia Greeter, A minimal login greeter for greetd.";
 
