@@ -1919,15 +1919,19 @@ void GreeterSurface::syncHeaderUserAvatar(
       && m_headerUserAvatar != nullptr
       && m_renderContext != nullptr;
   const std::string iconPath = canShowAvatar ? m_userIconPaths[m_selectedUser] : std::string{};
+  // size is logical; decode at buffer resolution so HiDPI outputs stay sharp.
+  const int avatarPixelSize = canShowAvatar ? static_cast<int>(std::lround(size * m_renderContext->renderScale())) : 0;
 
-  if (canShowAvatar && !iconPath.empty() && iconPath != m_loadedHeaderAvatarPath) {
+  if (canShowAvatar
+      && !iconPath.empty()
+      && (iconPath != m_loadedHeaderAvatarPath || avatarPixelSize != m_loadedHeaderAvatarPixelSize)) {
     if (m_headerAvatarTexture.id != 0) {
       m_renderContext->textureManager().unload(m_headerAvatarTexture);
       m_headerAvatarTexture = {};
     }
     m_loadedHeaderAvatarPath = iconPath;
-    m_headerAvatarTexture =
-        m_renderContext->textureManager().loadFromFile(iconPath, static_cast<int>(std::lround(size)), true);
+    m_loadedHeaderAvatarPixelSize = avatarPixelSize;
+    m_headerAvatarTexture = m_renderContext->textureManager().loadFromFile(iconPath, avatarPixelSize, true);
   }
 
   if (!canShowAvatar || iconPath.empty() || m_headerAvatarTexture.id == 0) {

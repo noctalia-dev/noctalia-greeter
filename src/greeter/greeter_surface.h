@@ -252,6 +252,7 @@ private:
   TextureHandle m_headerAvatarTexture{};
   TextureHandle m_wallpaperTexture{};
   std::string m_loadedHeaderAvatarPath;
+  int m_loadedHeaderAvatarPixelSize = 0;
   std::string m_boundOutputName;
   std::string m_wallpaperPath;
   WallpaperFillMode m_wallpaperFillMode = WallpaperFillMode::Crop;
