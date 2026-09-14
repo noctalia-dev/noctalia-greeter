@@ -1,0 +1,33 @@
+#!/usr/bin/env sh
+set -eu
+
+if [ "$#" -lt 1 ]; then
+  echo "usage: noctalia-greeter-xsession <session-command> [args...]" >&2
+  exit 1
+fi
+
+if ! command -v startx >/dev/null 2>&1; then
+  echo "error: startx not found; install xinit to use xsessions entries" >&2
+  exit 1
+fi
+
+# startx falls back to its default client (xterm) when the client program
+# isn't resolvable as a direct path (a bare name with no "/" isn't looked up
+# via PATH the way a normal exec would). Resolve it ourselves so
+# Exec=bspwm behaves the same as Exec=/usr/bin/bspwm.
+client="$1"
+shift
+resolved_client="$(command -v -- "${client}" 2>/dev/null || true)"
+if [ -n "${resolved_client}" ]; then
+  client="${resolved_client}"
+fi
+
+seat="${XDG_SEAT:-seat0}"
+
+# vtN must be passed explicitly: Xorg's /dev/tty0 auto-detection (which fails
+# as a non-root user) is skipped only when a VT number is given on the
+# command line, regardless of -seat/-keeptty.
+if [ -n "${XDG_VTNR:-}" ]; then
+  exec startx "${client}" "$@" -- -seat "${seat}" -keeptty "vt${XDG_VTNR}"
+fi
+exec startx "${client}" "$@" -- -seat "${seat}" -keeptty

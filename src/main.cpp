@@ -168,7 +168,7 @@ int main(int argc, char* argv[]) {
           "  -h, --help            Show this help message\n"
           "  -v, --version         Show version information\n"
           "  --log-test            Write test lines to all log paths and exit\n"
-          "  --session, --cmd NAME Default session (Wayland .desktop Name=)\n"
+          "  --session, --cmd NAME Default session (.desktop Name=)\n"
           "  --user NAME           Default user (skip user picker, open password)\n"
           "\n"
           "Environment:\n"

@@ -16,7 +16,8 @@ namespace greeter {
     std::string command;
     // From DesktopNames= (desktop-entry ;-list). Empty when unset (synthetic Shell).
     std::string desktopNames;
-    // "wayland" for wayland-sessions entries; "tty" for the synthetic Shell fallback.
+    // "wayland" for wayland-sessions entries, "x11" for xsessions entries, "tty" for the
+    // synthetic Shell fallback.
     std::string sessionType = "wayland";
   };
 
@@ -28,5 +29,10 @@ namespace greeter {
 
   // Env for greetd start_session (must be set before PAM opens the session).
   [[nodiscard]] std::vector<GreetdEnvironmentEntry> sessionStartEnvironment(const SessionOption& session);
+
+  // Full argv to execute for this session: the split Exec= tokens for wayland/tty
+  // sessions, or the same tokens wrapped in noctalia-greeter-xsession for x11 sessions
+  // (which need Xorg bootstrapped first). Empty when Exec= is empty or whitespace-only.
+  [[nodiscard]] std::vector<std::string> sessionArgv(const SessionOption& session);
 
 } // namespace greeter

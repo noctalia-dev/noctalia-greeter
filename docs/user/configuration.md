@@ -83,10 +83,35 @@ The value is the desktop entry's exact **`Name=`**, which is the same text shown
 noctalia-greeter sessions
 ```
 
-Sessions are discovered from `wayland-sessions` directories under
-`/usr/local/share`, `/usr/share`, `/run/current-system/sw/share`, and each base
-path in `XDG_DATA_DIRS`. Name lookup is case-insensitive, but using the exact
-picker spelling keeps the configuration unambiguous.
+Sessions are discovered from `wayland-sessions` and `xsessions` directories
+under `/usr/local/share`, `/usr/share`, `/run/current-system/sw/share`, and
+each base path in `XDG_DATA_DIRS`. Name lookup is case-insensitive, but using
+the exact picker spelling keeps the configuration unambiguous. If a
+`wayland-sessions` and an `xsessions` entry share the same `Name=`, the
+`wayland-sessions` entry wins.
+
+An `xsessions` entry's `Exec=` is run through `noctalia-greeter-xsession`,
+which bootstraps `Xorg` via `startx` before running it — `startx` handles
+`DISPLAY`/`Xauthority` setup for the client. This requires `xinit` (for
+`startx`) to be installed; without it, the session fails with a clear
+"startx not found" error instead of starting. The wrapper runs:
+
+```sh
+startx <session Exec=> -- -seat "${XDG_SEAT:-seat0}" -keeptty vt${XDG_VTNR}
+```
+
+`-seat`/`vt${XDG_VTNR}` let Xorg get the GPU device and VT through
+elogind/systemd-logind instead of needing root: `-seat` gets the device
+handoff, and the explicit `vtN` is required separately because Xorg only
+skips its normally-root-only `/dev/tty0` probe when a VT number is given
+directly on the command line. `XDG_SEAT`/`XDG_VTNR` come from the PAM
+session the same way `XDG_SESSION_TYPE` does. The wrapper also resolves a
+bare `Exec=` program name (e.g. `Exec=bspwm`) to an absolute path before
+handing it to `startx`, since some `startx` implementations only accept the
+client as a direct path and silently fall back to their default client
+(`xterm`) otherwise. See
+[X11 session doesn't start](troubleshooting.md#x11-session-doesnt-start) if
+it still fails.
 
 Set the default declaratively, especially when it contains spaces or punctuation:
 
