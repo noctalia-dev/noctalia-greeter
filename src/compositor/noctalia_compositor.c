@@ -1433,6 +1433,10 @@ static void choose_outputs(struct greeter_server* server) {
     wlr_log(WLR_INFO, "greeter pinned output: %s", pinned->wlr_output->name);
   }
 
+  // Mapping also lets wlroots apply the output transform to absolute input
+  // events before they reach the cursor listeners. Re-evaluate on hotplug.
+  wlr_cursor_map_to_output(server->cursor, pinned != NULL && pinned->active ? pinned->wlr_output : NULL);
+
   wl_list_for_each(output, &server->outputs, link) {
     if (output->view != NULL && output->view->mapped) {
       configure_view(output->view);
