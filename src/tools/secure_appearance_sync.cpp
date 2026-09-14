@@ -40,8 +40,8 @@ namespace greeter::secure_sync {
     constexpr std::uint64_t kConfigSizeLimit = 256U * 1024U;
     // greeter_compositor_config stores each serialized output value in a 2048-byte buffer.
     constexpr std::uint64_t kOutputMetadataSizeLimit = 2047U;
-    constexpr std::uint64_t kWallpaperSizeLimit = 64U * 1024U * 1024U;
-    constexpr std::uint64_t kTotalSizeLimit = 128U * 1024U * 1024U;
+    constexpr std::uint64_t kWallpaperSizeLimit = 256U * 1024U * 1024U;
+    constexpr std::uint64_t kTotalSizeLimit = 512U * 1024U * 1024U;
     // Config + three output files + a fallback and up to sixteen per-output wallpapers.
     constexpr std::size_t kFileCountLimit = 22;
     constexpr std::size_t kOutputEntryLimit = 16;
