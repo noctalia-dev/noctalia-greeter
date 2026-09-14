@@ -87,7 +87,9 @@ namespace {
 
   [[nodiscard]] bool isKnownIdleKey(std::string_view key) { return key == "timeout"; }
 
-  [[nodiscard]] bool isKnownCursorKey(std::string_view key) { return key == "theme" || key == "size" || key == "path"; }
+  [[nodiscard]] bool isKnownCursorKey(std::string_view key) {
+    return key == "theme" || key == "size" || key == "path" || key == "package";
+  }
 
   [[nodiscard]] bool isKnownKeyboardKey(std::string_view key) {
     return key == "layout" || key == "variant" || key == "options" || key == "numlock";
@@ -328,6 +330,8 @@ namespace {
             config.cursorTheme = stringValue(entryNode);
           } else if (entryView == "path") {
             config.cursorPath = stringValue(entryNode);
+          } else if (entryView == "package") {
+            config.cursorPackage = stringValue(entryNode);
           } else if (const auto size = cursorSizeValue(entryNode)) {
             config.cursorSize = *size;
           } else {
@@ -556,6 +560,12 @@ namespace {
     }
     insertString(
         cursor, "path", config.cursorPath, [](toml::table& table, std::string_view key, const std::string& value) {
+          table.insert_or_assign(std::string(key), value);
+        }
+    );
+    insertString(
+        cursor, "package", config.cursorPackage,
+        [](toml::table& table, std::string_view key, const std::string& value) {
           table.insert_or_assign(std::string(key), value);
         }
     );
@@ -921,7 +931,8 @@ namespace greeter::config {
            "theme_mode, corner_radius_scale, font_family\n";
     out << "# [appearance.palette] full color role table, [appearance.wallpaper] path/fill_mode/fill_color\n";
     out << "# [appearance.wallpapers.<connector>] per-output wallpaper overrides\n";
-    out << "# [output] name/layout/scale/scales/width/height/transforms, [idle] timeout, [cursor] theme/size/path\n";
+    out << "# [output] name/layout/scale/scales/width/height/transforms, [idle] timeout, [cursor] "
+           "theme/size/path/package\n";
     out << "# [keyboard] layout/variant/options/numlock\n";
     out << "# [auth] allow_empty_password (bool), request_timeout (0-3600 seconds; default 60, 0 disables)\n";
     out << '\n';
@@ -1071,7 +1082,13 @@ extern "C" void greeter_compositor_config_load(const char* state_dir, struct gre
 
   copyString(out->preferred_output, sizeof(out->preferred_output), config.outputName);
   copyString(out->cursor_theme, sizeof(out->cursor_theme), config.cursorTheme);
-  copyString(out->cursor_path, sizeof(out->cursor_path), config.cursorPath);
+  // cursor.path always wins; cursor.package is a convenience that fills it with
+  // "<package>/share/icons" so users don't have to spell that out themselves.
+  std::optional<std::string> cursorPathFromPackage;
+  if (config.cursorPackage.has_value() && !config.cursorPackage->empty()) {
+    cursorPathFromPackage = *config.cursorPackage + "/share/icons";
+  }
+  copyString(out->cursor_path, sizeof(out->cursor_path), preferString(config.cursorPath, cursorPathFromPackage));
   copyString(out->keyboard_layout, sizeof(out->keyboard_layout), config.keyboardLayout);
   copyString(out->keyboard_variant, sizeof(out->keyboard_variant), config.keyboardVariant);
   copyString(out->keyboard_options, sizeof(out->keyboard_options), config.keyboardOptions);

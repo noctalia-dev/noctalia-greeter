@@ -66,6 +66,9 @@ namespace greeter::config {
     std::optional<std::string> cursorTheme;
     std::optional<int> cursorSize;
     std::optional<std::string> cursorPath;
+    // Convenience alternative to cursorPath: a directory containing "share/icons"
+    // (e.g. a Nix store path). Ignored when cursorPath is set.
+    std::optional<std::string> cursorPackage;
 
     std::optional<std::string> keyboardLayout;
     std::optional<std::string> keyboardVariant;

@@ -158,6 +158,12 @@ in
       }
 
       (lib.mkIf (cfg.cursorTheme.package != null) {
+        warnings = [
+          ''
+            services.displayManager.noctalia-greeter.cursorTheme.package has been deprecated in favor
+            of services.displayManager.noctalia-greeter.settings.cursor.package.
+          ''
+        ];
         services.displayManager.noctalia-greeter.settings.cursor.path = lib.mkDefault "${cfg.cursorTheme.package}/share/icons";
       })
 

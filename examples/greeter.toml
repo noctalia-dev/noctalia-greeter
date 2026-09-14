@@ -96,6 +96,9 @@ theme = "Adwaita"
 size = 24
 # Colon-separated search path when the theme is not under the default icon dirs.
 path = "/usr/share/icons"
+# Alternative to path: a directory containing "share/icons" (e.g. a Nix store
+# path); "share/icons" is appended for you. Ignored when path is set.
+# package = "/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-bibata-cursors"
 
 [keyboard]
 # Comma-separated for multiple layouts.

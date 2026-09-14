@@ -237,7 +237,7 @@ services.displayManager.noctalia-greeter = {
     cursor = {
       theme = "Bibata-Modern-Ice";
       size = 24;
-      path = "${pkgs.bibata-cursors}/share/icons";
+      package = pkgs.bibata-cursors; # fills cursor.path as "${package}/share/icons"
     };
   };
 };

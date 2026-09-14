@@ -88,7 +88,7 @@ This setting has no effect when the active keymap does not provide Num Lock.
 
 The compositor resolves the cursor theme, size, and search path in this order:
 
-1. `[cursor].theme`, `[cursor].size`, and `[cursor].path` in `greeter.toml`
+1. `[cursor].theme`, `[cursor].size`, and `[cursor].path` in `greeter.toml` (`[cursor].package` fills `path` when `path` itself is unset)
 2. `XCURSOR_THEME`, `XCURSOR_SIZE`, and `XCURSOR_PATH` from the session environment
 3. The wlroots defaults, including a built-in cursor at size `24`
 
@@ -110,6 +110,17 @@ path = "/usr/share/icons"
 ```
 
 The path must be readable by the greetd session user. A cursor theme installed only in your personal home directory is normally unavailable to the greeter.
+
+On systems where the theme lives in a content-addressed store path (e.g. Nix), `package` is a shorthand for `path` that appends `share/icons` for you, so you don't have to spell that out yourself:
+
+```toml
+[cursor]
+theme = "Bibata-Modern-Ice"
+size = 24
+package = "/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-bibata-cursors"
+```
+
+This is equivalent to setting `path = "/nix/store/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-bibata-cursors/share/icons"`. `path` always wins when both are set.
 
 ### Environment variables
 
@@ -154,18 +165,15 @@ services.displayManager.noctalia-greeter = {
 
 ### Project flake module
 
-The project flake module provides a `cursorTheme.package` convenience option. It fills `cursor.path`, while other cursor values like `theme` and `size` go under `settings.cursor`:
-
 ```nix
 services.displayManager.noctalia-greeter = {
   enable = true;
-
-  cursorTheme.package = pkgs.bibata-cursors;
 
   settings = {
     cursor = {
       theme = "Bibata-Modern-Ice";
       size = 24;
+      package = pkgs.bibata-cursors; # fills cursor.path as "${package}/share/icons"
     };
     keyboard = {
       layout = "us,cz";
