@@ -121,6 +121,36 @@ Put names containing spaces or punctuation in `greeter.toml` instead of leaving 
 
 GNOME expects a systemd-managed user session and may fail with a `graphical-session-pre.target` error. The greeter passes `XDG_SESSION_TYPE` and the desktop entry's `DesktopNames` environment through greetd, but GNOME support remains best-effort compared with GDM. If the normal entry still fails, use GDM for GNOME or create a suitable `wayland-sessions` wrapper.
 
+### X11 session doesn't start
+
+`xsessions` entries run through `noctalia-greeter-xsession`, which needs
+`startx` (from `xinit`) installed. `startx: command not found` (or
+noctalia-greeter's own "startx not found" error) in the session log means
+`xinit` is missing.
+
+If `startx` is present but Xorg itself fails, reproduce the exact wrapper
+invocation by hand from a terminal to see the real Xorg error:
+
+```sh
+noctalia-greeter-xsession /path/to/session/binary
+```
+
+A `parse_vt_settings: Cannot open /dev/tty0 (Permission denied)` error here
+usually means `XDG_VTNR` was unset in the environment you ran this from (it
+is only guaranteed to be set for a real session opened by greetd's PAM
+stack, e.g. via `pam_elogind.so`/`pam_systemd.so` in `/etc/pam.d/greetd`) —
+this is expected when testing from an existing desktop session rather than
+through the greeter.
+
+If Xorg starts but the screen shows a terminal instead of the desktop, with
+an error like `xterm: bad command line option`, the wrapper's `startx` fell
+back to its default client instead of running the session — this is handled
+automatically since noctalia-greeter resolves `Exec=` to an absolute path
+before calling `startx`, but a very old or unusual `startx` implementation
+may still behave differently. See
+[Default session](configuration.md#default-session) for what the wrapper
+does and why.
+
 ## Sync and Polkit
 
 ### Appearance sync

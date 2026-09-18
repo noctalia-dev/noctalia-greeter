@@ -73,14 +73,14 @@ namespace {
     dirs.push_back(dir);
   }
 
-  [[nodiscard]] std::vector<std::filesystem::path> sessionSearchDirectories() {
+  [[nodiscard]] std::vector<std::filesystem::path> sessionSearchDirectories(std::string_view subdir) {
     std::vector<std::filesystem::path> dirs;
     std::unordered_set<std::string> seen;
     seen.reserve(8);
 
-    appendSearchDirectory(dirs, seen, "/usr/local/share/wayland-sessions");
-    appendSearchDirectory(dirs, seen, "/usr/share/wayland-sessions");
-    appendSearchDirectory(dirs, seen, "/run/current-system/sw/share/wayland-sessions");
+    appendSearchDirectory(dirs, seen, std::filesystem::path("/usr/local/share") / subdir);
+    appendSearchDirectory(dirs, seen, std::filesystem::path("/usr/share") / subdir);
+    appendSearchDirectory(dirs, seen, std::filesystem::path("/run/current-system/sw/share") / subdir);
 
     const char* xdgDataDirs = std::getenv("XDG_DATA_DIRS");
     const std::string_view xdgValue =
@@ -91,7 +91,7 @@ namespace {
       const std::size_t end = xdgValue.find(':', start);
       const std::string base = trim(std::string(xdgValue.substr(start, end - start)));
       if (!base.empty()) {
-        appendSearchDirectory(dirs, seen, std::filesystem::path(base) / "wayland-sessions");
+        appendSearchDirectory(dirs, seen, std::filesystem::path(base) / subdir);
       }
       if (end == std::string_view::npos) {
         break;
@@ -140,7 +140,7 @@ namespace {
 
   void discoverSessionsInDirectory(
       const std::filesystem::path& dir, std::vector<greeter::SessionOption>& sessions,
-      std::unordered_set<std::string>& seenNames
+      std::unordered_set<std::string>& seenNames, std::string_view sessionType
   ) {
     std::error_code ec;
     for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
@@ -187,7 +187,7 @@ namespace {
               .name = name,
               .command = exec,
               .desktopNames = desktopNames,
-              .sessionType = "wayland",
+              .sessionType = std::string(sessionType),
           }
       );
     }
@@ -201,8 +201,13 @@ namespace greeter {
     std::vector<SessionOption> sessions;
     std::unordered_set<std::string> seenNames;
 
-    for (const auto& dir : sessionSearchDirectories()) {
-      discoverSessionsInDirectory(dir, sessions, seenNames);
+    // Shared seenNames: a Name= collision between the two keeps the wayland-sessions
+    // entry, since it is scanned first.
+    for (const auto& dir : sessionSearchDirectories("wayland-sessions")) {
+      discoverSessionsInDirectory(dir, sessions, seenNames, "wayland");
+    }
+    for (const auto& dir : sessionSearchDirectories("xsessions")) {
+      discoverSessionsInDirectory(dir, sessions, seenNames, "x11");
     }
 
     if (sessions.empty()) {
@@ -241,6 +246,28 @@ namespace greeter {
     }
 
     return env;
+  }
+
+  std::vector<std::string> sessionArgv(const SessionOption& session) {
+    std::vector<std::string> tokens;
+    std::istringstream stream(session.command);
+    std::string token;
+    while (stream >> token) {
+      tokens.push_back(token);
+    }
+    if (tokens.empty()) {
+      return tokens;
+    }
+
+    if (session.sessionType == "x11") {
+      std::vector<std::string> wrapped;
+      wrapped.reserve(tokens.size() + 1);
+      wrapped.push_back("noctalia-greeter-xsession");
+      wrapped.insert(wrapped.end(), tokens.begin(), tokens.end());
+      return wrapped;
+    }
+
+    return tokens;
   }
 
 } // namespace greeter
