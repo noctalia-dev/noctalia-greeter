@@ -198,32 +198,11 @@ so this prompted flow is usable regardless of the list. When users are listed,
 it additionally generates a rule limited to the exact packaged helper, the root
 target account, and those users in active local sessions.
 
-The nixpkgs module does not currently have that convenience option. Once its
-selected greeter package meets the compatibility requirements above, add the
-equivalent rule in your NixOS configuration:
+The nixpkgs module works the same, only with a slightly different notation:
 
 ```nix
-security.polkit = {
-  enable = true;
-  extraConfig = ''
-    polkit.addRule(function(action, subject) {
-      var allowedUsers = ["alice"];
-
-      if (action.id == "org.noctalia.greeter.sync-appearance" &&
-          action.lookup("program") == "${pkgs.noctalia-greeter}/bin/noctalia-greeter-apply-appearance" &&
-          action.lookup("user") == "root" &&
-          subject.local && subject.active &&
-          allowedUsers.indexOf(subject.user) >= 0) {
-        return polkit.Result.YES;
-      }
-    });
-  '';
-};
+services.displayManager.noctalia-greeter.passwordlessSyncUsers = [ "alice" ];
 ```
-
-Ensure `pkexec` is available on the selected NixOS release. On releases that
-expose `security.polkit.enablePkexecWrapper`, set that option to `true`; releases
-without it provide the wrapper when Polkit is enabled.
 
 If you override `services.displayManager.noctalia-greeter.package`, use that
 same package in the helper path. Greeter 1.3.1 and older do not provide this
