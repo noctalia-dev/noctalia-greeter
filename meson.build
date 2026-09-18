@@ -63,6 +63,7 @@ if not cc.has_header('stb/stb_image_resize2.h')
 endif
 
 libwebp_dep = dependency('libwebp', required: true)
+libwebpdemux_dep = dependency('libwebpdemux', required: true)
 
 # ── Wayland protocol generation ───────────────────────────────────────────────
 wayland_scanner    = find_program('wayland-scanner')
@@ -162,6 +163,7 @@ _greeter_sources = files(
   'src/greeter/greeter_preferences.cpp',
   'src/greeter/greeter_sessions.cpp',
   'src/greeter/greeter_surface.cpp',
+  'src/greeter/animated_webp_background.cpp',
   'src/greeter/greeter_window.cpp',
   'src/greeter/logind_resume.cpp',
   'src/greeter/power_actions.cpp',
@@ -197,6 +199,7 @@ noctalia_greeter_executable = executable('noctalia-greeter',
     gobject_dep,
     gio_dep,
     libwebp_dep,
+    libwebpdemux_dep,
     nlohmann_dep,
     tomlplusplus_dep,
   ],
