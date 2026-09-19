@@ -288,6 +288,9 @@ private:
   std::vector<std::string> m_users;
   std::vector<uid_t> m_userUids;
   std::vector<std::string> m_userIconPaths;
+  // Display text per user, index-aligned with m_users. Holds the AccountsService/GECOS
+  // real name when [appearance] show_real_names is set and one is known, else the username.
+  std::vector<std::string> m_userDisplayNames;
   std::vector<greeter::SessionOption> m_sessions;
   std::size_t m_selectedUser = 0;
   std::size_t m_selectedSession = 0;
