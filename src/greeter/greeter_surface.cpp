@@ -1579,7 +1579,9 @@ void GreeterSurface::beginSessionStart() {
   }
 
   GreetdSessionCommand cmd;
-  greeter::SessionOption session{.name = "Shell", .command = "/bin/sh", .desktopNames = {}, .sessionType = "tty"};
+  greeter::SessionOption session{
+      .name = "Shell", .desktopId = {}, .command = "/bin/sh", .desktopNames = {}, .sessionType = "tty"
+  };
   if (!m_sessions.empty() && m_selectedSession < m_sessions.size()) {
     session = m_sessions[m_selectedSession];
   }
