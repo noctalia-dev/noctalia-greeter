@@ -87,7 +87,7 @@ for the limitation and configuration options.
 
 ## Default session
 
-The value is the desktop entry's exact **`Name=`**, which is the same text shown in the picker, not the `.desktop` filename. List available names with:
+The value is the desktop entry's **`Name=`**, which is the same text shown in the picker. The `.desktop` filename without the extension is also accepted as a fallback; a `Name=` match wins if both apply. List available names with:
 
 ```sh
 noctalia-greeter sessions
@@ -95,8 +95,8 @@ noctalia-greeter sessions
 
 Sessions are discovered from `wayland-sessions` directories under
 `/usr/local/share`, `/usr/share`, `/run/current-system/sw/share`, and each base
-path in `XDG_DATA_DIRS`. Name lookup is case-insensitive, but using the exact
-picker spelling keeps the configuration unambiguous.
+path in `XDG_DATA_DIRS`. Both name and filename lookup are case-insensitive, but
+using the exact picker spelling keeps the configuration unambiguous.
 
 Set the default declaratively, especially when it contains spaces or punctuation:
 
@@ -105,7 +105,7 @@ Set the default declaratively, especially when it contains spaces or punctuation
 default = "Hyprland (uwsm-managed)"
 ```
 
-Alternatively, a simple name can be passed through the greetd command:
+Alternatively, a simple name or the `.desktop` filename can be passed through the greetd command:
 
 ```toml
 command = "/usr/bin/noctalia-greeter-session -- --session niri"

@@ -185,6 +185,7 @@ namespace {
       sessions.push_back(
           greeter::SessionOption{
               .name = name,
+              .desktopId = entry.path().stem().string(),
               .command = exec,
               .desktopNames = desktopNames,
               .sessionType = "wayland",
@@ -207,7 +208,9 @@ namespace greeter {
 
     if (sessions.empty()) {
       sessions.push_back(
-          SessionOption{.name = "Shell", .command = "/bin/sh", .desktopNames = {}, .sessionType = "tty"}
+          SessionOption{
+              .name = "Shell", .desktopId = {}, .command = "/bin/sh", .desktopNames = {}, .sessionType = "tty"
+          }
       );
     }
     return sessions;
@@ -219,6 +222,11 @@ namespace greeter {
     }
     for (std::size_t i = 0; i < sessions.size(); ++i) {
       if (equalsIgnoreCase(sessions[i].name, name)) {
+        return i;
+      }
+    }
+    for (std::size_t i = 0; i < sessions.size(); ++i) {
+      if (!sessions[i].desktopId.empty() && equalsIgnoreCase(sessions[i].desktopId, name)) {
         return i;
       }
     }
