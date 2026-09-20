@@ -12,7 +12,7 @@
 # Docs: https://docs.noctalia.dev/greeter/configuration/
 
 [session]
-# Session Name from `noctalia-greeter sessions` (picker label, not .desktop id).
+# Session Name from `noctalia-greeter sessions` (picker label) or its .desktop filename.
 default = "niri"
 
 [user]
