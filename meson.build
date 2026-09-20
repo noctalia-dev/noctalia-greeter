@@ -365,6 +365,19 @@ wallpaper_span_geometry_test = executable(
 
 test('wallpaper-span-geometry', wallpaper_span_geometry_test)
 
+greeter_sessions_lookup_test = executable(
+  'greeter-sessions-lookup-test',
+  sources: files(
+    'tests/greeter_sessions_lookup_test.cpp',
+    'src/greeter/greeter_sessions.cpp',
+  ),
+  include_directories: include_directories('src'),
+  cpp_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow'],
+  build_by_default: false,
+)
+
+test('greeter-sessions-lookup', greeter_sessions_lookup_test)
+
 system_keyboard_config_test = executable(
   'system-keyboard-config-test',
   sources: files(

@@ -147,7 +147,7 @@ watchdog does not expire before PAM reaches the password fallback.
 
 ### Wrong session is selected on startup
 
-Use the desktop entry's exact **`Name=`** value from `noctalia-greeter sessions`, not its `.desktop` filename. Command-line `--session` takes precedence over `[session].default`, which takes precedence over the last-used `[session].last` value in `sync.toml`.
+Use the desktop entry's **`Name=`** value from `noctalia-greeter sessions`, or its `.desktop` filename without the extension. A `Name=` match wins if both apply. Command-line `--session` takes precedence over `[session].default`, which takes precedence over the last-used `[session].last` value in `sync.toml`.
 
 Put names containing spaces or punctuation in `greeter.toml` instead of leaving them unquoted in the greetd command. See [Default session](configuration.md#default-session).
 
