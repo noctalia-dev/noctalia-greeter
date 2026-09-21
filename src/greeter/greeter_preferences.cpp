@@ -243,6 +243,88 @@ namespace {
 
     return count;
   }
+  [[nodiscard]] int parseOutputModeDimension(const std::string& part) {
+    if (part.empty()) {
+      return 0;
+    }
+    char* end = nullptr;
+    const long parsed = std::strtol(part.c_str(), &end, 10);
+    if (end == nullptr || end == part.c_str() || *end != '\0' || parsed <= 0 || parsed > 16384) {
+      return 0;
+    }
+    return static_cast<int>(parsed);
+  }
+
+  [[nodiscard]] bool parseOutputModeEntry(std::string_view token) {
+    const std::string trimmed = trim(token);
+    if (trimmed.empty()) {
+      return false;
+    }
+
+    const std::size_t colon = trimmed.rfind(':');
+    if (colon == std::string_view::npos || colon == 0) {
+      return false;
+    }
+
+    const std::string name = trim(trimmed.substr(0, colon));
+    const std::string value = trim(trimmed.substr(colon + 1));
+    if (name.empty() || value.empty()) {
+      return false;
+    }
+
+    const std::size_t x = value.find('x');
+    if (x == std::string::npos || x == 0 || x + 1 >= value.size()) {
+      return false;
+    }
+    const std::string rest = value.substr(x + 1);
+    const std::size_t at = rest.find('@');
+    const std::string heightPart = at == std::string::npos ? rest : rest.substr(0, at);
+    const std::string refreshPart = at == std::string::npos ? std::string{} : rest.substr(at + 1);
+
+    if (parseOutputModeDimension(value.substr(0, x)) <= 0 || parseOutputModeDimension(heightPart) <= 0) {
+      return false;
+    }
+    if (refreshPart.empty()) {
+      return true;
+    }
+
+    char* end = nullptr;
+    const float refreshHz = std::strtof(refreshPart.c_str(), &end);
+    return end != nullptr && end != refreshPart.c_str() && *end == '\0' && refreshHz > 0.0f && refreshHz <= 1000.0f;
+  }
+
+  [[nodiscard]] std::size_t countValidOutputModeEntries(std::string_view raw) {
+    std::size_t count = 0;
+    std::string normalized;
+    normalized.reserve(raw.size());
+    for (const char ch : raw) {
+      normalized.push_back(ch == ';' ? ' ' : ch);
+    }
+
+    std::size_t begin = 0;
+    while (begin < normalized.size()) {
+      while (begin < normalized.size() && std::isspace(static_cast<unsigned char>(normalized[begin])) != 0) {
+        ++begin;
+      }
+      if (begin >= normalized.size()) {
+        break;
+      }
+
+      std::size_t end = begin;
+      while (end < normalized.size() && std::isspace(static_cast<unsigned char>(normalized[end])) == 0) {
+        ++end;
+      }
+
+      if (parseOutputModeEntry(normalized.substr(begin, end - begin))) {
+        ++count;
+      } else {
+        kLog.warn("ignoring invalid output mode entry '{}'", normalized.substr(begin, end - begin));
+      }
+      begin = end;
+    }
+
+    return count;
+  }
 
   [[nodiscard]] bool setPathMode(const std::filesystem::path& path, const mode_t mode, std::string& errorOut) {
     return greeter::privileged_state::setMode(path, mode, errorOut);
@@ -377,7 +459,7 @@ namespace greeter {
 
   bool applyAppearanceSyncGreeterConf(
       const std::optional<std::string>& stagedOutputLayout, const std::optional<std::string>& stagedOutputTransforms,
-      const std::optional<std::string>& stagedOutputScales,
+      const std::optional<std::string>& stagedOutputScales, const std::optional<std::string>& stagedOutputModes,
       const std::optional<GreeterSyncAppearanceUpdate>& appearanceUpdate
   ) {
     if (::geteuid() == 0) {
@@ -417,6 +499,13 @@ namespace greeter {
         return false;
       }
       sync.outputScales = *stagedOutputScales;
+    }
+    if (stagedOutputModes.has_value()) {
+      if (stagedOutputModes->empty() || countValidOutputModeEntries(*stagedOutputModes) == 0) {
+        kLog.warn("refusing to apply invalid staged output modes");
+        return false;
+      }
+      sync.outputModes = *stagedOutputModes;
     }
     if (appearanceUpdate.has_value()) {
       sync.appearance = appearanceUpdate->appearance;

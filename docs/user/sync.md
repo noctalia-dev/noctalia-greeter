@@ -37,7 +37,7 @@ is intentionally rejected; install a manual build into a trusted system prefix.
 - palette and theme mode
 - corner radius scale (`[shell] corner_radius_scale`)
 - shell font (`[shell] font_family`)
-- monitor layout, orientation, and effective per-output scale
+- monitor layout, orientation, effective per-output scale, and per-output mode (resolution and refresh rate)
 
 The constrained `--sync` operation deliberately excludes session power
 commands and custom session actions. Existing session commands and other
@@ -80,7 +80,7 @@ With a current Shell and greeter:
 | `wallpaper` / `wallpaper.<ext>` and `[appearance.wallpaper]`               | Default image or fallback            |
 | `wallpaper-<connector>.*` and `[appearance.wallpapers.<connector>]`        | Per-output wallpaper, such as `DP-2` |
 | `[appearance.palette]`, `theme_mode`, `corner_radius_scale`, `font_family` | Synced colors and UI styling         |
-| `[output].layout`, `transforms`, `scales`                                  | Synced monitor arrangement           |
+| `[output].layout`, `transforms`, `scales`, `modes`                          | Synced monitor arrangement           |
 
 Each greeter view uses the wallpaper for its connector when one exists, then falls back to `[appearance.wallpaper]`. A connector pinned with `[output].name` uses its matching entry. See [Displays](displays.md) for connector and layout settings.
 

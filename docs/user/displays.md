@@ -78,11 +78,11 @@ between monitors. When `layout` is set but a connector has no matching scale,
 that connector uses scale `1.0` instead of automatic DPI scaling. A global
 `scale` setting overrides all per-output scales.
 
-Noctalia can copy layout, transform, and effective scale values from the
-desktop session through xdg-output. It records a layout only when multiple
-ready outputs report distinct positions; transforms and scales need at least
-one ready output. See [Sync with Noctalia](sync.md). Values declared in
-`greeter.toml` take precedence over synchronized values in `sync.toml`.
+Noctalia can copy layout, transform, scale, and per-output mode values from
+the desktop session through xdg-output. It records a layout only when multiple
+ready outputs report distinct positions; transforms, scales, and modes need
+at least one ready output. See [Sync with Noctalia](sync.md). Values declared
+in `greeter.toml` take precedence over synchronized values in `sync.toml`.
 
 ## Match the desktop output mode
 
@@ -119,6 +119,22 @@ refresh_rate = "DP-1:120; HDMI-A-1:60"
 Entries are separated by semicolons and may use either connector names or the
 stable identifiers reported by `noctalia-greeter outputs --details`. Use either
 the numeric global form or the per-output mapping form, not both.
+
+To set an exact mode per display, combine resolution and refresh rate in a
+`modes` mapping:
+
+```toml
+[output]
+modes = "DP-1:2560x1440@60; HDMI-A-1:1920x1080@59.998"
+```
+
+Entries use the form `IDENTIFIER:WIDTHxHEIGHT@REFRESH_HZ`, are separated by
+semicolons, and may use connector names or the stable identifiers reported by
+`noctalia-greeter outputs --details`. The `@REFRESH_HZ` part is optional. A
+`modes` entry takes precedence over the global `width` and `height` settings
+for its output; outputs without an entry keep the usual mode selection.
+`noctalia` writes the session's per-output modes to `sync.toml` during
+appearance sync.
 
 :::note
 `width` and `height` select the physical DRM mode in pixels, while

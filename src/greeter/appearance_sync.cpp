@@ -613,6 +613,7 @@ namespace greeter::appearance {
     std::optional<std::string> stagedOutputLayout;
     std::optional<std::string> stagedOutputTransforms;
     std::optional<std::string> stagedOutputScales;
+    std::optional<std::string> stagedOutputModes;
     if (!readStagedText(kOutputLayoutFileName, stagedOutputLayout)) {
       return false;
     }
@@ -620,6 +621,9 @@ namespace greeter::appearance {
       return false;
     }
     if (!readStagedText(kOutputScalesFileName, stagedOutputScales)) {
+      return false;
+    }
+    if (!readStagedText(kOutputModesFileName, stagedOutputModes)) {
       return false;
     }
 
@@ -657,7 +661,7 @@ namespace greeter::appearance {
     }
 
     if (!greeter::applyAppearanceSyncGreeterConf(
-            stagedOutputLayout, stagedOutputTransforms, stagedOutputScales, appearanceUpdate
+            stagedOutputLayout, stagedOutputTransforms, stagedOutputScales, stagedOutputModes, appearanceUpdate
         )) {
       errorOut = "failed to update sync.toml after appearance sync";
       return false;
