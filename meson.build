@@ -437,3 +437,16 @@ test(
   wallpaper_program_pixel_test,
   env: ['LIBGL_ALWAYS_SOFTWARE=1'],
 )
+
+greeter_config_parser_test = executable(
+  'greeter-config-parser-test',
+  sources: _apply_appearance_support_sources + files('tests/greeter_config_parser_test.cpp'),
+  dependencies: [nlohmann_dep, tomlplusplus_dep],
+  include_directories: _greeter_tools_inc,
+  cpp_args: [
+    '-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow',
+  ],
+  build_by_default: false,
+)
+
+test('greeter-config-parser', greeter_config_parser_test)

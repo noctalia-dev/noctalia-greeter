@@ -74,7 +74,7 @@ in
       default = { };
       description = ''
         Full declarative greeter.toml, symlinked into the Nix store and replaced on every
-        activation. Configure everything here: session/user defaults, appearance (scheme,
+        activation. Configure everything here: session/user defaults, UI visibility, appearance (scheme,
         palette, wallpaper, font, ...), output, idle, cursor, keyboard, auth.
         Sync/UI mutable data lives in sync.toml and is not managed by this option.
         Accepts a Nix attrset, raw TOML string, or path to a `.toml` file.
@@ -86,6 +86,11 @@ in
           appearance = {
             scheme = "Synced";
             password_style = "default";
+            hide_session_selector = true;
+            hide_scheme_selector = false;
+            hide_shutdown_button = true;
+            hide_reboot_button = false;
+            hide_firmware_button = false;
             palette = {
               primary = "#fff59b";
               on_primary = "#0e0e43";
