@@ -59,6 +59,8 @@ namespace greeter::config {
     std::optional<int> outputModeHeight;
     std::optional<float> outputRefreshRate;
     std::optional<std::string> outputRefreshRateMap;
+    // Per-connector modes (NAME:2560x1440@60; ...). Distinct from global width/height.
+    std::optional<std::string> outputModes;
     std::optional<std::string> outputTransforms;
     // Per-connector scales (NAME:1.25; ...). Distinct from global outputScale.
     std::optional<std::string> outputScales;
@@ -83,6 +85,7 @@ namespace greeter::config {
     std::optional<std::string> sessionLast;
     std::optional<std::string> appearanceScheme;
     std::optional<std::string> outputLayout;
+    std::optional<std::string> outputModes;
     std::optional<std::string> outputTransforms;
     std::optional<std::string> outputScales;
 

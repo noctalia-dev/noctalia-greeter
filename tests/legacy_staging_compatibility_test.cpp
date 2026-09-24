@@ -264,6 +264,55 @@ refresh_rate = "DP-1:120; HDMI-A-1:60"
 
     {
       Fixture fixture(0700, 0600);
+      std::ofstream(fixture.runtimeDirectory / "greeter.toml") << R"toml(
+[output]
+modes = "DP-1:2560x1440@60; HDMI-A-1:1920x1080@59.998"
+)toml";
+
+      greeter_compositor_config config{};
+      greeter_compositor_config_load(fixture.runtimeDirectory.c_str(), &config);
+      expect(
+          "per-output modes parse",
+          std::string_view(config.output_modes) == "DP-1:2560x1440@60; HDMI-A-1:1920x1080@59.998", true, {}, passed
+      );
+    }
+
+    {
+      Fixture fixture(0700, 0600);
+      std::ofstream(fixture.runtimeDirectory / "greeter.toml") << R"toml(
+[output]
+modes = "DP-1:2560x1440@120"
+)toml";
+      std::ofstream(fixture.runtimeDirectory / "sync.toml") << R"toml(
+[output]
+modes = "DP-1:1920x1080@60"
+)toml";
+
+      greeter_compositor_config config{};
+      greeter_compositor_config_load(fixture.runtimeDirectory.c_str(), &config);
+      expect(
+          "greeter.toml modes win over sync.toml", std::string_view(config.output_modes) == "DP-1:2560x1440@120", true,
+          {}, passed
+      );
+    }
+
+    {
+      Fixture fixture(0700, 0600);
+      std::ofstream(fixture.runtimeDirectory / "sync.toml") << R"toml(
+[output]
+modes = "DP-1:1920x1080@60"
+)toml";
+
+      greeter_compositor_config config{};
+      greeter_compositor_config_load(fixture.runtimeDirectory.c_str(), &config);
+      expect(
+          "sync.toml modes parse when greeter.toml has none",
+          std::string_view(config.output_modes) == "DP-1:1920x1080@60", true, {}, passed
+      );
+    }
+
+    {
+      Fixture fixture(0700, 0600);
       writeSpanSyncToml(fixture.syncFile);
       greeter::config::clearConfigDiagnostics();
       const auto sync = greeter::config::loadSync(fixture.syncFile);
@@ -284,6 +333,49 @@ refresh_rate = "DP-1:120; HDMI-A-1:60"
       expect(
           "constrained sync accepts default and per-output span",
           greeter::secure_sync::detail::validateConstrainedPayloadForTesting(fixture.stagingDirectory, error), true,
+          error, passed
+      );
+    }
+
+    {
+      Fixture fixture(0700, 0600);
+      writeSpanSyncToml(fixture.syncFile);
+      const auto modesFile = fixture.stagingDirectory / "output_modes";
+      std::ofstream(modesFile) << "DP-1:2560x1440@60; HDMI-A-1:1920x1080@59.998\n";
+      Fixture::chmodOrThrow(modesFile, 0600);
+      error.clear();
+      expect(
+          "constrained sync accepts a staged output modes file",
+          greeter::secure_sync::detail::validateConstrainedPayloadForTesting(fixture.stagingDirectory, error), true,
+          error, passed
+      );
+    }
+
+    {
+      Fixture fixture(0700, 0600);
+      writeSpanSyncToml(fixture.syncFile);
+      const auto modesFile = fixture.stagingDirectory / "output_modes";
+      std::ofstream(modesFile) << "DP-1:2560x1440@0\n";
+      Fixture::chmodOrThrow(modesFile, 0600);
+      error.clear();
+      expect(
+          "constrained sync rejects an invalid staged output modes entry",
+          greeter::secure_sync::detail::validateConstrainedPayloadForTesting(fixture.stagingDirectory, error), false,
+          error, passed
+      );
+    }
+
+    {
+      Fixture fixture(0700, 0600);
+      writeSpanSyncToml(fixture.syncFile);
+      std::ofstream(fixture.syncFile, std::ios::app) << R"toml(
+[output]
+modes = "DP-1:1920x1080@60"
+)toml";
+      error.clear();
+      expect(
+          "constrained sync rejects output modes in sync.toml",
+          greeter::secure_sync::detail::validateConstrainedPayloadForTesting(fixture.stagingDirectory, error), false,
           error, passed
       );
     }

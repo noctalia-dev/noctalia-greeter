@@ -17,7 +17,7 @@ namespace greeter::appearance {
   //   sync.toml        — Sync + UI mutable: palette/wallpaper/theme/font, session power/menu,
   //                      last session/scheme, synced layout/transforms/scales
   //   appearance.json  — legacy live file only (migrated into sync.toml on first load).
-  // Staging: shell writes sync.toml (+ wallpapers, optional layout/transforms/scales text files).
+  // Staging: shell writes sync.toml (+ wallpapers, optional layout/transforms/scales/modes text files).
   // Legacy shells may still stage appearance.json; apply accepts either.
   // Precedence: greeter.toml wins over sync.toml when both set.
   inline constexpr const char* kDefaultSyncedDataDir = "/var/lib/noctalia-greeter";
@@ -25,6 +25,7 @@ namespace greeter::appearance {
   inline constexpr const char* kOutputLayoutFileName = "output_layout";
   inline constexpr const char* kOutputTransformsFileName = "output_transforms";
   inline constexpr const char* kOutputScalesFileName = "output_scales";
+  inline constexpr const char* kOutputModesFileName = "output_modes";
   inline constexpr const char* kGreeterTomlFileName = "greeter.toml";
   inline constexpr const char* kSyncTomlFileName = "sync.toml";
   inline constexpr const char* kWallpaperBaseName = "wallpaper";

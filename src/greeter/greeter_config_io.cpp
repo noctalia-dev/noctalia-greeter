@@ -83,6 +83,7 @@ namespace {
         || key == "width"
         || key == "height"
         || key == "refresh_rate"
+        || key == "modes"
         || key == "transforms";
   }
 
@@ -311,6 +312,8 @@ namespace {
             } else {
               kLog.warn("{}: invalid output.refresh_rate value", path.string());
             }
+          } else if (entryView == "modes") {
+            config.outputModes = stringValue(entryNode);
           } else if (entryView == "transforms") {
             config.outputTransforms = stringValue(entryNode);
           } else if (entryView == "scales") {
@@ -544,6 +547,11 @@ namespace {
       );
     }
     insertString(
+        output, "modes", config.outputModes, [](toml::table& table, std::string_view key, const std::string& value) {
+          table.insert_or_assign(std::string(key), value);
+        }
+    );
+    insertString(
         output, "transforms", config.outputTransforms,
         [](toml::table& table, std::string_view key, const std::string& value) {
           table.insert_or_assign(std::string(key), value);
@@ -714,6 +722,11 @@ namespace {
           table.insert_or_assign(std::string(key), value);
         }
     );
+    insertString(
+        output, "modes", sync.outputModes, [](toml::table& table, std::string_view key, const std::string& value) {
+          table.insert_or_assign(std::string(key), value);
+        }
+    );
     if (!output.empty()) {
       root.insert("output", std::move(output));
     }
@@ -760,6 +773,7 @@ namespace {
     sync.appearanceScheme = full.appearanceScheme;
     sync.outputLayout = full.outputLayout;
     sync.outputTransforms = full.outputTransforms;
+    sync.outputModes = full.outputModes;
     sync.outputScales = full.outputScales;
     sync.appearance = full.appearance;
 
@@ -940,7 +954,7 @@ namespace greeter::config {
            "theme_mode, corner_radius_scale, font_family\n";
     out << "# [appearance.palette] full color role table, [appearance.wallpaper] path/fill_mode/fill_color\n";
     out << "# [appearance.wallpapers.<connector>] per-output wallpaper overrides\n";
-    out << "# [output] name/layout/scale/scales/width/height/refresh_rate/transforms, "
+    out << "# [output] name/layout/scale/scales/width/height/refresh_rate/modes/transforms, "
            "[idle] timeout, [cursor] theme/size/path\n";
     out << "# [keyboard] layout/variant/options/numlock\n";
     out << "# [auth] allow_empty_password (bool), request_timeout (0-3600 seconds; default 60, 0 disables)\n";
@@ -1105,6 +1119,7 @@ extern "C" void greeter_compositor_config_load(const char* state_dir, struct gre
       preferString(config.outputTransforms, sync.outputTransforms)
   );
   copyString(out->output_scales, sizeof(out->output_scales), preferString(config.outputScales, sync.outputScales));
+  copyString(out->output_modes, sizeof(out->output_modes), preferString(config.outputModes, sync.outputModes));
   copyString(out->output_refresh_rate_map, sizeof(out->output_refresh_rate_map), config.outputRefreshRateMap);
 
   if (config.outputScale.has_value() && *config.outputScale >= 1.0f) {

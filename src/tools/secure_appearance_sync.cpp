@@ -508,7 +508,8 @@ namespace greeter::secure_sync {
       }
       if (name == appearance::kOutputLayoutFileName
           || name == appearance::kOutputTransformsFileName
-          || name == appearance::kOutputScalesFileName) {
+          || name == appearance::kOutputScalesFileName
+          || name == appearance::kOutputModesFileName) {
         return kOutputMetadataSizeLimit;
       }
       if (isWallpaperFileName(name)) {
@@ -728,6 +729,7 @@ namespace greeter::secure_sync {
       Layout,
       Transforms,
       Scales,
+      Modes,
     };
 
     [[nodiscard]] bool isOutputSeparator(const char ch) { return ch == ' ' || ch == '\t' || ch == ';'; }
@@ -783,6 +785,40 @@ namespace greeter::secure_sync {
           && parsed >= kOutputScaleMinimum
           && parsed <= kOutputScaleMaximum;
     }
+    [[nodiscard]] bool isValidModeDimension(std::string_view value) {
+      if (value.empty()) {
+        return false;
+      }
+      std::int64_t parsed = 0;
+      const auto [end, ec] = std::from_chars(value.data(), value.data() + value.size(), parsed);
+      return ec == std::errc{} && end == value.data() + value.size() && parsed >= 1 && parsed <= 16384;
+    }
+
+    [[nodiscard]] bool isValidMode(std::string_view value) {
+      const std::size_t x = value.find('x');
+      if (x == std::string_view::npos || x == 0 || x + 1 >= value.size()) {
+        return false;
+      }
+      const std::size_t at = value.find('@', x + 1);
+      const std::size_t sizeEnd = at == std::string_view::npos ? value.size() : at;
+      if (!isValidModeDimension(value.substr(0, x)) || !isValidModeDimension(value.substr(x + 1, sizeEnd - x - 1))) {
+        return false;
+      }
+      if (at == std::string_view::npos) {
+        return true;
+      }
+      const std::string_view refresh = value.substr(at + 1);
+      const std::string terminated(refresh);
+      char* end = nullptr;
+      errno = 0;
+      const float parsed = std::strtof(terminated.c_str(), &end);
+      return errno == 0
+          && end != terminated.c_str()
+          && end == terminated.c_str() + terminated.size()
+          && std::isfinite(parsed)
+          && parsed > 0.0f
+          && parsed <= 1000.0f;
+    }
 
     [[nodiscard]] bool validateOutputEntry(std::string_view token, const OutputMetadataKind kind) {
       const std::size_t colon = token.rfind(':');
@@ -800,6 +836,9 @@ namespace greeter::secure_sync {
       }
       if (kind == OutputMetadataKind::Scales) {
         return isValidScale(value);
+      }
+      if (kind == OutputMetadataKind::Modes) {
+        return isValidMode(value);
       }
 
       const std::size_t comma = value.find(',');
@@ -990,7 +1029,10 @@ namespace greeter::secure_sync {
         errorOut = "passwordless appearance sync cannot change session configuration";
         return false;
       }
-      if (sync.outputLayout.has_value() || sync.outputTransforms.has_value() || sync.outputScales.has_value()) {
+      if (sync.outputLayout.has_value()
+          || sync.outputTransforms.has_value()
+          || sync.outputScales.has_value()
+          || sync.outputModes.has_value()) {
         errorOut = "output metadata must use the dedicated staging files";
         return false;
       }
@@ -1023,6 +1065,11 @@ namespace greeter::secure_sync {
       }
       if (!validateOutputMetadata(
               staging.path(), appearance::kOutputScalesFileName, OutputMetadataKind::Scales, errorOut
+          )) {
+        return false;
+      }
+      if (!validateOutputMetadata(
+              staging.path(), appearance::kOutputModesFileName, OutputMetadataKind::Modes, errorOut
           )) {
         return false;
       }

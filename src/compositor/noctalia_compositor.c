@@ -223,6 +223,13 @@ struct greeter_output_refresh_rate {
   int refresh_mhz;
 };
 
+struct greeter_output_mode {
+  char identifier[512];
+  int width;
+  int height;
+  int refresh_mhz;
+};
+
 struct greeter_server {
   struct wl_display* display;
   struct wlr_backend* backend;
@@ -272,6 +279,8 @@ struct greeter_server {
   size_t output_scale_count;
   struct greeter_output_refresh_rate output_refresh_rates[16];
   size_t output_refresh_rate_count;
+  struct greeter_output_mode output_modes[16];
+  size_t output_mode_count;
   int idle_timeout_sec;
   struct timespec last_activity;
   int idle_timerfd;
@@ -649,6 +658,80 @@ static void parse_output_refresh_rate_map(struct greeter_server* server, char* v
   }
 }
 
+static bool parse_output_mode_entry(char* token, struct greeter_output_mode* out) {
+  char* colon = strrchr(token, ':');
+  if (colon == NULL || colon == token) {
+    return false;
+  }
+  char* identifier = trim(token);
+  char* spec = trim(colon + 1);
+  if (identifier[0] == '\0' || spec[0] == '\0') {
+    return false;
+  }
+
+  char* x = strchr(spec, 'x');
+  if (x == NULL || x == spec) {
+    return false;
+  }
+  *x = '\0';
+  char* at = strchr(x + 1, '@');
+  if (at != NULL) {
+    *at = '\0';
+    at++;
+  }
+
+  char* width_end = NULL;
+  const long width = strtol(spec, &width_end, 10);
+  if (width_end == spec || *width_end != '\0' || width <= 0 || width > 16384) {
+    return false;
+  }
+  char* height_end = NULL;
+  const long height = strtol(x + 1, &height_end, 10);
+  if (height_end == x + 1 || *height_end != '\0' || height <= 0 || height > 16384) {
+    return false;
+  }
+
+  int refresh_mhz = 0;
+  if (at != NULL) {
+    char* refresh_end = NULL;
+    const float refresh_hz = strtof(at, &refresh_end);
+    if (refresh_end == at || *refresh_end != '\0' || !(refresh_hz > 0.0f && refresh_hz <= 1000.0f)) {
+      return false;
+    }
+    refresh_mhz = (int)(refresh_hz * 1000.0f + 0.5f);
+  }
+
+  snprintf(out->identifier, sizeof(out->identifier), "%s", identifier);
+  out->width = (int)width;
+  out->height = (int)height;
+  out->refresh_mhz = refresh_mhz;
+  return true;
+}
+
+static void parse_output_mode_map(struct greeter_server* server, char* value) {
+  server->output_mode_count = 0;
+  char* saveptr = NULL;
+  for (char* token = strtok_r(value, ";", &saveptr); token != NULL; token = strtok_r(NULL, ";", &saveptr)) {
+    if (server->output_mode_count >= sizeof(server->output_modes) / sizeof(server->output_modes[0])) {
+      wlr_log(
+          WLR_ERROR, "output.modes: too many entries (max %zu)",
+          sizeof(server->output_modes) / sizeof(server->output_modes[0])
+      );
+      break;
+    }
+    struct greeter_output_mode entry;
+    if (!parse_output_mode_entry(token, &entry)) {
+      wlr_log(WLR_ERROR, "output.modes: invalid entry '%s' (use IDENTIFIER:WIDTHxHEIGHT[@REFRESH_HZ])", token);
+      continue;
+    }
+    server->output_modes[server->output_mode_count++] = entry;
+    wlr_log(
+        WLR_INFO, "output mode: %s -> %dx%d @ %.3f Hz", entry.identifier, entry.width, entry.height,
+        entry.refresh_mhz / 1000.0
+    );
+  }
+}
+
 static void read_greeter_config(struct greeter_server* server) {
   server->preferred_output[0] = '\0';
   server->manual_scale = 0.0f;
@@ -658,6 +741,7 @@ static void read_greeter_config(struct greeter_server* server) {
   server->output_transform_count = 0;
   server->output_scale_count = 0;
   server->output_refresh_rate_count = 0;
+  server->output_mode_count = 0;
   server->idle_timeout_sec = 0;
   server->cursor_theme[0] = '\0';
   server->cursor_size = 0;
@@ -749,6 +833,11 @@ static void read_greeter_config(struct greeter_server* server) {
     char refresh_rate_map[4096];
     snprintf(refresh_rate_map, sizeof(refresh_rate_map), "%s", config.output_refresh_rate_map);
     parse_output_refresh_rate_map(server, refresh_rate_map);
+  }
+  if (config.output_modes[0] != '\0') {
+    char modes[4096];
+    snprintf(modes, sizeof(modes), "%s", config.output_modes);
+    parse_output_mode_map(server, modes);
   }
 }
 
@@ -893,6 +982,15 @@ static int output_refresh_rate(const struct greeter_server* server, const struct
     }
   }
   return server->manual_mode_refresh_mhz;
+}
+
+static const struct greeter_output_mode* output_mode_entry(struct greeter_server* server, struct wlr_output* output) {
+  for (size_t i = 0; i < server->output_mode_count; ++i) {
+    if (output_matches_identifier(output, server->output_modes[i].identifier)) {
+      return &server->output_modes[i];
+    }
+  }
+  return NULL;
 }
 
 static struct greeter_output* output_by_name(struct greeter_server* server, const char* name) {
@@ -1416,9 +1514,22 @@ static bool commit_output_enabled(struct greeter_output* output) {
   struct wlr_output_state state;
   wlr_output_state_init(&state);
   wlr_output_state_set_enabled(&state, true);
-  const int refresh_mhz = output_refresh_rate(server, output->wlr_output);
-  struct wlr_output_mode* mode =
-      select_output_mode(output->wlr_output, server->manual_mode_width, server->manual_mode_height, refresh_mhz);
+  const struct greeter_output_mode* mode_entry = output_mode_entry(server, output->wlr_output);
+  struct wlr_output_mode* mode = NULL;
+  if (mode_entry != NULL) {
+    // A per-output mode entry takes precedence over the global manual mode.
+    mode = select_mode_at_size(output->wlr_output, mode_entry->width, mode_entry->height, mode_entry->refresh_mhz);
+    if (mode == NULL) {
+      wlr_log(
+          WLR_INFO, "no mode %dx%d for %s; falling back to preferred", mode_entry->width, mode_entry->height,
+          output->wlr_output->name
+      );
+    }
+  }
+  if (mode == NULL) {
+    const int refresh_mhz = output_refresh_rate(server, output->wlr_output);
+    mode = select_output_mode(output->wlr_output, server->manual_mode_width, server->manual_mode_height, refresh_mhz);
+  }
   if (mode != NULL) {
     wlr_output_state_set_mode(&state, mode);
     wlr_log(WLR_INFO, "selected output mode: %dx%d @ %.3f Hz", mode->width, mode->height, mode->refresh / 1000.0);
