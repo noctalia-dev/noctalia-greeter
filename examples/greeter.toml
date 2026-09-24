@@ -35,6 +35,10 @@ theme_mode = "dark"
 corner_radius_scale = 1.0
 # Optional; empty / omit keeps the greeter default font.
 font_family = "Inter"
+# Optional strftime labels above the login card. Empty or omitted disables each label.
+# Updated once per minute; use formats without seconds.
+# clock_time_format = "%H:%M"
+# clock_date_format = "%a, %b %-d"
 
 # Required for a declarative Synced look (same keys Sync writes under [appearance.palette]).
 # When complete, this wins over Sync's sync.toml appearance.

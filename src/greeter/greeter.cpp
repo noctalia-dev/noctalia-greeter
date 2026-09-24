@@ -162,7 +162,13 @@ int Greeter::run(WaylandClient& client, const std::atomic<bool>& shutdownRequest
 
     const int repeatMs = client.repeatPollTimeoutMs();
     const int requestMs = m_greetdClient.requestPollTimeoutMs();
-    const int timeoutMs = repeatMs < 0 ? requestMs : requestMs < 0 ? repeatMs : std::min(repeatMs, requestMs);
+    int timeoutMs = repeatMs < 0 ? requestMs : requestMs < 0 ? repeatMs : std::min(repeatMs, requestMs);
+    for (auto& view : m_views) {
+      view.surface->updateAmbientState(client.currentLayoutName(), client.lockKeysState().capsLock);
+      const int clockMs = view.surface->clockPollTimeoutMs();
+      if (clockMs >= 0 && (timeoutMs < 0 || clockMs < timeoutMs))
+        timeoutMs = clockMs;
+    }
 
     while (wl_display_prepare_read(display) != 0) {
       if (wl_display_dispatch_pending(display) < 0) {

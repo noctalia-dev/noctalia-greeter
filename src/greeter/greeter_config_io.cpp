@@ -65,6 +65,8 @@ namespace {
     return key == "scheme"
         || key == "password_style"
         || key == "hide_logo"
+        || key == "clock_time_format"
+        || key == "clock_date_format"
         || key == "power_buttons_position"
         || key == "scheme_selector_position"
         || key == "theme_mode"
@@ -228,6 +230,10 @@ namespace {
             if (const auto value = entryNode.value<bool>()) {
               config.appearanceHideLogo = *value;
             }
+          } else if (entryView == "clock_time_format") {
+            config.appearanceClockTimeFormat = stringValue(entryNode);
+          } else if (entryView == "clock_date_format") {
+            config.appearanceClockDateFormat = stringValue(entryNode);
           } else if (entryView == "power_buttons_position") {
             config.appearancePowerButtonsPosition = stringValue(entryNode);
           } else if (entryView == "scheme_selector_position") {
@@ -497,6 +503,10 @@ namespace {
     if (config.appearanceHideLogo.has_value()) {
       appearance.insert_or_assign("hide_logo", *config.appearanceHideLogo);
     }
+    if (config.appearanceClockTimeFormat)
+      appearance.insert_or_assign("clock_time_format", *config.appearanceClockTimeFormat);
+    if (config.appearanceClockDateFormat)
+      appearance.insert_or_assign("clock_date_format", *config.appearanceClockDateFormat);
     insertString(
         appearance, "power_buttons_position", config.appearancePowerButtonsPosition,
         [](toml::table& table, std::string_view key, const std::string& value) {

@@ -54,6 +54,8 @@ public:
   void setOnAuthEnded(std::function<void(GreeterSurface*)> callback);
   void setOnGreetdTransportError(std::function<void(const GreetdError&)> callback);
   void setKeyboardOwner(bool owner) noexcept;
+  void updateAmbientState(const std::string& layout, bool capsLock);
+  [[nodiscard]] int clockPollTimeoutMs() const;
 
   void mirrorStateFrom(const GreeterSurface& other);
 
@@ -215,6 +217,15 @@ private:
   Button* m_loginButton = nullptr;
   Button* m_backButton = nullptr;
   Label* m_statusLabel = nullptr;
+  Label* m_keyboardLabel = nullptr;
+  Label* m_clockLabel = nullptr;
+  Label* m_dateLabel = nullptr;
+  std::string m_keyboardText;
+  std::string m_clockText;
+  std::string m_dateText;
+  bool m_capsLock = false;
+  std::string m_clockTimeFormat;
+  std::string m_clockDateFormat;
   RectNode* m_configErrorBanner = nullptr;
   Label* m_configErrorHeading = nullptr;
   Label* m_configErrorLabel = nullptr;
