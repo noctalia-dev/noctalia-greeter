@@ -35,6 +35,23 @@ namespace {
   }
 
   std::optional<DecodedRasterImage> decodeWebP(const std::uint8_t* data, std::size_t size, std::string* errorMessage) {
+    // A WebP (especially VP8X) can declare a canvas far larger than its file
+    // size; cap it before libwebp allocates the full RGBA canvas to avoid OOM.
+    WebPBitstreamFeatures features;
+    if (WebPGetFeatures(data, size, &features) != VP8_STATUS_OK) {
+      if (errorMessage != nullptr)
+        *errorMessage = "libwebp: failed to read WebP header";
+      return std::nullopt;
+    }
+    if (features.width <= 0
+        || features.height <= 0
+        || static_cast<std::uint64_t>(features.width) * static_cast<std::uint64_t>(features.height) * 4
+            > kMaxWebpCanvasBytes) {
+      if (errorMessage != nullptr)
+        *errorMessage = "libwebp: WebP canvas exceeds size cap";
+      return std::nullopt;
+    }
+
     int width = 0, height = 0;
     std::uint8_t* rgba = WebPDecodeRGBA(data, size, &width, &height);
     if (rgba == nullptr) {
