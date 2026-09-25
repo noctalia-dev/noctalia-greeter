@@ -39,6 +39,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <initializer_list>
 #include <linux/input-event-codes.h>
 #include <nlohmann/json.hpp>
 #include <pwd.h>
@@ -534,6 +535,54 @@ void GreeterSurface::initialize(RenderContext* context) {
   m_configErrorLabel->setZIndex(10);
   m_root.addChild(std::move(configError));
 
+  auto shade = std::make_unique<RectNode>();
+  m_powerShade = shade.get();
+  shade->setZIndex(99);
+  shade->setHitTestVisible(false);
+  shade->setVisible(false);
+  shade->setStyle(RoundedRectStyle{.fill = rgba(0.0f, 0.0f, 0.0f, 0.68f), .fillMode = FillMode::Solid});
+  m_root.addChild(std::move(shade));
+  auto blocker = std::make_unique<InputArea>();
+  m_powerBlocker = blocker.get();
+  blocker->setZIndex(100);
+  blocker->setVisible(false);
+  m_root.addChild(std::move(blocker));
+  auto dialog = std::make_unique<Box>();
+  m_powerDialog = dialog.get();
+  dialog->setZIndex(101);
+  dialog->setVisible(false);
+  m_root.addChild(std::move(dialog));
+  auto prompt = std::make_unique<Label>();
+  m_powerPrompt = prompt.get();
+  prompt->setFontSize(Style::fontSizeHeading());
+  prompt->setHitTestVisible(false);
+  prompt->setZIndex(102);
+  prompt->setVisible(false);
+  m_root.addChild(std::move(prompt));
+  const auto confirmationButton = [this](std::string_view text, ButtonVariant variant, std::function<void()> action) {
+    auto button = std::make_unique<Button>();
+    button->setText(text);
+    button->setVariant(variant);
+    button->setOnClick(std::move(action));
+    button->setZIndex(102);
+    button->setVisible(false);
+    auto* result = button.get();
+    m_root.addChild(std::move(button));
+    return result;
+  };
+  m_powerCancel = confirmationButton("Cancel", ButtonVariant::Outline, [this]() { cancelPowerAction(); });
+  m_powerCancel->setCustomPalette(
+      Button::ButtonPalette{
+          .borderWidth = Style::borderWidth(),
+          .normal = makePaletteState(ColorRole::Surface, ColorRole::Outline, ColorRole::OnSurface),
+          .hover = makePaletteState(ColorRole::Surface, ColorRole::Outline, ColorRole::OnSurface),
+          .pressed = makePaletteState(ColorRole::SurfaceVariant, ColorRole::Primary, ColorRole::OnSurface),
+          .disabled = makePaletteState(ColorRole::Surface, ColorRole::Outline, ColorRole::OnSurface, 0.55f),
+          .selected = std::nullopt,
+      }
+  );
+  m_powerConfirm = confirmationButton("Confirm", ButtonVariant::Destructive, [this]() { confirmPowerAction(); });
+
   m_canRebootToFirmware = power::canRebootToFirmwareSetup();
 
   const auto makePowerButton =
@@ -550,13 +599,18 @@ void GreeterSurface::initialize(RenderContext* context) {
     return ptr;
   };
 
-  m_shutdownButton = makePowerButton("power", ColorRole::Error, ColorRole::OnError, []() { power::powerOff(); });
+  m_shutdownButton = makePowerButton("power", ColorRole::Error, ColorRole::OnError, [this]() {
+    requestPowerAction(greeter::PowerAction::Shutdown);
+  });
   m_shutdownButton->setTooltip("Shut down");
-  m_rebootButton = makePowerButton("reload", ColorRole::Secondary, ColorRole::OnSecondary, []() { power::reboot(); });
+  m_rebootButton = makePowerButton("reload", ColorRole::Secondary, ColorRole::OnSecondary, [this]() {
+    requestPowerAction(greeter::PowerAction::Reboot);
+  });
   m_rebootButton->setTooltip("Restart");
   if (m_canRebootToFirmware) {
-    m_firmwareButton =
-        makePowerButton("cpu", ColorRole::Secondary, ColorRole::OnSecondary, []() { power::rebootToFirmwareSetup(); });
+    m_firmwareButton = makePowerButton("cpu", ColorRole::Secondary, ColorRole::OnSecondary, [this]() {
+      requestPowerAction(greeter::PowerAction::Firmware);
+    });
     m_firmwareButton->setTooltip("Restart to UEFI firmware setup");
   }
 
@@ -708,6 +762,14 @@ bool GreeterSurface::ownsInputArea(const InputArea* area) const {
 }
 
 void GreeterSurface::reconcileKeyboardFocus() {
+  if (m_powerConfirmation.active()) {
+    auto* focused = InputArea::getFocused();
+    if (focused != m_powerCancel->inputArea() && focused != m_powerConfirm->inputArea())
+      setFocusIndex(0);
+    else
+      syncFocusIndexFromFocused();
+    return;
+  }
   InputArea* focused = InputArea::getFocused();
   if (focused != nullptr && ownsInputArea(focused)) {
     syncFocusIndexFromFocused();
@@ -1000,6 +1062,9 @@ void GreeterSurface::syncScaledTypography() {
   m_loginButton->setGlyphSize(Style::fontSizeTitle());
   m_backButton->setGlyphSize(Style::fontSizeTitle());
   m_statusLabel->setFontSize(Style::fontSizeCaption());
+  m_powerPrompt->setFontSize(Style::fontSizeHeading());
+  m_powerCancel->setFontSize(Style::fontSizeBody());
+  m_powerConfirm->setFontSize(Style::fontSizeBody());
 }
 
 void GreeterSurface::enterPasswordStep(std::size_t userIndex) {
@@ -1258,6 +1323,7 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
   }
 
   layoutPowerButtons(ox, oy, sw, sh);
+  layoutPowerConfirmation(ox, oy, sw, sh);
 
   if (!m_passwordVisible && showsUserDropdown()) {
     layoutPanelUserSelector(contentLeft, contentTop, contentWidth, rowHeight);
@@ -1337,6 +1403,20 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
 
   rebuildFocusRing();
   applyMenuHighlight();
+
+  if (m_powerConfirmation.active()) {
+    reconcileKeyboardFocus();
+    return;
+  }
+  if (m_powerReturnFocus != nullptr) {
+    for (std::size_t i = 0; i < m_focusRing.size(); ++i) {
+      if (m_focusRing[i].area == m_powerReturnFocus) {
+        setFocusIndex(static_cast<std::ptrdiff_t>(i));
+        break;
+      }
+    }
+    m_powerReturnFocus = nullptr;
+  }
 
   if (!m_isKeyboardOwner) {
     return;
@@ -2246,6 +2326,12 @@ bool GreeterSurface::menuOpen() const noexcept { return m_userMenuOpen || m_sess
 void GreeterSurface::rebuildFocusRing() {
   InputArea* previouslyFocused = InputArea::getFocused();
   m_focusRing.clear();
+  if (m_powerConfirmation.active()) {
+    m_focusRing.push_back({m_powerCancel->inputArea(), [this]() { cancelPowerAction(); }});
+    m_focusRing.push_back({m_powerConfirm->inputArea(), [this]() { confirmPowerAction(); }});
+    m_focusIndex = previouslyFocused == m_powerConfirm->inputArea() ? 1 : 0;
+    return;
+  }
 
   if (m_passwordVisible) {
     if (m_passwordField != nullptr && m_passwordField->inputArea() != nullptr) {
@@ -2273,13 +2359,19 @@ void GreeterSurface::rebuildFocusRing() {
   }
 
   if (m_firmwareButton != nullptr && m_firmwareButton->inputArea() != nullptr && m_firmwareButton->visible()) {
-    m_focusRing.push_back({m_firmwareButton->inputArea(), []() { power::rebootToFirmwareSetup(); }});
+    m_focusRing.push_back({m_firmwareButton->inputArea(), [this]() {
+                             requestPowerAction(greeter::PowerAction::Firmware);
+                           }});
   }
   if (m_rebootButton != nullptr && m_rebootButton->inputArea() != nullptr && m_rebootButton->visible()) {
-    m_focusRing.push_back({m_rebootButton->inputArea(), []() { power::reboot(); }});
+    m_focusRing.push_back({m_rebootButton->inputArea(), [this]() {
+                             requestPowerAction(greeter::PowerAction::Reboot);
+                           }});
   }
   if (m_shutdownButton != nullptr && m_shutdownButton->inputArea() != nullptr && m_shutdownButton->visible()) {
-    m_focusRing.push_back({m_shutdownButton->inputArea(), []() { power::powerOff(); }});
+    m_focusRing.push_back({m_shutdownButton->inputArea(), [this]() {
+                             requestPowerAction(greeter::PowerAction::Shutdown);
+                           }});
   }
 
   // Keep focus on whatever was focused before the rebuild, if still present.
@@ -2932,6 +3024,16 @@ void GreeterSurface::activateMenuHighlight() {
 }
 
 bool GreeterSurface::handleNavigationKey(std::uint32_t sym, std::uint32_t utf32, std::uint32_t modifiers) {
+  if (m_powerConfirmation.active()) {
+    reconcileKeyboardFocus();
+    if (KeySymbol::isEscape(sym))
+      cancelPowerAction();
+    else if (KeySymbol::isTab(sym) || sym == XKB_KEY_ISO_Left_Tab)
+      moveFocus((modifiers & KeyMod::Shift) != 0 || sym == XKB_KEY_ISO_Left_Tab ? -1 : 1);
+    else if (KeySymbol::isEnter(sym) || sym == XKB_KEY_space)
+      activateFocused();
+    return true;
+  }
   if (m_authenticating) {
     return false;
   }
@@ -3529,4 +3631,86 @@ void GreeterSurface::rebuildSchemeMenu() {
       /*rightAlign=*/true, /*zBase=*/60, m_schemeMenuPanel, m_schemeMenuRows, m_schemeMenuLabels, m_schemeMenuAreas,
       [this](std::size_t i) { selectScheme(i); }
   );
+}
+
+void GreeterSurface::requestPowerAction(greeter::PowerAction action) {
+  if (m_authenticating || m_sharedAuthBlocked || m_powerConfirmation.active())
+    return;
+  closeMenus();
+  Button* invoker = action == greeter::PowerAction::Shutdown ? m_shutdownButton
+      : action == greeter::PowerAction::Reboot               ? m_rebootButton
+                                                             : m_firmwareButton;
+  m_powerReturnFocus = invoker != nullptr ? invoker->inputArea() : nullptr;
+  m_powerConfirmation.request(action);
+  const char* question = action == greeter::PowerAction::Shutdown ? "Shut down this computer?"
+      : action == greeter::PowerAction::Reboot                    ? "Restart this computer?"
+                                                                  : "Restart to firmware setup?";
+  m_powerPrompt->setText(question);
+  m_powerConfirm->setText(action == greeter::PowerAction::Shutdown ? "Shut down" : "Restart");
+  commitImmediateFrame(true);
+  setFocusIndex(0);
+}
+
+void GreeterSurface::cancelPowerAction() {
+  m_powerConfirmation.cancel();
+  commitImmediateFrame(true);
+}
+
+void GreeterSurface::confirmPowerAction() {
+  const auto action = m_powerConfirmation.accept();
+  if (!action)
+    return;
+  if (m_authenticating || m_sharedAuthBlocked) {
+    cancelPowerAction();
+    return;
+  }
+  m_powerReturnFocus = nullptr;
+  commitImmediateFrame(true);
+  setFocusIndex(defaultFocusIndex());
+  if (*action == greeter::PowerAction::Shutdown)
+    power::powerOff();
+  else if (*action == greeter::PowerAction::Reboot)
+    power::reboot();
+  else
+    power::rebootToFirmwareSetup();
+}
+
+void GreeterSurface::layoutPowerConfirmation(float ox, float oy, float sw, float sh) {
+  const bool active = m_powerConfirmation.active();
+  for (Node* node : std::initializer_list<Node*>{
+           m_powerShade, m_powerBlocker, m_powerDialog, m_powerPrompt, m_powerCancel, m_powerConfirm
+       })
+    node->setVisible(active);
+  if (!active)
+    return;
+  m_powerShade->setPosition(ox, oy);
+  m_powerShade->setSize(sw, sh);
+  m_powerBlocker->setPosition(ox, oy);
+  m_powerBlocker->setSize(sw, sh);
+  const float width = std::max(0.0f, std::min(440.0f, sw - 32.0f));
+  const float x = ox + (sw - width) * 0.5f;
+  const float y = oy + (sh - 152.0f) * 0.5f;
+  m_powerDialog->setPosition(x, y);
+  m_powerDialog->setSize(width, 152.0f);
+  m_powerDialog->setStyle(
+      RoundedRectStyle{
+          .fill = colorForRole(ColorRole::SurfaceVariant),
+          .border = colorForRole(ColorRole::Outline),
+          .fillMode = FillMode::Solid,
+          .radius = Style::radiusXl(),
+          .borderWidth = Style::borderWidth()
+      }
+  );
+  m_powerPrompt->setColor(colorForRole(ColorRole::OnSurface));
+  m_powerPrompt->setMaxWidth(std::max(0.0f, width - 48.0f));
+  m_powerPrompt->measure(*m_renderContext);
+  m_powerPrompt->setPosition(x + 24.0f, y + 24.0f);
+  const float buttonWidth = std::max(0.0f, (width - 56.0f) * 0.5f);
+  m_powerCancel->setPosition(x + 24.0f, y + 88.0f);
+  m_powerConfirm->setPosition(x + 32.0f + buttonWidth, y + 88.0f);
+  for (Button* button : {m_powerCancel, m_powerConfirm}) {
+    button->setSize(buttonWidth, 40.0f);
+    button->setRadius(Style::radiusMd());
+    button->layout(*m_renderContext);
+  }
 }

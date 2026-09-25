@@ -399,6 +399,16 @@ output_identity_test = executable(
 
 test('output-identity', output_identity_test)
 
+power_confirmation_test = executable(
+  'power-confirmation-test',
+  sources: files('tests/power_confirmation_test.cpp'),
+  include_directories: include_directories('src'),
+  cpp_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow'],
+  build_by_default: false,
+)
+
+test('power-confirmation', power_confirmation_test)
+
 test(
   'compositor-headless-layout',
   find_program('sh'),
