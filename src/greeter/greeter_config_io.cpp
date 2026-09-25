@@ -65,6 +65,7 @@ namespace {
     return key == "scheme"
         || key == "password_style"
         || key == "hide_logo"
+        || key == "show_real_names"
         || key == "power_buttons_position"
         || key == "scheme_selector_position"
         || key == "theme_mode"
@@ -227,6 +228,10 @@ namespace {
           } else if (entryView == "hide_logo") {
             if (const auto value = entryNode.value<bool>()) {
               config.appearanceHideLogo = *value;
+            }
+          } else if (entryView == "show_real_names") {
+            if (const auto value = entryNode.value<bool>()) {
+              config.appearanceShowRealNames = *value;
             }
           } else if (entryView == "power_buttons_position") {
             config.appearancePowerButtonsPosition = stringValue(entryNode);
@@ -496,6 +501,9 @@ namespace {
     );
     if (config.appearanceHideLogo.has_value()) {
       appearance.insert_or_assign("hide_logo", *config.appearanceHideLogo);
+    }
+    if (config.appearanceShowRealNames.has_value()) {
+      appearance.insert_or_assign("show_real_names", *config.appearanceShowRealNames);
     }
     insertString(
         appearance, "power_buttons_position", config.appearancePowerButtonsPosition,
@@ -936,8 +944,8 @@ namespace greeter::config {
     out << "# and output layout/transforms when not set here. Session power actions/menu entries are\n";
     out << "# Sync-only (sync.toml [session.power]/[[session.actions]]) and are not settable here.\n";
     out << "# [session] default, [user] default\n";
-    out << "# [appearance] scheme, password_style, hide_logo, power_buttons_position, scheme_selector_position, "
-           "theme_mode, corner_radius_scale, font_family\n";
+    out << "# [appearance] scheme, password_style, hide_logo, show_real_names, power_buttons_position, "
+           "scheme_selector_position, theme_mode, corner_radius_scale, font_family\n";
     out << "# [appearance.palette] full color role table, [appearance.wallpaper] path/fill_mode/fill_color\n";
     out << "# [appearance.wallpapers.<connector>] per-output wallpaper overrides\n";
     out << "# [output] name/layout/scale/scales/width/height/refresh_rate/transforms, "

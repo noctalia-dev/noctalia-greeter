@@ -113,6 +113,23 @@ namespace {
             || sym == XKB_KEY_U);
   }
 
+  // GECOS convention: full name is the first comma-separated field, may be empty.
+  [[nodiscard]] std::string gecosDisplayName(const char* gecos) {
+    if (gecos == nullptr) {
+      return {};
+    }
+    const std::string_view field(gecos, std::strcspn(gecos, ","));
+    std::size_t begin = 0;
+    while (begin < field.size() && std::isspace(static_cast<unsigned char>(field[begin])) != 0) {
+      ++begin;
+    }
+    std::size_t end = field.size();
+    while (end > begin && std::isspace(static_cast<unsigned char>(field[end - 1])) != 0) {
+      --end;
+    }
+    return std::string(field.substr(begin, end - begin));
+  }
+
   void appendDummyUsers(std::vector<std::string>& users, std::vector<uid_t>& uids) {
     const char* dummyEnv = std::getenv("NOCTALIA_GREETER_DUMMY_USERS");
     if (dummyEnv == nullptr) {
@@ -661,6 +678,7 @@ void GreeterSurface::applyInitialUserSelection() {
     m_users.push_back(*initialUser);
     m_userUids.push_back(0);
     m_userIconPaths.push_back("");
+    m_userDisplayNames.push_back(*initialUser);
     m_selectedUser = m_users.size() - 1;
     setUsername(*initialUser);
     m_passwordVisible = true;
@@ -1091,7 +1109,7 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
   const float headerGlyphSize = Style::scaled(kHeaderUserIconBase) * glyphScale;
 
   if (m_passwordVisible && !m_users.empty() && m_selectedUser < m_users.size()) {
-    m_formSubtitleLabel->setText(m_users[m_selectedUser]);
+    m_formSubtitleLabel->setText(m_userDisplayNames[m_selectedUser]);
     m_formSubtitleLabel->setVisible(true);
   } else {
     m_formSubtitleLabel->setVisible(false);
@@ -1699,10 +1717,12 @@ void GreeterSurface::loadUsers() {
   m_users.clear();
   m_userUids.clear();
   m_userIconPaths.clear();
+  m_userDisplayNames.clear();
   static const std::unordered_set<std::string> kHiddenSystemUsers = {
       "greeter", "greetd", "sddm", "lightdm", "gdm", "nobody",
   };
 
+  const bool showRealNames = greeter::loadGreeterPreferences().showRealNames;
   std::unordered_set<std::string> seen;
 
   // Prefer AccountsService cached users (same source as ReGreet) so FreeIPA /
@@ -1719,6 +1739,7 @@ void GreeterSurface::loadUsers() {
     m_users.push_back(cached.username);
     m_userUids.push_back(cached.uid);
     m_userIconPaths.push_back(cached.iconPath);
+    m_userDisplayNames.push_back(showRealNames ? cached.realName.value_or(cached.username) : cached.username);
   }
   if (!cachedUsers.empty()) {
     kLog.info("AccountsService: {} cached user(s), {} after filters", cachedUsers.size(), m_users.size());
@@ -1754,6 +1775,14 @@ void GreeterSurface::loadUsers() {
     m_users.push_back(user);
     m_userUids.push_back(uid);
     m_userIconPaths.push_back(accounts::iconFileForUid(uid).value_or(""));
+    std::string displayName = user;
+    if (showRealNames) {
+      std::string gecos = gecosDisplayName(pw->pw_gecos);
+      if (!gecos.empty()) {
+        displayName = std::move(gecos);
+      }
+    }
+    m_userDisplayNames.push_back(std::move(displayName));
   }
   ::endpwent();
 
@@ -1765,11 +1794,15 @@ void GreeterSurface::loadUsers() {
     m_users.push_back("greeter");
     m_userUids.push_back(0);
     m_userIconPaths.push_back("");
+    m_userDisplayNames.push_back("greeter");
   }
 
   appendDummyUsers(m_users, m_userUids);
   while (m_userIconPaths.size() < m_users.size()) {
     m_userIconPaths.push_back("");
+  }
+  while (m_userDisplayNames.size() < m_users.size()) {
+    m_userDisplayNames.push_back(m_users[m_userDisplayNames.size()]);
   }
 
   m_selectedUser = 0;
@@ -1783,7 +1816,9 @@ void GreeterSurface::loadSessions() {
 
 void GreeterSurface::refreshSelectionLabels() {
   if (m_userSelectLabel != nullptr) {
-    const std::string userLabel = m_users.empty() ? "(none)" : m_users[std::min(m_selectedUser, m_users.size() - 1)];
+    const std::string userLabel = m_userDisplayNames.empty()
+        ? "(none)"
+        : m_userDisplayNames[std::min(m_selectedUser, m_userDisplayNames.size() - 1)];
     m_userSelectLabel->setText(userLabel);
     m_userSelectLabel->setColor(colorForRole(ColorRole::OnSurface));
   }
@@ -3208,7 +3243,7 @@ void GreeterSurface::refreshUserMenuRows() {
 
   float contentW = anchorW;
   for (const std::size_t userIndex : m_userMenuFilteredIndices) {
-    const float textW = renderer->measureText(m_users[userIndex], Style::fontSizeBody()).width;
+    const float textW = renderer->measureText(m_userDisplayNames[userIndex], Style::fontSizeBody()).width;
     contentW = std::max(contentW, rowIconReserve + textW + 2.0f * kUserMenuPadding);
   }
   const float screenW = m_root.width();
@@ -3335,7 +3370,7 @@ void GreeterSurface::refreshUserMenuRows() {
 
     auto label = std::make_unique<Label>();
     auto* labelPtr = label.get();
-    labelPtr->setText(m_users[userIndex]);
+    labelPtr->setText(m_userDisplayNames[userIndex]);
     labelPtr->setFontSize(Style::fontSizeBody());
     labelPtr->setColor(colorForRole(ColorRole::OnSurface));
     labelPtr->setZIndex(52);

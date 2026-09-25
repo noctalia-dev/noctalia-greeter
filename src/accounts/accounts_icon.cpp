@@ -128,6 +128,7 @@ namespace accounts {
           entry.iconPath = *icon;
         }
       }
+      entry.realName = dbusUserStringProperty(connection, userPath, "RealName");
       users.push_back(std::move(entry));
     }
     g_variant_iter_free(pathIter);
