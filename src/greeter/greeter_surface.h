@@ -265,6 +265,8 @@ private:
   bool m_wallpaperDirty = false;
   bool m_hasWallpaper = false;
   bool m_hideLogo = false;
+  std::optional<float> m_panelWidth;
+  std::optional<float> m_inputHeight;
   // UI element positioning: "hidden", "bottom-left", "bottom-right", "top-left", "top-right"
   std::string m_powerButtonsPosition;
   std::string m_schemeSelectorPosition;

@@ -988,9 +988,9 @@ void GreeterSurface::syncScaledTypography() {
     m_headerUserGlyph->setGlyphSize(Style::scaled(kHeaderUserIconBase));
   }
   m_formSubtitleLabel->setFontSize(Style::fontSizeTitle());
-  m_brandTitleLabel->setFontSize(Style::scaled(30.0f));
+  m_brandTitleLabel->setFontSize(Style::scaledFont(30.0f));
   m_brandSubtitleLabel->setFontSize(Style::fontSizeCaption());
-  m_passwordField->setControlHeight(Style::controlHeight());
+  m_passwordField->setControlHeight(m_inputHeight ? Style::scaled(*m_inputHeight) : Style::controlHeight());
   m_userSelectLabel->setFontSize(Style::fontSizeBody());
   m_userSelectGlyph->setGlyphSize(Style::fontSizeBody());
   m_sessionSelectLabel->setFontSize(Style::fontSizeBody());
@@ -1070,18 +1070,11 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
     m_backdrop->setVisible(true);
   }
 
-  if (m_bottomBrandLogo != nullptr) {
-    const bool hasBrandLogo = m_brandLogoTexture.id != 0 && !m_hideLogo;
-    m_bottomBrandLogo->setVisible(hasBrandLogo);
-    if (hasBrandLogo) {
-      const float logoSize = Style::scaled(64.0f);
-      m_bottomBrandLogo->setSize(logoSize, logoSize);
-      m_bottomBrandLogo->setPosition(ox + std::round((sw - logoSize) * 0.5f), oy + sh - logoSize - Style::spaceLg());
-      m_bottomBrandLogo->setTint(colorForRole(ColorRole::OnSurface, 0.88f));
-    }
-  }
-
-  const float panelWidth = std::clamp(sw * 0.32f, Style::scaled(440.0f), Style::scaled(540.0f));
+  const float defaultPanelWidth = std::clamp(sw * 0.32f, Style::scaled(440.0f), Style::scaled(540.0f));
+  const float panelWidth = m_panelWidth
+      ? std::max(0.0f, std::min(Style::scaled(*m_panelWidth), sw - Style::spaceLg() * 2.0f))
+      : defaultPanelWidth;
+  const float inputHeight = m_inputHeight ? Style::scaled(*m_inputHeight) : Style::controlHeight();
   const float rowHeight = Style::controlHeightLg();
   const float rowGap = Style::spaceSm();
   const float panelPadding = Style::spaceLg();
@@ -1112,7 +1105,7 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
 
   const float userBlockHeight = showsUserDropdown() ? rowHeight : 0.0f;
   const float userPickerContentHeight = userBlockHeight + sessionRowGap + sessionRowH;
-  const float passwordContentHeight = Style::controlHeight() + sessionRowGap + sessionRowH;
+  const float passwordContentHeight = inputHeight + sessionRowGap + sessionRowH;
   const float contentBlockHeight = m_passwordVisible ? passwordContentHeight : userPickerContentHeight;
 
   const bool hasStatus = !m_status.empty();
@@ -1134,6 +1127,18 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
       std::clamp(panelInnerHeight + panelTopPadding + panelBottomPadding, minPanelHeight, maxPanelHeight);
   const float panelX = ox + std::round((sw - panelWidth) * 0.5f);
   const float panelY = oy + std::round((sh - panelHeight) * 0.5f);
+  if (m_bottomBrandLogo != nullptr) {
+    const float logoSize = Style::scaled(64.0f);
+    const float logoY = oy + sh - logoSize - Style::spaceLg();
+    const bool hasRoom = logoY >= panelY + panelHeight + Style::spaceSm();
+    const bool showLogo = m_brandLogoTexture.id != 0 && !m_hideLogo && hasRoom;
+    m_bottomBrandLogo->setVisible(showLogo);
+    if (showLogo) {
+      m_bottomBrandLogo->setSize(logoSize, logoSize);
+      m_bottomBrandLogo->setPosition(ox + std::round((sw - logoSize) * 0.5f), logoY);
+      m_bottomBrandLogo->setTint(colorForRole(ColorRole::OnSurface, 0.88f));
+    }
+  }
   const float contentLeft = panelX + panelPadding;
   const float contentWidth = panelWidth - panelPadding * 2.0f;
 
@@ -1216,7 +1221,7 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
       }
   );
 
-  const float buttonWidth = Style::controlHeight();
+  const float buttonWidth = inputHeight;
   const float gap = Style::spaceSm();
   const float inputWidth = std::max(120.0f, contentWidth - buttonWidth - gap);
 
@@ -1303,7 +1308,7 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
     m_passwordField->setPosition((contentLeft), (contentTop));
     m_passwordField->layout(*renderer);
 
-    m_loginButton->setSize(buttonWidth, Style::controlHeight());
+    m_loginButton->setSize(buttonWidth, inputHeight);
     m_loginButton->setPosition((contentLeft + inputWidth + gap), (contentTop));
     m_loginButton->layout(*renderer);
     if (Glyph* loginGlyph = m_loginButton->glyph()) {
@@ -1311,7 +1316,7 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
       const auto glyphMetrics = renderer->measureGlyph(loginGlyph->codepoint(), loginGlyph->fontSize());
       const float glyphW = glyphMetrics.right - glyphMetrics.left;
       const float glyphH = glyphMetrics.bottom - glyphMetrics.top;
-      const float glyphY = std::round(Style::controlHeight() * 0.5f - (glyphMetrics.top + glyphMetrics.bottom) * 0.5f);
+      const float glyphY = std::round(inputHeight * 0.5f - (glyphMetrics.top + glyphMetrics.bottom) * 0.5f);
       loginGlyph->setPosition(std::round(buttonWidth * 0.5f - (glyphMetrics.left + glyphMetrics.right) * 0.5f), glyphY);
       loginGlyph->setSize(std::max(glyphW, 1.0f), std::max(glyphH, 1.0f));
     }
@@ -1319,8 +1324,8 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
     m_backButton->setVisible(false);
   }
 
-  const float sessionY = m_passwordVisible ? (contentTop + Style::controlHeight() + sessionRowGap)
-                                           : (contentTop + userBlockHeight + sessionRowGap);
+  const float sessionY =
+      m_passwordVisible ? (contentTop + inputHeight + sessionRowGap) : (contentTop + userBlockHeight + sessionRowGap);
   layoutPanelSessionSelector(contentLeft, sessionY, contentWidth, sessionRowH);
 
   if (hasStatus) {
@@ -2047,7 +2052,10 @@ void GreeterSurface::syncWallpaperTexture() {
 
 void GreeterSurface::loadPreferences() {
   const auto prefs = greeter::loadGreeterPreferences();
+  Style::setFontScale(prefs.fontScale);
   m_allowEmptyPassword = prefs.allowEmptyPassword;
+  m_panelWidth = prefs.panelWidth;
+  m_inputHeight = prefs.inputHeight;
   const auto initialSession = greeter::resolveInitialSessionName(prefs);
 
   if (initialSession.has_value()) {

@@ -1,8 +1,10 @@
 #include "ui/style.h"
 
 #include <algorithm>
+#include <cmath>
 
 float Style::s_uiScale = 1.0f;
+float Style::s_fontScale = 1.0f;
 float Style::s_cornerRadiusScale = 1.0f;
 
 void Style::setUiScale(float scale) noexcept { s_uiScale = std::clamp(scale, kMinUiScale, kMaxUiScale); }
@@ -10,6 +12,12 @@ void Style::setUiScale(float scale) noexcept { s_uiScale = std::clamp(scale, kMi
 float Style::uiScale() noexcept { return s_uiScale; }
 
 float Style::scaled(float value) noexcept { return value * s_uiScale; }
+
+void Style::setFontScale(float scale) noexcept {
+  s_fontScale = std::isfinite(scale) ? std::clamp(scale, 0.5f, 3.0f) : 1.0f;
+}
+
+float Style::scaledFont(float value) noexcept { return value * s_uiScale * s_fontScale; }
 
 void Style::setCornerRadiusScale(float scale) noexcept { s_cornerRadiusScale = std::clamp(scale, 0.0f, 2.0f); }
 
@@ -31,11 +39,11 @@ float Style::controlHeight() noexcept { return controlHeightBase * s_uiScale; }
 float Style::controlHeightSm() noexcept { return controlHeightSmBase * s_uiScale; }
 float Style::controlHeightLg() noexcept { return controlHeightLgBase * s_uiScale; }
 
-float Style::fontSizeCaption() noexcept { return fontSizeCaptionBase * s_uiScale; }
-float Style::fontSizeBody() noexcept { return fontSizeBodyBase * s_uiScale; }
-float Style::fontSizeTitle() noexcept { return fontSizeTitleBase * s_uiScale; }
-float Style::fontSizeHeading() noexcept { return fontSizeHeadingBase * s_uiScale; }
-float Style::fontSizeDisplay() noexcept { return fontSizeDisplayBase * s_uiScale; }
+float Style::fontSizeCaption() noexcept { return scaledFont(fontSizeCaptionBase); }
+float Style::fontSizeBody() noexcept { return scaledFont(fontSizeBodyBase); }
+float Style::fontSizeTitle() noexcept { return scaledFont(fontSizeTitleBase); }
+float Style::fontSizeHeading() noexcept { return scaledFont(fontSizeHeadingBase); }
+float Style::fontSizeDisplay() noexcept { return scaledFont(fontSizeDisplayBase); }
 
 float Style::borderWidth() noexcept { return borderWidthBase * s_uiScale; }
 
