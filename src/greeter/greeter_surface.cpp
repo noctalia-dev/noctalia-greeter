@@ -304,7 +304,13 @@ void GreeterSurface::initialize(RenderContext* context) {
   pwField->setPlaceholder("Type password");
   pwField->setPasswordMode(true);
   pwField->setControlHeight(Style::controlHeight());
-  pwField->setOnChange([this](const std::string& value) { m_password = value; });
+  pwField->setOnChange([this](const std::string& value) {
+    m_password = value;
+    m_passwordField->setInvalid(false);
+    if (m_authErrorVisible)
+      updateStatus("", false);
+    syncAuthInteractivity();
+  });
   pwField->setOnSubmit([this](const std::string&) { tryAuthenticate(); });
   m_passwordField = pwField.get();
   m_passwordField->setZIndex(6);
@@ -769,6 +775,8 @@ void GreeterSurface::mirrorStateFrom(const GreeterSurface& other) {
   m_username = other.m_username;
   m_status = other.m_status;
   m_statusIsError = other.m_statusIsError;
+  m_authErrorVisible = other.m_authErrorVisible;
+  m_passwordField->setInvalid(m_authErrorVisible);
 
   if (schemeChanged && m_selectedScheme < m_schemeNames.size()) {
     applyScheme(m_selectedScheme);
@@ -1011,8 +1019,7 @@ void GreeterSurface::enterPasswordStep(std::size_t userIndex) {
   m_userMenuOpen = false;
   m_userMenuSearchQuery.clear();
   m_passwordVisible = true;
-  m_passwordField->setValue("");
-  m_password.clear();
+  clearPasswordInput();
   if (m_passwordField->inputArea() != nullptr) {
     m_inputDispatcher.setFocus(m_passwordField->inputArea());
   }
@@ -1392,6 +1399,7 @@ void GreeterSurface::tryAuthenticate() {
     // Arm the typed input (possibly empty) to answer the first secret prompt.
     m_pendingResponse = m_password;
     m_hasPendingResponse = true;
+    clearPasswordInput();
     m_authenticating = true;
     kLog.info("greetd: create_session for '{}'", m_username);
     if (!m_greetdClient->requestCreateSession(m_username)) {
@@ -1402,6 +1410,7 @@ void GreeterSurface::tryAuthenticate() {
     }
     m_authSessionStarted = true;
     m_pendingReplies.push_back(AuthRequest::CreateSession);
+    updateStatus("Checking password…", false);
     syncAuthInteractivity();
     commitImmediateFrame(false);
   } else if (m_secretPromptWaiting) {
@@ -1531,6 +1540,7 @@ void GreeterSurface::postAuthResponse(const std::string& data) {
   clearPasswordInput();
   m_secretPromptWaiting = false;
   m_pendingReplies.push_back(AuthRequest::PostAuthData);
+  updateStatus("Checking password…", false);
   syncAuthInteractivity();
   commitImmediateFrame(false);
 }
@@ -1541,7 +1551,7 @@ void GreeterSurface::syncAuthInteractivity() {
     m_passwordField->setEnabled(!busy);
   }
   if (m_loginButton != nullptr) {
-    m_loginButton->setEnabled(!busy);
+    m_loginButton->setEnabled(!busy && (m_allowEmptyPassword || !m_password.empty()));
   }
 }
 
@@ -1653,7 +1663,9 @@ void GreeterSurface::clearPasswordInput() {
   m_password.clear();
   if (m_passwordField != nullptr) {
     m_passwordField->setValue("");
+    m_passwordField->setInvalid(false);
   }
+  syncAuthInteractivity();
 }
 
 void GreeterSurface::onAuthError(const GreetdError& error) {
@@ -1663,7 +1675,9 @@ void GreeterSurface::onAuthError(const GreetdError& error) {
   m_pendingResponse.clear();
   m_pendingReplies.clear();
   clearPasswordInput();
+  m_passwordField->setInvalid(true);
   updateStatus(error.description, true);
+  m_authErrorVisible = true;
   kLog.warn("authentication failed: {}", error.description);
   if (!resetAuthSession()) {
     return;
@@ -1686,6 +1700,7 @@ void GreeterSurface::reportGreetdTransportError(const GreetdError& error) {
 void GreeterSurface::updateStatus(const std::string& text, bool isError) {
   // Empty text clears the line; non-empty text shows as an error or, for PAM
   // info prompts, as a neutral hint rather than being discarded.
+  m_authErrorVisible = false;
   m_status = text;
   m_statusIsError = isError;
   if (m_statusLabel != nullptr) {
@@ -2068,6 +2083,7 @@ void GreeterSurface::loadPreferences() {
   m_hideLogo = prefs.hideLogo;
   m_powerButtonsPosition = prefs.powerButtonsPosition.value_or("bottom-right");
   m_schemeSelectorPosition = prefs.schemeSelectorPosition.value_or("top-right");
+  syncAuthInteractivity();
 }
 
 void GreeterSurface::savePreferences() const {
@@ -2231,8 +2247,7 @@ void GreeterSurface::runBackAction() {
     return;
   }
   m_passwordVisible = false;
-  m_passwordField->setValue("");
-  m_password.clear();
+  clearPasswordInput();
   updateStatus("", false);
   if (m_userSelectArea != nullptr) {
     m_inputDispatcher.setFocus(m_userSelectArea);

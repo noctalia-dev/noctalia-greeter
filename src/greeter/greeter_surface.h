@@ -240,6 +240,7 @@ private:
   std::string m_password;
   std::string m_status;
   bool m_statusIsError = false;
+  bool m_authErrorVisible = false;
   bool m_authenticating = false;
   bool m_greetdUnavailable = false;
   bool m_sharedAuthBlocked = false;
