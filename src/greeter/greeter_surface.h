@@ -4,6 +4,7 @@
 #include "greetd/greetd_client.h"
 #include "greeter/appearance_config.h"
 #include "greeter/greeter_sessions.h"
+#include "greeter/power_confirmation.h"
 #include "render/animation/animation_manager.h"
 #include "render/core/color.h"
 #include "render/core/texture_handle.h"
@@ -125,6 +126,10 @@ private:
   void layoutPanelUserSelector(float x, float y, float w, float h);
   void layoutPanelSessionSelector(float x, float y, float w, float h);
   void layoutPowerButtons(float ox, float oy, float sw, float sh);
+  void requestPowerAction(greeter::PowerAction action);
+  void cancelPowerAction();
+  void confirmPowerAction();
+  void layoutPowerConfirmation(float ox, float oy, float sw, float sh);
   void commitImmediateFrame(bool layout);
   void setFocusIndex(std::ptrdiff_t index);
   void syncFocusIndexFromFocused();
@@ -215,6 +220,14 @@ private:
   Button* m_loginButton = nullptr;
   Button* m_backButton = nullptr;
   Label* m_statusLabel = nullptr;
+  greeter::PowerConfirmation m_powerConfirmation;
+  InputArea* m_powerReturnFocus = nullptr;
+  Box* m_powerDialog = nullptr;
+  RectNode* m_powerShade = nullptr;
+  InputArea* m_powerBlocker = nullptr;
+  Label* m_powerPrompt = nullptr;
+  Button* m_powerCancel = nullptr;
+  Button* m_powerConfirm = nullptr;
   RectNode* m_configErrorBanner = nullptr;
   Label* m_configErrorHeading = nullptr;
   Label* m_configErrorLabel = nullptr;
