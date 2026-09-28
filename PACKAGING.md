@@ -25,7 +25,7 @@ AppStream, etc.):
 
 - Build system: [Meson](https://mesonbuild.com/) + Ninja. The repo [`Justfile`](Justfile) is convenience only.
 - Language: C++20 (greeter client), C (wlroots compositor).
-- Recommended for packages: `meson setup build --buildtype=plain` (or `release` **without** relying on `-march=native`; the default `release` buildtype in `meson.build` enables CPU-local flags that are not portable across machines).
+- Recommended for packages: `meson setup build --buildtype=plain`.
 - **wlroots 0.20** and **wayland-server** are required (the compositor is not optional).
 
 Install with the prefix you intend to ship. Greetd `command` must point at the installed `noctalia-greeter-session` path (often `/usr/bin/...`, not `/usr/local/bin/...`).

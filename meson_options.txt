@@ -1,0 +1,6 @@
+option(
+  'native_optimizations',
+  type: 'boolean',
+  value: false,
+  description: 'Optimize for the build machine CPU; output may not be portable',
+)
