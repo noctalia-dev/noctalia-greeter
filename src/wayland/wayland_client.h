@@ -75,6 +75,8 @@ public:
   [[nodiscard]] wl_display* display() const noexcept { return m_display; }
   [[nodiscard]] wl_compositor* compositor() const noexcept { return m_compositor; }
   [[nodiscard]] wl_seat* seat() const noexcept { return m_seat; }
+  [[nodiscard]] std::string currentLayoutName() const { return m_seatHandler.currentLayoutName(); }
+  [[nodiscard]] WaylandSeat::LockKeysState lockKeysState() const { return m_seatHandler.lockKeysState(); }
   [[nodiscard]] xdg_wm_base* xdgWmBase() const noexcept { return m_xdgWmBase; }
   [[nodiscard]] wp_fractional_scale_manager_v1* fractionalScaleManager() const noexcept {
     return m_fractionalScaleManager;

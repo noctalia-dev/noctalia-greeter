@@ -38,6 +38,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <filesystem>
 #include <linux/input-event-codes.h>
 #include <nlohmann/json.hpp>
@@ -230,6 +231,19 @@ void GreeterSurface::initialize(RenderContext* context) {
   bottomLogo->setZIndex(2);
   m_bottomBrandLogo = bottomLogo.get();
   m_root.addChild(std::move(bottomLogo));
+
+  const auto ambientLabel = [this](float size) {
+    auto label = std::make_unique<Label>();
+    label->setFontSize(size);
+    label->setHitTestVisible(false);
+    label->setZIndex(6);
+    auto* result = label.get();
+    m_root.addChild(std::move(label));
+    return result;
+  };
+  m_keyboardLabel = ambientLabel(12.0f);
+  m_clockLabel = ambientLabel(48.0f);
+  m_dateLabel = ambientLabel(14.0f);
 
   auto formSubtitle = std::make_unique<Label>();
   formSubtitle->setFontSize(Style::fontSizeTitle());
@@ -1000,6 +1014,9 @@ void GreeterSurface::syncScaledTypography() {
   m_loginButton->setGlyphSize(Style::fontSizeTitle());
   m_backButton->setGlyphSize(Style::fontSizeTitle());
   m_statusLabel->setFontSize(Style::fontSizeCaption());
+  m_keyboardLabel->setFontSize(Style::fontSizeCaption());
+  m_clockLabel->setFontSize(Style::scaled(48.0f));
+  m_dateLabel->setFontSize(Style::fontSizeBody());
 }
 
 void GreeterSurface::enterPasswordStep(std::size_t userIndex) {
@@ -1330,6 +1347,30 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
   } else {
     m_statusLabel->setVisible(false);
   }
+
+  m_keyboardLabel->setText(m_keyboardText);
+  m_keyboardLabel->setColor(colorForRole(m_capsLock ? ColorRole::Error : ColorRole::OnSurfaceVariant));
+  m_keyboardLabel->setVisible(!m_keyboardText.empty());
+  m_keyboardLabel->setMaxWidth(contentWidth);
+  m_keyboardLabel->measure(*renderer);
+  m_keyboardLabel->setPosition(
+      contentLeft + (contentWidth - m_keyboardLabel->width()) * 0.5f,
+      contentTop + contentBlockHeight + statusGap + Style::fontSizeCaption() + Style::scaled(16.0f)
+  );
+  m_clockLabel->setText(m_clockText);
+  m_dateLabel->setText(m_dateText);
+  m_clockLabel->setColor(colorForRole(ColorRole::OnSurface));
+  m_dateLabel->setColor(colorForRole(ColorRole::OnSurfaceVariant));
+  m_clockLabel->setVisible(!m_clockText.empty());
+  m_dateLabel->setVisible(!m_dateText.empty());
+  m_clockLabel->measure(*renderer);
+  m_dateLabel->measure(*renderer);
+  m_dateLabel->setPosition(
+      ox + (sw - m_dateLabel->width()) * 0.5f, panelY - Style::scaled(43.0f) - m_dateLabel->height() * 0.5f
+  );
+  m_clockLabel->setPosition(
+      ox + (sw - m_clockLabel->width()) * 0.5f, panelY - Style::scaled(91.0f) - m_clockLabel->height() * 0.5f
+  );
 
   rebuildUserMenu();
   rebuildSessionMenu();
@@ -2048,6 +2089,8 @@ void GreeterSurface::syncWallpaperTexture() {
 void GreeterSurface::loadPreferences() {
   const auto prefs = greeter::loadGreeterPreferences();
   m_allowEmptyPassword = prefs.allowEmptyPassword;
+  m_clockTimeFormat = prefs.clockTimeFormat;
+  m_clockDateFormat = prefs.clockDateFormat;
   const auto initialSession = greeter::resolveInitialSessionName(prefs);
 
   if (initialSession.has_value()) {
@@ -3529,4 +3572,37 @@ void GreeterSurface::rebuildSchemeMenu() {
       /*rightAlign=*/true, /*zBase=*/60, m_schemeMenuPanel, m_schemeMenuRows, m_schemeMenuLabels, m_schemeMenuAreas,
       [this](std::size_t i) { selectScheme(i); }
   );
+}
+
+int GreeterSurface::clockPollTimeoutMs() const {
+  if (m_clockTimeFormat.empty() && m_clockDateFormat.empty())
+    return -1;
+  const auto now =
+      std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
+          .count();
+  return static_cast<int>(60000 - now % 60000);
+}
+
+void GreeterSurface::updateAmbientState(const std::string& layout, bool capsLock) {
+  const std::string keyboard = layout + (capsLock ? "  ·  Caps Lock is on" : "");
+  const std::time_t now = std::time(nullptr);
+  std::tm local{};
+  if (localtime_r(&now, &local) == nullptr)
+    return;
+  const auto format = [&local](const std::string& pattern) {
+    char text[256]{};
+    if (pattern.empty())
+      return std::string{};
+    const auto length = std::strftime(text, sizeof(text), pattern.c_str(), &local);
+    return std::string(text, length);
+  };
+  const auto clock = format(m_clockTimeFormat);
+  const auto date = format(m_clockDateFormat);
+  if (keyboard == m_keyboardText && clock == m_clockText && date == m_dateText)
+    return;
+  m_keyboardText = keyboard;
+  m_capsLock = capsLock;
+  m_clockText = clock;
+  m_dateText = date;
+  requestLayout();
 }

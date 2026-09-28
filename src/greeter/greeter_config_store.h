@@ -46,6 +46,8 @@ namespace greeter::config {
     std::optional<std::string> appearanceScheme;
     std::optional<std::string> appearancePasswordStyle;
     std::optional<bool> appearanceHideLogo;
+    std::optional<std::string> appearanceClockTimeFormat;
+    std::optional<std::string> appearanceClockDateFormat;
     // UI element positioning: "hidden", "bottom-left", "bottom-right", "top-left", "top-right"
     std::optional<std::string> appearancePowerButtonsPosition;
     std::optional<std::string> appearanceSchemeSelectorPosition;
