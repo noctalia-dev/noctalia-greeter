@@ -35,6 +35,10 @@ public:
   [[nodiscard]] static float controlHeightSm() noexcept;
   [[nodiscard]] static float controlHeightLg() noexcept;
 
+  // Scale text independently of controls and icons.
+  static void setFontScale(float scale) noexcept;
+  [[nodiscard]] static float scaledFont(float value) noexcept;
+
   // Font sizes
   static constexpr float fontSizeCaptionBase = 12.0f;
   static constexpr float fontSizeBodyBase = 14.0f;
@@ -80,5 +84,6 @@ public:
 
 private:
   static float s_uiScale;
+  static float s_fontScale;
   static float s_cornerRadiusScale;
 };

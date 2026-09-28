@@ -65,6 +65,9 @@ namespace {
     return key == "scheme"
         || key == "password_style"
         || key == "hide_logo"
+        || key == "font_scale"
+        || key == "panel_width"
+        || key == "input_height"
         || key == "power_buttons_position"
         || key == "scheme_selector_position"
         || key == "theme_mode"
@@ -227,6 +230,21 @@ namespace {
           } else if (entryView == "hide_logo") {
             if (const auto value = entryNode.value<bool>()) {
               config.appearanceHideLogo = *value;
+            }
+          } else if (entryView == "font_scale") {
+            if (const auto value = positiveFloatValue(entryNode); value && *value >= 0.5f && *value <= 3.0f) {
+              config.appearanceFontScale = *value;
+            } else {
+              kLog.warn("{}: invalid appearance.font_scale value", path.string());
+            }
+          } else if (entryView == "panel_width" || entryView == "input_height") {
+            const auto value = positiveFloatValue(entryNode);
+            const float minimum = entryView == "panel_width" ? 300.0f : 32.0f;
+            const float maximum = entryView == "panel_width" ? 1000.0f : 96.0f;
+            if (value && *value >= minimum && *value <= maximum) {
+              (entryView == "panel_width" ? config.appearancePanelWidth : config.appearanceInputHeight) = *value;
+            } else {
+              kLog.warn("{}: invalid appearance.{} value", path.string(), entryView);
             }
           } else if (entryView == "power_buttons_position") {
             config.appearancePowerButtonsPosition = stringValue(entryNode);
@@ -497,6 +515,12 @@ namespace {
     if (config.appearanceHideLogo.has_value()) {
       appearance.insert_or_assign("hide_logo", *config.appearanceHideLogo);
     }
+    if (config.appearanceFontScale)
+      appearance.insert_or_assign("font_scale", *config.appearanceFontScale);
+    if (config.appearancePanelWidth)
+      appearance.insert_or_assign("panel_width", *config.appearancePanelWidth);
+    if (config.appearanceInputHeight)
+      appearance.insert_or_assign("input_height", *config.appearanceInputHeight);
     insertString(
         appearance, "power_buttons_position", config.appearancePowerButtonsPosition,
         [](toml::table& table, std::string_view key, const std::string& value) {

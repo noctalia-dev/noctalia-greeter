@@ -421,6 +421,9 @@ namespace greeter {
     if (file.appearanceHideLogo.has_value()) {
       prefs.hideLogo = *file.appearanceHideLogo;
     }
+    prefs.fontScale = file.appearanceFontScale.value_or(1.0f);
+    prefs.panelWidth = file.appearancePanelWidth;
+    prefs.inputHeight = file.appearanceInputHeight;
     prefs.powerButtonsPosition = file.appearancePowerButtonsPosition;
     prefs.schemeSelectorPosition = file.appearanceSchemeSelectorPosition;
     if (file.authAllowEmptyPassword.has_value()) {

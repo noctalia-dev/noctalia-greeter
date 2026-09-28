@@ -35,6 +35,12 @@ theme_mode = "dark"
 corner_radius_scale = 1.0
 # Optional; empty / omit keeps the greeter default font.
 font_family = "Inter"
+# Text scale relative to the UI scale (0.5-3.0; default 1.0).
+# font_scale = 1.0
+# Optional panel width in logical pixels (300-1000). Omit for adaptive width.
+# panel_width = 540.0
+# Optional password field and submit button height in logical pixels (32-96).
+# input_height = 48.0
 
 # Required for a declarative Synced look (same keys Sync writes under [appearance.palette]).
 # When complete, this wins over Sync's sync.toml appearance.
