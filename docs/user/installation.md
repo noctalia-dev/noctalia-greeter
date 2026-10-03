@@ -1,9 +1,10 @@
----
+--
 title: Installation
 description: Install Noctalia Greeter from distribution packages, NixOS, or source and connect it to greetd.
 sidebar:
   order: 1
 ---
+import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 For most users, the shortest path is to install a distribution package, point
 greetd at the installed session wrapper, and then switch display managers. The
@@ -93,11 +94,20 @@ for Debian Trixie, Debian Sid, and Ubuntu 26.04. Follow the shared
 [Debian repository setup instructions](https://docs.noctalia.dev/noctalia/getting-started/installation/#debian),
 then install:
 
+<Tabs>
+<TabItem label="Debian Trixie">
+```sh
+sudo apt update
+sudo apt install -t trixie-backports noctalia-greeter
+```
+</TabItem>
+<TabItem label="Debian Sid or Ubuntu 26.04">
 ```sh
 sudo apt update
 sudo apt install noctalia-greeter
 ```
-
+</TabItem>
+</Tabs>
 ## 3. Configure greetd
 
 If using the Debian or Ubuntu packages, `greetd` will have already been
