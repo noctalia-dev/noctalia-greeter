@@ -11,6 +11,7 @@ namespace accounts {
     std::string username;
     uid_t uid = 0;
     std::string iconPath;
+    std::optional<std::string> realName;
   };
 
   // Users known to org.freedesktop.Accounts (ListCachedUsers), including
