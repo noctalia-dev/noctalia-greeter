@@ -271,7 +271,8 @@ For Noctalia greeter to work correctly, you have to:
 2. Add `elogind-service-type`,
 3. Add the `noctalia-greeter-state-service-type`, which sets up the `/var/lib/noctalia-greeter` directory in order to allow for syncing theme with Noctalia,
 4. Add `noctalia-greeter` to your list of packages, so that Noctalia may detect it and allow you to sync your wallpaper and theme,
-5. Finally, remove any service that would conflict with greetd, like `mingetty-service-type` which is provided by `%base-services`, or SDDM/GDM which are provided by `%desktop-services`
+5. Optional: add the polkit action to allow for passwordless sync,
+6. Finally, remove any service that would conflict with greetd, like `mingetty-service-type` which is provided by `%base-services`, or SDDM/GDM which are provided by `%desktop-services`
 
 An example system configuration would look something like this:
 
@@ -298,6 +299,9 @@ An example system configuration would look something like this:
                 (service elogind-service-type) ;; omit if using %desktop-services
                 
                 (service noctalia-greeter-state-service-type)
+                
+                (simple-service 'noctalia-greeter-passwordless-sync polkit-service-type
+                    (list noctalia-greeter))
                 
                 (service greetd-service-type
                     (greetd-configuration
