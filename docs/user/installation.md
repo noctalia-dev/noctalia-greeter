@@ -252,7 +252,7 @@ starts and lists the installed desktop sessions.
 
 ## GNU Guix declarative setup
 
-Noctalia greeter is available in the third-party `midnight` guix channel. To use it, add the following channel to your channels list in `~/.config/guix/channels.scm`:
+Noctalia greeter is available in the third-party [`midnight`](https://codeberg.org/stampede/midnight) guix channel. To use it, add the following channel to your channels list in `~/.config/guix/channels.scm`:
 
 ```scheme
 (channel
@@ -267,60 +267,47 @@ Noctalia greeter is available in the third-party `midnight` guix channel. To use
 ```
 
 For Noctalia greeter to work correctly, you have to:
-1. Add and configure the `greetd-service-type` to use `noctalia-greeter`,
-2. Add `elogind-service-type`,
-3. Add the `noctalia-greeter-state-service-type`, which sets up the `/var/lib/noctalia-greeter` directory in order to allow for syncing theme with Noctalia,
-4. Add `noctalia-greeter` to your list of packages, so that Noctalia may detect it and allow you to sync your wallpaper and theme,
-5. Optional: add the polkit action to allow for passwordless sync,
-6. Finally, remove any service that would conflict with greetd, like `mingetty-service-type` which is provided by `%base-services`, or SDDM/GDM which are provided by `%desktop-services`
+1. Add and configure the `greetd-service-type` to use `greetd-noctalia-greeter-session`,
+2. Add `elogind-service-type`, and `polkit-service-type`,
+3. Add the `noctalia-greeter-service-type`, which sets up the state directory, manages `greeter.toml` config file, adds the Polkit actions, and automatically adds the `noctalia-greeter` package to the system profile,
+4. Finally, remove any service that would conflict with greetd, like `mingetty-service-type` which is provided by `%base-services`, or SDDM/GDM which are provided by `%desktop-services`
 
-An example system configuration would look something like this:
+An example `services` section of the system configuration would look something like this:
 
 ```scheme
-(use-modules
-    (gnu services base) ;; for greetd
-    (gnu services desktop) ;; for elogind
-    (midnight packages noctalia-greeter) ;; for the main greeter package
-    (midnight services noctalia-greeter) ;; for the noctalia-greeter service
-    ...) ;; your other modules
-
-(operating-system
-    
-    (packages
-        (list noctalia-greeter
-            ...)) ;; your other packages
-    
-    (services
-        (append
-            (modify-services %base-services
-                (delete mingetty-service-type))
+(services
+    (append
+        (modify-services %base-services
+            (delete mingetty-service-type))
+        
+        (list
+            (service polkit-service-type) ; omit if using %desktop-services
+            (service elogind-service-type) ; omit if using %desktop-services
             
-            (list
-                (service elogind-service-type) ;; omit if using %desktop-services
-                
-                (service noctalia-greeter-state-service-type)
-                
-                (simple-service 'noctalia-greeter-passwordless-sync polkit-service-type
-                    (list noctalia-greeter))
-                
-                (service greetd-service-type
-                    (greetd-configuration
-                        (greeter-supplementary-groups '("video" "input"))
-                        (terminals
-                            (list
-                                (greetd-terminal-configuration
-                                    (extra-shepherd-requirement '(elogind))
-                                    (terminal-vt "1")
-                                    (default-session-command
-                                        (file-append noctalia-greeter "/bin/noctalia-greeter-session")))
-                                (greetd-terminal-configuration (terminal-vt "2"))
-                                (greetd-terminal-configuration (terminal-vt "3"))
-                                (greetd-terminal-configuration (terminal-vt "4"))
-                                (greetd-terminal-configuration (terminal-vt "5"))
-                                (greetd-terminal-configuration (terminal-vt "6"))))))
-                
-                ...))) ;; your other services
-        ...) ;; rest of your operating system config
+            (service noctalia-greeter-service-type
+                (noctalia-greeter-configuration
+                    (cursor (noctalia-greeter-cursor-configuration
+                        (package bibata-cursor-theme)
+                        (theme "Bibata-Modern-Ice")
+                        (size 24)))
+                    (passwordless-sync-users '("username"))
+                    (config-file (list (local-file "./files/greeter.toml")))))
+            
+            (service greetd-service-type
+                (greetd-configuration
+                    (greeter-supplementary-groups '("video" "input"))
+                    (terminals
+                        (list
+                            (greetd-terminal-configuration
+                                (extra-shepherd-requirement '(elogind))
+                                (terminal-vt "1")
+                                (terminal-switch #t)
+                                (default-session-command (greetd-noctalia-greeter-session)))
+                            (greetd-terminal-configuration (terminal-vt "2"))
+                            (greetd-terminal-configuration (terminal-vt "3"))
+                            (greetd-terminal-configuration (terminal-vt "4"))
+                            (greetd-terminal-configuration (terminal-vt "5"))
+                            (greetd-terminal-configuration (terminal-vt "6")))))))))
 ```
 
 ## Build from source
