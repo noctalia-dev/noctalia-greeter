@@ -266,6 +266,8 @@ Noctalia greeter is available in the third-party [`midnight`](https://codeberg.o
                 "640A 2C3C E948 22D3 394B 40C3 CAFA EECA 00FF 9B1E"))))
 ```
 
+Then, add `(midnight services noctalia-greeter)` to your list of imported modules
+
 For Noctalia greeter to work correctly, you have to:
 1. Add and configure the `greetd-service-type` to use `greetd-noctalia-greeter-session`,
 2. Add `elogind-service-type`, and `polkit-service-type`,
