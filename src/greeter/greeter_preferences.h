@@ -33,6 +33,7 @@ namespace greeter {
     bool allowEmptyPassword = false;
     int authRequestTimeoutSec = 60;
     bool hideLogo = false;
+    bool showRealNames = false;
     // UI element positioning: "hidden", "bottom-left", "bottom-right", "top-left", "top-right"
     std::optional<std::string> powerButtonsPosition;
     std::optional<std::string> schemeSelectorPosition;

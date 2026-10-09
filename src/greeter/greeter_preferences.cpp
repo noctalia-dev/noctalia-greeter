@@ -423,6 +423,9 @@ namespace greeter {
     if (file.appearanceHideLogo.has_value()) {
       prefs.hideLogo = *file.appearanceHideLogo;
     }
+    if (file.appearanceShowRealNames.has_value()) {
+      prefs.showRealNames = *file.appearanceShowRealNames;
+    }
     prefs.powerButtonsPosition = file.appearancePowerButtonsPosition;
     prefs.schemeSelectorPosition = file.appearanceSchemeSelectorPosition;
     if (file.clockEnabled.has_value()) {
