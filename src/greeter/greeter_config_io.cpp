@@ -78,6 +78,7 @@ namespace {
 
   [[nodiscard]] bool isKnownOutputKey(std::string_view key) {
     return key == "name"
+        || key == "use_synced_settings"
         || key == "layout"
         || key == "scale"
         || key == "scales"
@@ -314,6 +315,12 @@ namespace {
           }
           if (entryView == "name") {
             config.outputName = stringValue(entryNode);
+          } else if (entryView == "use_synced_settings") {
+            if (const auto value = entryNode.value<bool>()) {
+              config.outputUseSyncedSettings = *value;
+            } else {
+              kLog.warn("{}: invalid output.use_synced_settings value (expected a boolean)", path.string());
+            }
           } else if (entryView == "layout") {
             config.outputLayout = stringValue(entryNode);
           } else if (entryView == "scale") {
@@ -573,6 +580,9 @@ namespace {
           table.insert_or_assign(std::string(key), value);
         }
     );
+    if (config.outputUseSyncedSettings.has_value()) {
+      output.insert_or_assign("use_synced_settings", *config.outputUseSyncedSettings);
+    }
     insertString(
         output, "layout", config.outputLayout, [](toml::table& table, std::string_view key, const std::string& value) {
           table.insert_or_assign(std::string(key), value);
@@ -986,15 +996,16 @@ namespace greeter::config {
 
     std::ostringstream out;
     out << "# noctalia-greeter greeter.toml (declarative; Nix-safe; UI and Sync never write this)\n";
-    out << "# Last-used session lives in sync.toml; UI/Sync also fall back to sync.toml for scheme\n";
-    out << "# and output layout/transforms when not set here. Session power actions/menu entries are\n";
+    out << "# Last-used session lives in sync.toml; UI/Sync also fall back to sync.toml for scheme.\n";
+    out << "# Output layout/transforms/scales fall back to sync.toml when not set here and\n";
+    out << "# output.use_synced_settings is true (default). Session power actions/menu entries are\n";
     out << "# Sync-only (sync.toml [session.power]/[[session.actions]]) and are not settable here.\n";
     out << "# [session] default, [user] default\n";
     out << "# [appearance] scheme, password_style, hide_logo, power_buttons_position, scheme_selector_position, "
            "theme_mode, corner_radius_scale, font_family\n";
     out << "# [appearance.palette] full color role table, [appearance.wallpaper] path/fill_mode/fill_color\n";
     out << "# [appearance.wallpapers.<connector>] per-output wallpaper overrides\n";
-    out << "# [output] name/layout/scale/scales/width/height/refresh_rate/transforms, "
+    out << "# [output] name/use_synced_settings/layout/scale/scales/width/height/refresh_rate/transforms, "
            "[idle] timeout, [cursor] theme/size/path\n";
     out << "# [keyboard] layout/variant/options/numlock\n";
     out << "# [auth] allow_empty_password (bool), request_timeout (0-3600 seconds; default 60, 0 disables)\n";
@@ -1078,11 +1089,13 @@ namespace {
         hasLegacyState ? greeter::config::loadSync(legacyStatePath) : greeter::config::GreeterSyncFile{};
 
     greeter::config::GreeterConfigFile conf = greeter::config::loadConfig(confPath);
+    const bool migrateOutputs = conf.outputUseSyncedSettings.value_or(true);
     const bool hasRuntime = (conf.sessionLast.has_value() && !conf.sessionLast->empty())
         || (conf.appearanceScheme.has_value() && !conf.appearanceScheme->empty())
-        || (conf.outputLayout.has_value() && !conf.outputLayout->empty())
-        || (conf.outputTransforms.has_value() && !conf.outputTransforms->empty())
-        || (conf.outputScales.has_value() && !conf.outputScales->empty());
+        || (migrateOutputs
+            && ((conf.outputLayout.has_value() && !conf.outputLayout->empty())
+                || (conf.outputTransforms.has_value() && !conf.outputTransforms->empty())
+                || (conf.outputScales.has_value() && !conf.outputScales->empty())));
     if (!hasLegacyState && !hasRuntime) {
       return;
     }
@@ -1093,13 +1106,13 @@ namespace {
     if (conf.appearanceScheme.has_value() && !conf.appearanceScheme->empty()) {
       sync.appearanceScheme = conf.appearanceScheme;
     }
-    if (conf.outputLayout.has_value() && !conf.outputLayout->empty()) {
+    if (migrateOutputs && conf.outputLayout.has_value() && !conf.outputLayout->empty()) {
       sync.outputLayout = conf.outputLayout;
     }
-    if (conf.outputTransforms.has_value() && !conf.outputTransforms->empty()) {
+    if (migrateOutputs && conf.outputTransforms.has_value() && !conf.outputTransforms->empty()) {
       sync.outputTransforms = conf.outputTransforms;
     }
-    if (conf.outputScales.has_value() && !conf.outputScales->empty()) {
+    if (migrateOutputs && conf.outputScales.has_value() && !conf.outputScales->empty()) {
       sync.outputScales = conf.outputScales;
     }
     if (!greeter::config::writeSync(syncPath, sync)) {
@@ -1110,9 +1123,11 @@ namespace {
     if (hasRuntime) {
       conf.sessionLast.reset();
       conf.appearanceScheme.reset();
-      conf.outputLayout.reset();
-      conf.outputTransforms.reset();
-      conf.outputScales.reset();
+      if (migrateOutputs) {
+        conf.outputLayout.reset();
+        conf.outputTransforms.reset();
+        conf.outputScales.reset();
+      }
       if (!greeter::config::writeConfig(confPath, conf)) {
         kLog.warn("migrated sync.toml but failed to strip runtime keys from {}", confPath.string());
         return;
@@ -1142,7 +1157,9 @@ extern "C" void greeter_compositor_config_load(const char* state_dir, struct gre
   migrateLegacyRuntimeKeysToSync(confPath, syncPath);
 
   const greeter::config::GreeterConfigFile config = greeter::config::loadConfig(confPath);
-  const greeter::config::GreeterSyncFile sync = greeter::config::loadSync(syncPath);
+  const greeter::config::GreeterSyncFile sync = config.outputUseSyncedSettings.value_or(true)
+      ? greeter::config::loadSync(syncPath)
+      : greeter::config::GreeterSyncFile{};
 
   copyString(out->preferred_output, sizeof(out->preferred_output), config.outputName);
   copyString(out->cursor_theme, sizeof(out->cursor_theme), config.cursorTheme);

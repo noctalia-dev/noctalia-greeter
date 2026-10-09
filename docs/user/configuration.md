@@ -68,6 +68,7 @@ Set these keys in `greeter.toml`. A command-line `--session` or `--user` value t
 | `[clock].time_format` | Time line format; defaults to `{:%H:%M}` |
 | `[clock].date_format` | Date line format; defaults to `%A, %x` |
 | `[output].name` | Connector or stable EDID identifier on which to pin the greeter |
+| `[output].use_synced_settings` | Use synced layout, transforms, and scales when not declared here; defaults to `true`. Set `false` to use declarative output settings and compositor defaults only |
 | `[output].layout` | Multi-monitor positions by connector or stable identifier; overrides synced layout |
 | `[output].width` / `.height` | Preferred DRM mode size |
 | `[output].refresh_rate` | Preferred DRM mode refresh rate in hertz, globally or per output |

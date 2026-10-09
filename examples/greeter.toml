@@ -83,6 +83,10 @@ time_format = "{:%H:%M}"
 date_format = "%A, %x"
 
 [output]
+# Use layout, transforms, and scales from sync.toml when not declared here (default true).
+# Set false to use independent display settings while keeping appearance sync.
+# For automatic layout/scaling, also omit layout, scales, and scale below.
+use_synced_settings = true
 # Pin the greeter to one connector or stable EDID identifier; omit to mirror on every monitor.
 # List both with: noctalia-greeter outputs --details
 name = "DP-2"

@@ -17,6 +17,7 @@ and project flake modules.
 - [Match the desktop output mode](#match-the-desktop-output-mode)
 - [Rotate an output](#rotate-an-output)
 - [Scale the interface](#scale-the-interface)
+- [Use automatic display settings with appearance sync](#use-automatic-display-settings-with-appearance-sync)
 - [Blank displays when idle](#blank-displays-when-idle)
 - [Apply changes](#apply-changes)
 
@@ -178,7 +179,7 @@ results match. Automatic scale is capped at `2`.
 Scale is resolved independently for each output in this order:
 
 1. Global `[output].scale` in `greeter.toml`
-2. A connector or stable-identifier entry in `[output].scales` from `greeter.toml`, then `sync.toml`
+2. A connector or stable-identifier entry in `[output].scales` from `greeter.toml`, then `sync.toml` when `[output].use_synced_settings` is `true` (the default)
 3. Scale `1.0` when the output has a matching `[output].layout` entry but no scale
 4. Automatic scale from display geometry
 
@@ -204,6 +205,34 @@ scaling.
 These settings affect only the greeter session. They do not configure scaling
 inside the desktop session, although Noctalia Sync can copy the desktop's
 effective per-output scales to keep synchronized layouts valid.
+
+## Use automatic display settings with appearance sync
+
+If you connect different monitors to the same connector, or switch a monitor
+between resolution modes, a previously synced scale may no longer be suitable.
+To use the greeter's display defaults while continuing to sync its appearance,
+set this in `greeter.toml`:
+
+```toml
+[output]
+use_synced_settings = false
+```
+
+The option defaults to `true`. With `false`, the greeter ignores the synced
+`layout`, `transforms`, and `scales` in `sync.toml`. Output settings declared
+in `greeter.toml` still apply, including a pinned monitor, mode overrides,
+manual scales, and rotation.
+
+For automatic layout and scaling, omit `layout`, `scales`, and `scale` from
+`greeter.toml`. Outputs are then arranged from left to right and scaled from
+their current display geometry. A declarative layout without a matching scale
+still uses scale `1.0`, as described above; synced layout and scale are ignored
+together because the layout positions were recorded in logical pixels.
+
+Sync continues to update appearance and store output metadata in `sync.toml`.
+The option controls whether the greeter uses that metadata, so it also applies
+to previously saved settings and later sync operations. Wallpaper and palette
+syncing continue normally. Restart greetd after changing the option.
 
 ## Blank displays when idle
 

@@ -245,11 +245,13 @@ namespace {
         hasLegacyState ? greeter::config::loadSync(legacyStatePath) : greeter::config::GreeterSyncFile{};
 
     greeter::config::GreeterConfigFile conf = greeter::config::loadConfig(confPath);
+    const bool migrateOutputs = conf.outputUseSyncedSettings.value_or(true);
     const bool hasRuntime = (conf.sessionLast.has_value() && !conf.sessionLast->empty())
         || (conf.appearanceScheme.has_value() && !conf.appearanceScheme->empty())
-        || (conf.outputLayout.has_value() && !conf.outputLayout->empty())
-        || (conf.outputTransforms.has_value() && !conf.outputTransforms->empty())
-        || (conf.outputScales.has_value() && !conf.outputScales->empty());
+        || (migrateOutputs
+            && ((conf.outputLayout.has_value() && !conf.outputLayout->empty())
+                || (conf.outputTransforms.has_value() && !conf.outputTransforms->empty())
+                || (conf.outputScales.has_value() && !conf.outputScales->empty())));
     if (!hasLegacyState && !hasRuntime) {
       return;
     }
@@ -260,13 +262,13 @@ namespace {
     if (conf.appearanceScheme.has_value() && !conf.appearanceScheme->empty()) {
       sync.appearanceScheme = conf.appearanceScheme;
     }
-    if (conf.outputLayout.has_value() && !conf.outputLayout->empty()) {
+    if (migrateOutputs && conf.outputLayout.has_value() && !conf.outputLayout->empty()) {
       sync.outputLayout = conf.outputLayout;
     }
-    if (conf.outputTransforms.has_value() && !conf.outputTransforms->empty()) {
+    if (migrateOutputs && conf.outputTransforms.has_value() && !conf.outputTransforms->empty()) {
       sync.outputTransforms = conf.outputTransforms;
     }
-    if (conf.outputScales.has_value() && !conf.outputScales->empty()) {
+    if (migrateOutputs && conf.outputScales.has_value() && !conf.outputScales->empty()) {
       sync.outputScales = conf.outputScales;
     }
     if (!greeter::config::writeSync(syncPath, sync)) {
@@ -277,9 +279,11 @@ namespace {
     if (hasRuntime) {
       conf.sessionLast.reset();
       conf.appearanceScheme.reset();
-      conf.outputLayout.reset();
-      conf.outputTransforms.reset();
-      conf.outputScales.reset();
+      if (migrateOutputs) {
+        conf.outputLayout.reset();
+        conf.outputTransforms.reset();
+        conf.outputScales.reset();
+      }
       if (!greeter::config::writeConfig(confPath, conf)) {
         kLog.warn("migrated sync.toml but failed to strip runtime keys from {}", confPath.string());
         return;
@@ -337,6 +341,9 @@ namespace greeter {
     const config::GreeterConfigFile conf = config::loadConfig(greeterConfPath());
     if (conf.outputLayout.has_value() && !conf.outputLayout->empty()) {
       return parseOutputLayoutValue(*conf.outputLayout);
+    }
+    if (!conf.outputUseSyncedSettings.value_or(true)) {
+      return {};
     }
     const config::GreeterSyncFile sync = config::loadSync(greeterSyncPath());
     if (!sync.outputLayout.has_value() || sync.outputLayout->empty()) {

@@ -73,6 +73,21 @@ wallpaper precedence are resolved independently: a complete
 `[appearance.wallpaper]` and per-output wallpaper values override matching
 Sync wallpaper values even when a built-in color scheme is selected.
 
+To sync appearance while using independent display settings, set this in
+`greeter.toml`:
+
+```toml
+[output]
+use_synced_settings = false
+```
+
+This option defaults to `true`. With `false`, the greeter uses output values
+declared in `greeter.toml` and compositor defaults instead of synced layout,
+transforms, and scales. Sync still stores the output metadata, but the greeter
+ignores it across sync operations. See
+[Use automatic display settings with appearance sync](displays.md#use-automatic-display-settings-with-appearance-sync)
+for automatic layout and scaling.
+
 With a current Shell and greeter:
 
 | On disk / in config                                                        | Purpose                              |

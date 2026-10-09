@@ -53,6 +53,8 @@ namespace greeter::config {
     GreeterTomlAppearance appearance;
 
     std::optional<std::string> outputName;
+    // Defaults to true; false uses only declarative output settings and compositor defaults.
+    std::optional<bool> outputUseSyncedSettings;
     std::optional<std::string> outputLayout;
     std::optional<float> outputScale;
     std::optional<int> outputModeWidth;

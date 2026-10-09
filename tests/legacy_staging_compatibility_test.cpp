@@ -23,6 +23,9 @@
 namespace {
 
   constexpr std::string_view kStagingName = "noctalia-greeter-sync";
+  constexpr std::string_view kSyncedOutputLayout = "DP-1:0,0; DP-2:1280,0";
+  constexpr std::string_view kSyncedOutputTransforms = "DP-1:90; DP-2:normal";
+  constexpr std::string_view kSyncedOutputScales = "DP-1:2; DP-2:1.25";
 
   class Fixture {
   public:
@@ -134,6 +137,24 @@ namespace {
     }
     std::cerr << name << ": unexpected fill-mode parse result\n";
     passed = false;
+  }
+
+  void expectOutputMappings(
+      const std::string_view name, const greeter_compositor_config& config, const std::string_view layout,
+      const std::string_view transforms, const std::string_view scales, bool& passed
+  ) {
+    expect(
+        std::string(name) + " layout", std::string_view(config.output_layout) == layout, true,
+        std::string(config.output_layout), passed
+    );
+    expect(
+        std::string(name) + " transforms", std::string_view(config.output_transforms) == transforms, true,
+        std::string(config.output_transforms), passed
+    );
+    expect(
+        std::string(name) + " scales", std::string_view(config.output_scales) == scales, true,
+        std::string(config.output_scales), passed
+    );
   }
 
   void writeSpanSyncToml(const std::filesystem::path& path) {
@@ -272,6 +293,201 @@ refresh_rate = 120
       expect("output width parses", config.manual_mode_width == 1920, true, {}, passed);
       expect("output height parses", config.manual_mode_height == 1080, true, {}, passed);
       expect("output refresh rate parses", config.manual_mode_refresh_mhz == 120000, true, {}, passed);
+    }
+
+    for (const std::string_view setting : {"", "use_synced_settings = true\n", "use_synced_settings = \"false\"\n"}) {
+      Fixture fixture(0700, 0600);
+      const auto configPath = fixture.runtimeDirectory / "greeter.toml";
+      std::ofstream(configPath) << "[output]\n" << setting;
+      const ScopedStateDirectory stateDirectory(fixture.runtimeDirectory);
+      expect(
+          "stage synced output mappings",
+          greeter::applyAppearanceSyncGreeterConf(
+              std::string(kSyncedOutputLayout), std::string(kSyncedOutputTransforms), std::string(kSyncedOutputScales),
+              std::nullopt
+          ),
+          true, {}, passed
+      );
+
+      greeter_compositor_config config{};
+      greeter_compositor_config_load(fixture.runtimeDirectory.c_str(), &config);
+      expectOutputMappings(
+          "enabled or omitted output sync", config, kSyncedOutputLayout, kSyncedOutputTransforms, kSyncedOutputScales,
+          passed
+      );
+      const auto placements = greeter::loadGreeterOutputLayout();
+      expect(
+          "enabled or omitted client layout", placements.size() == 2 && placements[1].x == 1280, true,
+          std::string(setting), passed
+      );
+
+      const auto declarative = greeter::config::loadConfig(configPath);
+      expect(
+          "invalid output sync type uses the enabled default", declarative.outputUseSyncedSettings.value_or(true), true,
+          std::string(setting), passed
+      );
+      expect(
+          "enabled output sync config rewrites", greeter::config::writeConfig(configPath, declarative), true, {}, passed
+      );
+      expect(
+          "output sync setting survives rewrite",
+          greeter::config::loadConfig(configPath).outputUseSyncedSettings == declarative.outputUseSyncedSettings, true,
+          std::string(setting), passed
+      );
+    }
+
+    {
+      Fixture fixture(0700, 0600);
+      const auto configPath = fixture.runtimeDirectory / "greeter.toml";
+      std::ofstream(configPath) << "[output]\nuse_synced_settings = false\n";
+      const ScopedStateDirectory stateDirectory(fixture.runtimeDirectory);
+      expect(
+          "output sync stores metadata while opted out",
+          greeter::applyAppearanceSyncGreeterConf(
+              std::string(kSyncedOutputLayout), std::string(kSyncedOutputTransforms), std::string(kSyncedOutputScales),
+              std::nullopt
+          ),
+          true, {}, passed
+      );
+
+      const auto declarative = greeter::config::loadConfig(configPath);
+      expect("disabled output sync parses", declarative.outputUseSyncedSettings == false, true, {}, passed);
+      expect(
+          "disabled output sync config rewrites", greeter::config::writeConfig(configPath, declarative), true, {},
+          passed
+      );
+      expect(
+          "disabled output sync survives rewrite",
+          greeter::config::loadConfig(configPath).outputUseSyncedSettings == false, true, {}, passed
+      );
+
+      greeter_compositor_config config{};
+      greeter_compositor_config_load(fixture.runtimeDirectory.c_str(), &config);
+      expectOutputMappings("disabled output sync", config, "", "", "", passed);
+      expect("disabled output sync leaves automatic scale", config.manual_scale == 0.0f, true, {}, passed);
+      expect("disabled client layout", greeter::loadGreeterOutputLayout().empty(), true, {}, passed);
+
+      writeSpanSyncToml(fixture.syncFile);
+      std::ofstream(fixture.stagingDirectory / greeter::appearance::kOutputLayoutFileName)
+          << "DP-1:50,60; DP-2:700,60\n";
+      std::ofstream(fixture.stagingDirectory / greeter::appearance::kOutputTransformsFileName)
+          << kSyncedOutputTransforms;
+      std::ofstream(fixture.stagingDirectory / greeter::appearance::kOutputScalesFileName) << kSyncedOutputScales;
+      error.clear();
+      expect(
+          "subsequent appearance sync succeeds with output opt-out",
+          greeter::appearance::applySyncedGreeterPreferences(fixture.stagingDirectory, false, error), true, error,
+          passed
+      );
+      expect("synced palette loads with output opt-out", loadGreeterSyncedAppearance().has_value(), true, {}, passed);
+      expect(
+          "synced wallpaper loads with output opt-out", loadGreeterWallpaperAppearance().has_value(), true, {}, passed
+      );
+      greeter_compositor_config_load(fixture.runtimeDirectory.c_str(), &config);
+      expectOutputMappings("output opt-out after appearance sync", config, "", "", "", passed);
+      expect(
+          "client layout remains opted out after appearance sync", greeter::loadGreeterOutputLayout().empty(), true, {},
+          passed
+      );
+
+      auto preferences = greeter::loadGreeterPreferences();
+      preferences.session = "Niri";
+      expect("picker state saves with output opt-out", greeter::saveGreeterPreferences(preferences), true, {}, passed);
+      const auto stored = greeter::config::loadSync(fixture.runtimeDirectory / "sync.toml");
+      expect("synced layout remains stored", stored.outputLayout == "DP-1:50,60; DP-2:700,60", true, {}, passed);
+      expect("synced transforms remain stored", stored.outputTransforms == kSyncedOutputTransforms, true, {}, passed);
+      expect("synced scales remain stored", stored.outputScales == kSyncedOutputScales, true, {}, passed);
+
+      auto enabled = greeter::config::loadConfig(configPath);
+      enabled.outputUseSyncedSettings = true;
+      expect("output sync can be re-enabled", greeter::config::writeConfig(configPath, enabled), true, {}, passed);
+      greeter_compositor_config_load(fixture.runtimeDirectory.c_str(), &config);
+      expectOutputMappings(
+          "re-enabled output sync", config, "DP-1:50,60; DP-2:700,60", kSyncedOutputTransforms, kSyncedOutputScales,
+          passed
+      );
+      const auto placements = greeter::loadGreeterOutputLayout();
+      expect(
+          "re-enabled client layout", placements.size() == 2 && placements[0].x == 50 && placements[0].y == 60, true,
+          {}, passed
+      );
+    }
+
+    struct OutputStartupCase {
+      const char* name;
+      bool existingSync;
+      bool compositorFirst;
+    };
+    for (const auto& startup : std::array{
+             OutputStartupCase{"existing sync", true, true},
+             OutputStartupCase{"first compositor startup", false, true},
+             OutputStartupCase{"first client startup", false, false},
+         }) {
+      Fixture fixture(0700, 0600);
+      const auto configPath = fixture.runtimeDirectory / "greeter.toml";
+      std::ofstream(configPath) << R"toml(
+[appearance]
+scheme = "Synced"
+
+[output]
+use_synced_settings = false
+name = "DP-2"
+layout = "DP-1:10,20; DP-2:1800,20"
+transforms = "DP-1:normal; DP-2:180"
+scales = "DP-1:1.25; DP-2:1.5"
+scale = 1.5
+)toml";
+      const ScopedStateDirectory stateDirectory(fixture.runtimeDirectory);
+      if (startup.existingSync) {
+        expect(
+            "stage conflicting synced output mappings",
+            greeter::applyAppearanceSyncGreeterConf(
+                std::string(kSyncedOutputLayout), std::string(kSyncedOutputTransforms),
+                std::string(kSyncedOutputScales), std::nullopt
+            ),
+            true, startup.name, passed
+        );
+      }
+
+      greeter_compositor_config config{};
+      std::vector<greeter::GreeterOutputPlacement> placements;
+      if (startup.compositorFirst) {
+        greeter_compositor_config_load(fixture.runtimeDirectory.c_str(), &config);
+        placements = greeter::loadGreeterOutputLayout();
+      } else {
+        placements = greeter::loadGreeterOutputLayout();
+        greeter_compositor_config_load(fixture.runtimeDirectory.c_str(), &config);
+      }
+      expectOutputMappings(
+          startup.name, config, "DP-1:10,20; DP-2:1800,20", "DP-1:normal; DP-2:180", "DP-1:1.25; DP-2:1.5", passed
+      );
+      expect(
+          "declarative output pin applies", std::string_view(config.preferred_output) == "DP-2", true, startup.name,
+          passed
+      );
+      expect("declarative global scale applies", config.manual_scale == 1.5f, true, startup.name, passed);
+      expect(
+          "declarative client layout applies",
+          placements.size() == 2 && placements[0].x == 10 && placements[0].y == 20 && placements[1].x == 1800, true,
+          startup.name, passed
+      );
+
+      const auto preserved = greeter::config::loadConfig(configPath);
+      expect(
+          "output opt-out remains declarative", preserved.outputUseSyncedSettings == false, true, startup.name, passed
+      );
+      expect(
+          "manual layout remains declarative", preserved.outputLayout == "DP-1:10,20; DP-2:1800,20", true, startup.name,
+          passed
+      );
+      expect(
+          "manual transforms remain declarative", preserved.outputTransforms == "DP-1:normal; DP-2:180", true,
+          startup.name, passed
+      );
+      expect(
+          "manual scales remain declarative", preserved.outputScales == "DP-1:1.25; DP-2:1.5", true, startup.name,
+          passed
+      );
     }
 
     {
