@@ -71,4 +71,5 @@ private:
   bool m_pendingOutputSync = false;
   bool m_syncingOutputWindows = false;
   bool m_greetdUnavailable = false;
+  bool m_capsLockActive = false;
 };
