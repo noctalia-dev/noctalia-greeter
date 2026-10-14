@@ -1,5 +1,6 @@
 #include "greeter/greeter_sessions.h"
 
+#include <algorithm>
 #include <cctype>
 #include <cstdlib>
 #include <filesystem>
@@ -218,6 +219,11 @@ namespace greeter {
           }
       );
     }
+
+    std::ranges::sort(sessions, [](const SessionOption& a, const SessionOption& b) {
+      return sessionNameKey(a.name) < sessionNameKey(b.name);
+    });
+
     return sessions;
   }
 
