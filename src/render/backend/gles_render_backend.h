@@ -93,6 +93,9 @@ private:
   void ensureFullscreenTintProgram();
   // Reuses the two blur ping-pong targets; recreates them only when the size changes.
   [[nodiscard]] bool ensureBlurFramebuffers(std::uint32_t width, std::uint32_t height);
+  // Wallpaper node bounds in buffer pixels, as a bottom-up GL viewport (x, y, width, height).
+  [[nodiscard]] std::array<GLint, 4>
+  wallpaperViewport(float surfaceWidth, float surfaceHeight, float width, float height, const Mat3& transform) const;
 
   EGLDisplay m_display = EGL_NO_DISPLAY;
   EGLConfig m_config = nullptr;
