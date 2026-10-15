@@ -437,6 +437,7 @@ void GlesRenderBackend::drawWallpaper(
     float imageHeight2, float progress, float fillMode, const TransitionParams& params, const Color& fillColor,
     const Mat3& transform, const WallpaperSpanParams& span, float blurRadius, const Color& tintColor
 ) {
+  bool blurred = false;
   if (blurRadius > 0.0f) {
     const std::uint32_t targetWidth = m_bufferWidth > 0 ? m_bufferWidth : static_cast<std::uint32_t>(surfaceWidth);
     const std::uint32_t targetHeight = m_bufferHeight > 0 ? m_bufferHeight : static_cast<std::uint32_t>(surfaceHeight);
@@ -466,22 +467,24 @@ void GlesRenderBackend::drawWallpaper(
       bindDefaultFramebuffer();
       setViewport(targetWidth, targetHeight);
       drawFramebufferBlur(fb2->colorTexture(), fbWidth, fbHeight, 0.0f, 1.0f, blurRadius);
-
-      if (tintColor.a > 0.0f) {
-        setBlendMode(RenderBlendMode::StraightAlpha);
-        drawFullscreenTint(tintColor);
-        setBlendMode(RenderBlendMode::PremultipliedAlpha);
-      }
-      return;
+      blurred = true;
     }
   }
 
-  m_wallpaperProgram.ensureInitialized();
-  m_wallpaperProgram.draw(
-      transition, sourceKind1, texture1, sourceColor1, sourceKind2, texture2, sourceColor2, surfaceWidth, surfaceHeight,
-      width, height, imageWidth1, imageHeight1, imageWidth2, imageHeight2, progress, fillMode, params, fillColor,
-      transform, span
-  );
+  if (!blurred) {
+    m_wallpaperProgram.ensureInitialized();
+    m_wallpaperProgram.draw(
+        transition, sourceKind1, texture1, sourceColor1, sourceKind2, texture2, sourceColor2, surfaceWidth,
+        surfaceHeight, width, height, imageWidth1, imageHeight1, imageWidth2, imageHeight2, progress, fillMode, params,
+        fillColor, transform, span
+    );
+  }
+
+  if (tintColor.a > 0.0f) {
+    setBlendMode(RenderBlendMode::StraightAlpha);
+    drawFullscreenTint(tintColor);
+    setBlendMode(RenderBlendMode::PremultipliedAlpha);
+  }
 }
 
 void GlesRenderBackend::drawFullscreenTexture(TextureId texture, bool flipY) {
