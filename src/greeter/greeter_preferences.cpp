@@ -546,7 +546,8 @@ namespace greeter {
     }
 
     if (!config::writeSync(path, sync)) {
-      if (!std::filesystem::exists(path)) {
+      std::error_code ec;
+      if (!std::filesystem::exists(path, ec)) {
         kLog.warn(
             "cannot create {}; greetd user needs write access to {} (run: "
             "noctalia-greeter-apply-appearance --setup-system)",
