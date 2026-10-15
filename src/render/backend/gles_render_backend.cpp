@@ -444,11 +444,8 @@ void GlesRenderBackend::drawWallpaper(
     const std::uint32_t fbWidth = std::max(1u, targetWidth / 4);
     const std::uint32_t fbHeight = std::max(1u, targetHeight / 4);
 
-    auto fb1 = createFramebuffer(fbWidth, fbHeight);
-    auto fb2 = createFramebuffer(fbWidth, fbHeight);
-
-    if (fb1 != nullptr && fb2 != nullptr && fb1->valid() && fb2->valid()) {
-      bindFramebuffer(*fb1);
+    if (ensureBlurFramebuffers(fbWidth, fbHeight)) {
+      m_blurFramebuffers[0].bind();
       setViewport(fbWidth, fbHeight);
       clear(rgba(0.0f, 0.0f, 0.0f, 0.0f));
 
@@ -459,14 +456,13 @@ void GlesRenderBackend::drawWallpaper(
           params, fillColor, transform, span
       );
 
-      bindFramebuffer(*fb2);
-      setViewport(fbWidth, fbHeight);
+      m_blurFramebuffers[1].bind();
       clear(rgba(0.0f, 0.0f, 0.0f, 0.0f));
-      drawFramebufferBlur(fb1->colorTexture(), fbWidth, fbHeight, 1.0f, 0.0f, blurRadius);
+      drawFramebufferBlur(m_blurFramebuffers[0].colorTexture(), fbWidth, fbHeight, 1.0f, 0.0f, blurRadius);
 
       bindDefaultFramebuffer();
       setViewport(targetWidth, targetHeight);
-      drawFramebufferBlur(fb2->colorTexture(), fbWidth, fbHeight, 0.0f, 1.0f, blurRadius);
+      drawFramebufferBlur(m_blurFramebuffers[1].colorTexture(), fbWidth, fbHeight, 0.0f, 1.0f, blurRadius);
       blurred = true;
     }
   }
@@ -485,6 +481,18 @@ void GlesRenderBackend::drawWallpaper(
     drawFullscreenTint(tintColor);
     setBlendMode(RenderBlendMode::PremultipliedAlpha);
   }
+}
+
+bool GlesRenderBackend::ensureBlurFramebuffers(std::uint32_t width, std::uint32_t height) {
+  for (auto& framebuffer : m_blurFramebuffers) {
+    if (framebuffer.valid() && framebuffer.width() == width && framebuffer.height() == height) {
+      continue;
+    }
+    if (!framebuffer.create(m_textureManager, width, height)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 void GlesRenderBackend::drawFullscreenTexture(TextureId texture, bool flipY) {
@@ -550,6 +558,9 @@ void GlesRenderBackend::cleanup() {
   m_graphProgram.destroy();
   m_wallpaperProgram.destroy();
   m_blurProgram.destroy();
+  for (auto& framebuffer : m_blurFramebuffers) {
+    framebuffer.destroy();
+  }
   m_fullscreenTextureProgram.destroy();
   m_fullscreenTintProgram.destroy();
   m_textureManager.cleanup();
