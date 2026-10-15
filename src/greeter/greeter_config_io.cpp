@@ -1029,7 +1029,8 @@ namespace greeter::config {
     out << "# [session] default, [user] default\n";
     out << "# [appearance] scheme, password_style, hide_logo, power_buttons_position, scheme_selector_position, "
            "theme_mode, corner_radius_scale, font_family\n";
-    out << "# [appearance.palette] full color role table, [appearance.wallpaper] path/fill_mode/fill_color\n";
+    out << "# [appearance.palette] full color role table, [appearance.wallpaper] "
+           "path/fill_mode/fill_color/blur/tint\n";
     out << "# [appearance.wallpapers.<connector>] per-output wallpaper overrides\n";
     out << "# [output] name/use_synced_settings/layout/scale/scales/width/height/refresh_rate/transforms, "
            "[idle] timeout, [cursor] theme/size/path\n";
