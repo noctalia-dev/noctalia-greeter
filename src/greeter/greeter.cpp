@@ -317,6 +317,7 @@ void Greeter::syncOutputWindows() {
     view.surface->setOnGreetdTransportError([this](const GreetdError& error) { onGreetdTransportError(error); });
     view.surface->initialize(m_renderContext.get());
     view.surface->setSharedAuthBlocked(m_authSurface != nullptr);
+    view.surface->setCapsLockActive(m_capsLockActive);
     if (m_greetdUnavailable) {
       view.surface->setGreetdUnavailable("Login service is unavailable. Restart greetd.");
     }
@@ -556,6 +557,13 @@ void Greeter::setupInputCallbacks(WaylandClient& client) {
 
   client.setKeyboardEventCallback([this](const KeyboardEvent& event) {
     onKeyboardEvent(event.sym, event.utf32, event.modifiers, event.pressed, event.preedit);
+  });
+
+  client.setLockKeysChangedCallback([this](const WaylandSeat::LockKeysState& state) {
+    m_capsLockActive = state.capsLock;
+    for (auto& view : m_views) {
+      view.surface->setCapsLockActive(m_capsLockActive);
+    }
   });
 }
 
