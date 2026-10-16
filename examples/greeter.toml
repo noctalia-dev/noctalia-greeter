@@ -66,6 +66,9 @@ path = "/var/lib/noctalia-greeter/wallpaper.webp"
 fill_mode = "crop"
 # May also be used without path for a solid background.
 # fill_color = "#070722"
+# Background effects, 0.0 (off, default) to 1.0. tint uses the active scheme's surface color.
+# blur = 0.75
+# tint = 0.4
 
 # Optional per-connector wallpapers (overrides [appearance.wallpaper] for that output):
 # [appearance.wallpapers.DP-1]

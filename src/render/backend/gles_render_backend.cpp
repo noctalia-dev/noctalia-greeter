@@ -7,7 +7,10 @@
 #include "render/render_target.h"
 
 #include <GLES2/gl2.h>
+#include <algorithm>
+#include <array>
 #include <chrono>
+#include <cmath>
 #include <format>
 #include <stdexcept>
 #include <utility>
@@ -249,7 +252,10 @@ void GlesRenderBackend::makeCurrent(RenderTarget& target) {
 void GlesRenderBackend::beginFrame(RenderTarget& target) {
   makeCurrent(target);
 
-  setViewport(target.bufferWidth(), target.bufferHeight());
+  m_bufferWidth = target.bufferWidth();
+  m_bufferHeight = target.bufferHeight();
+
+  setViewport(m_bufferWidth, m_bufferHeight);
   setBlendMode(RenderBlendMode::PremultipliedAlpha);
   disableScissor();
   clear(rgba(0.0f, 0.0f, 0.0f, 0.0f));
@@ -432,14 +438,107 @@ void GlesRenderBackend::drawWallpaper(
     WallpaperSourceKind sourceKind2, TextureId texture2, const Color& sourceColor2, float surfaceWidth,
     float surfaceHeight, float width, float height, float imageWidth1, float imageHeight1, float imageWidth2,
     float imageHeight2, float progress, float fillMode, const TransitionParams& params, const Color& fillColor,
-    const Mat3& transform, const WallpaperSpanParams& span
+    const Mat3& transform, const WallpaperSpanParams& span, float blurRadius, const Color& tintColor
 ) {
-  m_wallpaperProgram.ensureInitialized();
-  m_wallpaperProgram.draw(
-      transition, sourceKind1, texture1, sourceColor1, sourceKind2, texture2, sourceColor2, surfaceWidth, surfaceHeight,
-      width, height, imageWidth1, imageHeight1, imageWidth2, imageHeight2, progress, fillMode, params, fillColor,
-      transform, span
-  );
+  const auto drawQuad = [&](float quadSurfaceWidth, float quadSurfaceHeight, const Mat3& quadTransform) {
+    m_wallpaperProgram.ensureInitialized();
+    m_wallpaperProgram.draw(
+        transition, sourceKind1, texture1, sourceColor1, sourceKind2, texture2, sourceColor2, quadSurfaceWidth,
+        quadSurfaceHeight, width, height, imageWidth1, imageHeight1, imageWidth2, imageHeight2, progress, fillMode,
+        params, fillColor, quadTransform, span
+    );
+  };
+
+  const bool wantsBlur = blurRadius > 0.0f;
+  const bool wantsTint = tintColor.a > 0.0f;
+  if ((!wantsBlur && !wantsTint) || width <= 0.0f || height <= 0.0f) {
+    drawQuad(surfaceWidth, surfaceHeight, transform);
+    return;
+  }
+
+  // Effects cover only the wallpaper's on-screen rect, so letterbox bars stay untouched.
+  const auto viewport = wallpaperViewport(surfaceWidth, surfaceHeight, width, height, transform);
+  const auto useWallpaperViewport = [&]() { glViewport(viewport[0], viewport[1], viewport[2], viewport[3]); };
+
+  bool blurred = false;
+  if (wantsBlur) {
+    const auto fbWidth = std::max<std::uint32_t>(1u, static_cast<std::uint32_t>(viewport[2]) / 4);
+    const auto fbHeight = std::max<std::uint32_t>(1u, static_cast<std::uint32_t>(viewport[3]) / 4);
+
+    if (ensureBlurFramebuffers(fbWidth, fbHeight)) {
+      const GLboolean scissorEnabled = glIsEnabled(GL_SCISSOR_TEST);
+      disableScissor();
+
+      // Render the wallpaper at its own size (identity transform) so the blur never samples outside it.
+      m_blurFramebuffers[0].bind();
+      setViewport(fbWidth, fbHeight);
+      clear(rgba(0.0f, 0.0f, 0.0f, 0.0f));
+      drawQuad(width, height, Mat3::identity());
+
+      m_blurFramebuffers[1].bind();
+      clear(rgba(0.0f, 0.0f, 0.0f, 0.0f));
+      drawFramebufferBlur(m_blurFramebuffers[0].colorTexture(), fbWidth, fbHeight, 1.0f, 0.0f, blurRadius);
+
+      bindDefaultFramebuffer();
+      if (scissorEnabled == GL_TRUE) {
+        glEnable(GL_SCISSOR_TEST);
+      }
+      useWallpaperViewport();
+      drawFramebufferBlur(m_blurFramebuffers[1].colorTexture(), fbWidth, fbHeight, 0.0f, 1.0f, blurRadius);
+      blurred = true;
+    }
+  }
+
+  if (!blurred) {
+    drawQuad(surfaceWidth, surfaceHeight, transform);
+  }
+
+  if (wantsTint) {
+    useWallpaperViewport();
+    setBlendMode(RenderBlendMode::StraightAlpha);
+    drawFullscreenTint(tintColor);
+    setBlendMode(RenderBlendMode::PremultipliedAlpha);
+  }
+  setViewport(m_bufferWidth, m_bufferHeight);
+}
+
+std::array<GLint, 4> GlesRenderBackend::wallpaperViewport(
+    float surfaceWidth, float surfaceHeight, float width, float height, const Mat3& transform
+) const {
+  const float scaleX = surfaceWidth > 0.0f ? static_cast<float>(m_bufferWidth) / surfaceWidth : 1.0f;
+  const float scaleY = surfaceHeight > 0.0f ? static_cast<float>(m_bufferHeight) / surfaceHeight : 1.0f;
+  const Vec2 corners[] = {
+      transform.transformPoint(0.0f, 0.0f), transform.transformPoint(width, 0.0f),
+      transform.transformPoint(0.0f, height), transform.transformPoint(width, height)
+  };
+  float left = corners[0].x;
+  float top = corners[0].y;
+  float right = corners[0].x;
+  float bottom = corners[0].y;
+  for (const auto& corner : corners) {
+    left = std::min(left, corner.x);
+    top = std::min(top, corner.y);
+    right = std::max(right, corner.x);
+    bottom = std::max(bottom, corner.y);
+  }
+  const auto x = static_cast<GLint>(std::lround(left * scaleX));
+  const auto w = static_cast<GLsizei>(std::lround(right * scaleX)) - x;
+  const auto yTop = static_cast<GLint>(std::lround(top * scaleY));
+  const auto h = static_cast<GLsizei>(std::lround(bottom * scaleY)) - yTop;
+  // GL viewports are bottom-up.
+  return {x, static_cast<GLint>(m_bufferHeight) - yTop - h, std::max(w, 1), std::max(h, 1)};
+}
+
+bool GlesRenderBackend::ensureBlurFramebuffers(std::uint32_t width, std::uint32_t height) {
+  for (auto& framebuffer : m_blurFramebuffers) {
+    if (framebuffer.valid() && framebuffer.width() == width && framebuffer.height() == height) {
+      continue;
+    }
+    if (!framebuffer.create(m_textureManager, width, height)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 void GlesRenderBackend::drawFullscreenTexture(TextureId texture, bool flipY) {
@@ -505,6 +604,9 @@ void GlesRenderBackend::cleanup() {
   m_graphProgram.destroy();
   m_wallpaperProgram.destroy();
   m_blurProgram.destroy();
+  for (auto& framebuffer : m_blurFramebuffers) {
+    framebuffer.destroy();
+  }
   m_fullscreenTextureProgram.destroy();
   m_fullscreenTintProgram.destroy();
   m_textureManager.cleanup();
