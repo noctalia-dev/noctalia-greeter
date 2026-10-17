@@ -48,6 +48,8 @@ public:
   void setBoundOutputName(std::string outputName);
   void setWallpaperSpanParams(const WallpaperSpanParams& params);
   void setGreetdClient(GreetdClient* client);
+  // Start PAM right away so pam_fprintd can scan without pressing Enter first.
+  void startFingerprintAuth();
   void setUsername(const std::string& username);
   void setOnExitRequested(std::function<void()> callback);
   void setOnStateChanged(std::function<void(GreeterSurface*)> callback);
@@ -262,6 +264,8 @@ private:
   bool m_authSessionStarted = false;
   bool m_secretPromptWaiting = false; // greetd wants secret input from the user
   bool m_hasPendingResponse = false;  // user-supplied input armed for next prompt
+  bool m_fingerprintAuth = false;     // session started without input; scanning fingerprint
+  bool m_restartFingerprintAfterCancel = false;
   std::string m_pendingResponse;
   std::deque<AuthRequest> m_pendingReplies;
   std::function<void()> m_onExitRequested;

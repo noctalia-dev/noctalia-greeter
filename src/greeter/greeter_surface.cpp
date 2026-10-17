@@ -753,6 +753,38 @@ void GreeterSurface::setWindow(GreeterWindow* window) { m_window = window; }
 
 void GreeterSurface::setGreetdClient(GreetdClient* client) { m_greetdClient = client; }
 
+void GreeterSurface::startFingerprintAuth() {
+  if (!m_allowEmptyPassword
+      || !m_passwordVisible
+      || m_username.empty()
+      || m_greetdClient == nullptr
+      || m_greetdUnavailable
+      || m_sharedAuthBlocked
+      || m_authSessionStarted
+      || awaitingReply()) {
+    return;
+  }
+  if (m_onAuthBeginRequested && !m_onAuthBeginRequested(this)) {
+    return;
+  }
+  // No armed response: the first secret prompt waits for typed input.
+  m_hasPendingResponse = false;
+  m_pendingResponse.clear();
+  m_authenticating = true;
+  kLog.info("greetd: create_session for '{}' (fingerprint)", m_username);
+  if (!m_greetdClient->requestCreateSession(m_username)) {
+    reportGreetdTransportError(
+        m_greetdClient->lastError().value_or(GreetdError{GreetdErrorType::Error, "failed to send request"})
+    );
+    return;
+  }
+  m_authSessionStarted = true;
+  m_fingerprintAuth = true;
+  m_pendingReplies.push_back(AuthRequest::CreateSession);
+  syncAuthInteractivity();
+  commitImmediateFrame(false);
+}
+
 void GreeterSurface::setUsername(const std::string& username) { m_username = username; }
 
 void GreeterSurface::setOnExitRequested(std::function<void()> callback) { m_onExitRequested = std::move(callback); }
@@ -1069,6 +1101,12 @@ void GreeterSurface::enterPasswordStep(std::size_t userIndex) {
     m_inputDispatcher.setFocus(m_passwordField->inputArea());
   }
   refreshSelectionLabels();
+  if (m_fingerprintAuth) {
+    m_restartFingerprintAfterCancel = resetAuthSession();
+    syncAuthInteractivity();
+  } else {
+    startFingerprintAuth();
+  }
   notifyStateChanged();
   commitImmediateFrame(true);
 }
@@ -1423,6 +1461,28 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
 }
 
 void GreeterSurface::tryAuthenticate() {
+  if (m_fingerprintAuth && m_greetdClient != nullptr && !m_greetdUnavailable && !m_sharedAuthBlocked) {
+    if (m_secretPromptWaiting) {
+      if (m_password.empty()) {
+        // Fingerprint scan gave up; Enter with an empty field scans again.
+        m_restartFingerprintAfterCancel = resetAuthSession();
+        syncAuthInteractivity();
+        commitImmediateFrame(false);
+        return;
+      }
+      postAuthResponse(m_password);
+    } else if (!m_password.empty()) {
+      // Still scanning: arm the password for PAM's prompt once the scan ends.
+      m_pendingResponse = m_password;
+      m_hasPendingResponse = true;
+      m_fingerprintAuth = false;
+      clearPasswordInput();
+      syncAuthInteractivity();
+      commitImmediateFrame(false);
+    }
+    return;
+  }
+
   // Ignore re-submits while a request is already in flight.
   if (m_greetdClient == nullptr || m_greetdUnavailable || m_sharedAuthBlocked || awaitingReply()) {
     return;
@@ -1487,6 +1547,12 @@ void GreeterSurface::handleGreetdResponse(const GreetdResponse& response) {
   const AuthRequest expected = m_pendingReplies.front();
   m_pendingReplies.pop_front();
 
+  // A cancel is queued behind this reply; the session it belongs to is gone.
+  if (expected != AuthRequest::Cancel
+      && std::find(m_pendingReplies.begin(), m_pendingReplies.end(), AuthRequest::Cancel) != m_pendingReplies.end()) {
+    return;
+  }
+
   const char* reqName = expected == AuthRequest::CreateSession ? "create_session"
       : expected == AuthRequest::PostAuthData                  ? "post_auth_data"
       : expected == AuthRequest::StartSession                  ? "start_session"
@@ -1500,6 +1566,10 @@ void GreeterSurface::handleGreetdResponse(const GreetdResponse& response) {
   if (expected == AuthRequest::Cancel) {
     if (m_onAuthEnded) {
       m_onAuthEnded(this);
+    }
+    if (m_restartFingerprintAfterCancel && m_pendingReplies.empty()) {
+      m_restartFingerprintAfterCancel = false;
+      startFingerprintAuth();
     }
     syncAuthInteractivity();
     commitImmediateFrame(false);
@@ -1583,13 +1653,14 @@ void GreeterSurface::postAuthResponse(const std::string& data) {
   }
   clearPasswordInput();
   m_secretPromptWaiting = false;
+  m_fingerprintAuth = false;
   m_pendingReplies.push_back(AuthRequest::PostAuthData);
   syncAuthInteractivity();
   commitImmediateFrame(false);
 }
 
 void GreeterSurface::syncAuthInteractivity() {
-  const bool busy = m_greetdUnavailable || m_sharedAuthBlocked || awaitingReply();
+  const bool busy = m_greetdUnavailable || m_sharedAuthBlocked || (awaitingReply() && !m_fingerprintAuth);
   if (m_passwordField != nullptr) {
     m_passwordField->setEnabled(!busy);
   }
@@ -1609,6 +1680,8 @@ void GreeterSurface::setSharedAuthBlocked(const bool blocked) {
 
 void GreeterSurface::setGreetdUnavailable(const std::string_view reason) {
   m_greetdUnavailable = true;
+  m_fingerprintAuth = false;
+  m_restartFingerprintAfterCancel = false;
   m_authenticating = false;
   m_authSessionStarted = false;
   m_secretPromptWaiting = false;
@@ -1623,6 +1696,8 @@ void GreeterSurface::setGreetdUnavailable(const std::string_view reason) {
 
 void GreeterSurface::beginSessionStart() {
   kLog.info("authentication successful");
+  m_fingerprintAuth = false;
+  syncAuthInteractivity();
 
   savePreferences();
 
@@ -1684,6 +1759,7 @@ void GreeterSurface::beginSessionStart() {
 }
 
 bool GreeterSurface::resetAuthSession() {
+  m_fingerprintAuth = false;
   if (m_greetdClient != nullptr && m_authSessionStarted) {
     if (!m_greetdClient->requestCancelSession()) {
       m_authSessionStarted = false;
@@ -1713,6 +1789,8 @@ void GreeterSurface::clearPasswordInput() {
 
 void GreeterSurface::onAuthError(const GreetdError& error) {
   m_authenticating = false;
+  m_fingerprintAuth = false;
+  m_restartFingerprintAfterCancel = false;
   m_secretPromptWaiting = false;
   m_hasPendingResponse = false;
   m_pendingResponse.clear();
@@ -2297,6 +2375,11 @@ void GreeterSurface::runBackAction() {
   m_passwordField->setValue("");
   m_password.clear();
   updateStatus("", false);
+  if (m_fingerprintAuth) {
+    m_restartFingerprintAfterCancel = false;
+    (void)resetAuthSession();
+    syncAuthInteractivity();
+  }
   if (m_userSelectArea != nullptr) {
     m_inputDispatcher.setFocus(m_userSelectArea);
   }

@@ -79,7 +79,7 @@ Set these keys in `greeter.toml`. A command-line `--session` or `--user` value t
 | `[idle].timeout` | Seconds before outputs blank; `0` disables |
 | `[cursor].theme` / `.size` / `.path` | Cursor theme |
 | `[keyboard].layout` / `.variant` / `.options` / `.numlock` | XKB keymap |
-| `[auth].allow_empty_password` | Permit an empty submission to start fprintd or smartcard PAM; this does not make password and fingerprint checks run in parallel |
+| `[auth].allow_empty_password` | Start PAM as soon as the password step appears, so fprintd or smartcard PAM can run without pressing Enter, and permit an empty submission; this does not make password and fingerprint checks run in parallel |
 | `[auth].request_timeout` | Seconds to wait for each greetd reply (`0`–`3600`, default `60`); `0` disables the watchdog |
 
 Display and input settings have task-oriented guides:
