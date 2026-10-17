@@ -90,6 +90,7 @@ public:
   void clearOutputViewport();
 
   [[nodiscard]] Node* sceneRoot() noexcept { return &m_root; }
+  [[nodiscard]] bool animating() const noexcept { return m_animations.hasActive(); }
 
 private:
   void notifyStateChanged();

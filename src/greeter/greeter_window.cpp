@@ -177,8 +177,8 @@ void GreeterWindow::renderNow() {
     return;
   }
 
-  paintFrame();
   requestNextFrame();
+  paintFrame();
 }
 
 void GreeterWindow::applySurfaceScale() {
@@ -255,7 +255,8 @@ void GreeterWindow::paintFrame() {
   }
 
   const bool needsLayout = m_layoutNeeded || m_greeterSurface.sceneRoot()->layoutDirty();
-  const bool needsRedraw = m_redrawNeeded || needsLayout || m_greeterSurface.sceneRoot()->paintDirty();
+  const bool needsRedraw =
+      m_redrawNeeded || needsLayout || m_greeterSurface.sceneRoot()->paintDirty() || m_greeterSurface.animating();
 
   if (!needsRedraw) {
     return;
@@ -304,13 +305,14 @@ void GreeterWindow::handleFrameDone(void* data, wl_callback* callback, std::uint
 
   const bool dirty = self->m_redrawNeeded
       || self->m_layoutNeeded
+      || self->m_greeterSurface.animating()
       || self->m_greeterSurface.sceneRoot()->paintDirty()
       || self->m_greeterSurface.sceneRoot()->layoutDirty();
+  // Request the next callback before committing, so it is attached to this frame and keeps animations running.
+  self->requestNextFrame();
   if (dirty) {
     self->paintFrame();
   }
-
-  self->requestNextFrame();
 }
 
 void GreeterWindow::applyConfigure(std::uint32_t width, std::uint32_t height) {

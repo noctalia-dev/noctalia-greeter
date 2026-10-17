@@ -15,6 +15,7 @@ public:
   void cancel(std::uint64_t id);
   void cancelForOwner(void* owner);
   void tick(float deltaMs);
+  [[nodiscard]] bool hasActive() const noexcept { return !m_animations.empty(); }
 
 private:
   std::vector<Animation> m_animations;
