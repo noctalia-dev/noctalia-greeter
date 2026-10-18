@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <functional>
 
+struct FrameDemand;
 class GlSharedContext;
 class GreeterSurface;
 class RenderContext;
@@ -63,6 +64,7 @@ private:
   void acknowledgeConfigure(std::uint32_t width, std::uint32_t height, std::uint32_t serial);
   bool ensureRenderTarget();
   void paintFrame();
+  [[nodiscard]] FrameDemand frameDemand();
   void requestNextFrame();
 
   WaylandClient& m_client;

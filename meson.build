@@ -160,6 +160,7 @@ _greeter_sources = files(
   'src/greetd/greetd_client.cpp',
   'src/greeter/appearance_sync.cpp',
   'src/greeter/appearance_config.cpp',
+  'src/greeter/frame_demand.cpp',
   'src/greeter/session_config.cpp',
   'src/greeter/greetd_user.cpp',
   'src/greeter/privileged_state_paths.cpp',
