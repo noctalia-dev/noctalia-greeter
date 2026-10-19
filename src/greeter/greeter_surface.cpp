@@ -173,12 +173,14 @@ namespace {
     return loweredUser.find(loweredQuery) != std::string::npos;
   }
 
-  [[nodiscard]] std::vector<std::size_t>
-  filterUserIndices(const std::vector<std::string>& users, std::string_view query) {
+  [[nodiscard]] std::vector<std::size_t> filterUserIndices(
+      const std::vector<std::string>& users, const std::vector<std::string>& displayNames, std::string_view query
+  ) {
     std::vector<std::size_t> indices;
     indices.reserve(users.size());
     for (std::size_t i = 0; i < users.size(); ++i) {
-      if (matchesUserFilter(users[i], query)) {
+      if (matchesUserFilter(users[i], query)
+          || (i < displayNames.size() && matchesUserFilter(displayNames[i], query))) {
         indices.push_back(i);
       }
     }
@@ -3231,7 +3233,7 @@ void GreeterSurface::refreshUserMenuRows() {
   }
 
   auto* renderer = m_renderContext;
-  m_userMenuFilteredIndices = filterUserIndices(m_users, m_userMenuSearchQuery);
+  m_userMenuFilteredIndices = filterUserIndices(m_users, m_userDisplayNames, m_userMenuSearchQuery);
 
   const float anchorX = m_userSelectBox->x();
   const float anchorW = m_userSelectBox->width();
