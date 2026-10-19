@@ -317,6 +317,21 @@ noctalia_greeter_compositor_executable = executable('noctalia-greeter-compositor
   install: true,
 )
 
+greetd_client_response_test = executable(
+  'greetd-client-response-test',
+  sources: files(
+    'tests/greetd_client_response_test.cpp',
+    'src/greetd/greetd_client.cpp',
+    'src/core/log.cpp',
+  ),
+  dependencies: [nlohmann_dep],
+  include_directories: include_directories('src'),
+  cpp_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow'],
+  build_by_default: false,
+)
+
+test('greetd-client-response', greetd_client_response_test)
+
 passwordless_sync_policy_xml_test = executable(
   'passwordless-sync-policy-xml-test',
   sources: files(

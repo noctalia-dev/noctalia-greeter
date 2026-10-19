@@ -93,7 +93,8 @@ public:
 
   // Write a request without waiting for its reply. False on write failure.
   bool requestCreateSession(const std::string& username);
-  bool requestPostAuthData(const std::string& data);
+  // nullopt acknowledges an informational message; an empty string answers a prompt.
+  bool requestPostAuthData(const std::optional<std::string>& data);
   bool requestStartSession(const GreetdSessionCommand& command);
   bool requestCancelSession();
 

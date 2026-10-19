@@ -1542,8 +1542,8 @@ void GreeterSurface::handleAuthMessage(const GreetdAuthMessage& message) {
     if (isError) {
       clearPasswordInput();
     }
-    // Ack with an empty response to resume PAM; paint now so the message shows.
-    if (!m_greetdClient->requestPostAuthData("")) {
+    // Ack without a credential to resume PAM; paint now so the message shows.
+    if (!m_greetdClient->requestPostAuthData(std::nullopt)) {
       reportGreetdTransportError(
           m_greetdClient->lastError().value_or(GreetdError{GreetdErrorType::Error, "failed to send request"})
       );

@@ -315,11 +315,11 @@ bool GreetdClient::requestCreateSession(const std::string& username) {
   return sendRequest(req.dump(), GreetdRequestType::CreateSession);
 }
 
-bool GreetdClient::requestPostAuthData(const std::string& data) {
+bool GreetdClient::requestPostAuthData(const std::optional<std::string>& data) {
   json req;
   req["type"] = "post_auth_message_response";
-  if (!data.empty()) {
-    req["response"] = data;
+  if (data.has_value()) {
+    req["response"] = *data;
   }
   return sendRequest(req.dump(), GreetdRequestType::PostAuthMessageResponse);
 }
