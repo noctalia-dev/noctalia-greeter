@@ -37,4 +37,10 @@ namespace KeySymbol {
   [[nodiscard]] inline bool isF3(std::uint32_t sym) noexcept { return sym == XKB_KEY_F3; }
 
   [[nodiscard]] inline bool isF7(std::uint32_t sym) noexcept { return sym == XKB_KEY_F7; }
+
+  [[nodiscard]] inline bool isBrightnessUp(std::uint32_t sym) noexcept { return sym == XKB_KEY_XF86MonBrightnessUp; }
+
+  [[nodiscard]] inline bool isBrightnessDown(std::uint32_t sym) noexcept {
+    return sym == XKB_KEY_XF86MonBrightnessDown;
+  }
 } // namespace KeySymbol

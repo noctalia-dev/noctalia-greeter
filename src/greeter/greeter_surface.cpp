@@ -7,6 +7,7 @@
 #include "core/resource_paths.h"
 #include "greeter/appearance_config.h"
 #include "greeter/appearance_sync.h"
+#include "greeter/brightness.h"
 #include "greeter/greeter_config_store.h"
 #include "greeter/greeter_preferences.h"
 #include "greeter/greeter_sessions.h"
@@ -3171,6 +3172,10 @@ void GreeterSurface::activateMenuHighlight() {
 }
 
 bool GreeterSurface::handleNavigationKey(std::uint32_t sym, std::uint32_t utf32, std::uint32_t modifiers) {
+  // Brightness keys are system controls and stay active during authentication.
+  if (brightness::handleKey(sym)) {
+    return true;
+  }
   if (m_authenticating) {
     return false;
   }
