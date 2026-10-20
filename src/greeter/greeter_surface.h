@@ -66,6 +66,7 @@ public:
   // Prevent this surface from starting a second conversation on the shared
   // greetd connection while another output owns authentication.
   void setSharedAuthBlocked(bool blocked);
+  void setCapsLockActive(bool active);
   // True while this surface is mid-conversation with greetd.
   [[nodiscard]] bool authInProgress() const noexcept { return m_authenticating; }
 
@@ -230,6 +231,8 @@ private:
   Button* m_loginButton = nullptr;
   Button* m_backButton = nullptr;
   Label* m_statusLabel = nullptr;
+  Glyph* m_capsLockGlyph = nullptr;
+  Label* m_capsLockLabel = nullptr;
   RectNode* m_configErrorBanner = nullptr;
   Label* m_configErrorHeading = nullptr;
   Label* m_configErrorLabel = nullptr;
@@ -260,6 +263,7 @@ private:
   bool m_authenticating = false;
   bool m_greetdUnavailable = false;
   bool m_sharedAuthBlocked = false;
+  bool m_capsLockActive = false;
   bool m_authSessionStarted = false;
   bool m_secretPromptWaiting = false; // greetd wants secret input from the user
   bool m_hasPendingResponse = false;  // user-supplied input armed for next prompt
