@@ -296,6 +296,7 @@ install_data(
 noctalia_greeter_compositor_executable = executable('noctalia-greeter-compositor',
   sources: files(
     'src/compositor/noctalia_compositor.c',
+    'src/compositor/output_layout_move.c',
     'src/compositor/system_keyboard_config.c',
     'src/config/output_identity.c',
     'src/core/log.cpp',
@@ -434,6 +435,20 @@ system_keyboard_config_test = executable(
 )
 
 test('system-keyboard-config', system_keyboard_config_test)
+
+output_layout_move_test = executable(
+  'output-layout-move-test',
+  sources: files(
+    'tests/output_layout_move_test.c',
+    'src/compositor/output_layout_move.c',
+  ),
+  dependencies: [wlroots_dep, wayland_server_dep, wayland_client_dep],
+  include_directories: include_directories('src'),
+  c_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-DWLR_USE_UNSTABLE'],
+  build_by_default: false,
+)
+
+test('output-layout-move', output_layout_move_test)
 
 output_identity_test = executable(
   'output-identity-test',

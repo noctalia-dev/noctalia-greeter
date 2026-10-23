@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 
+#include "compositor/output_layout_move.h"
 #include "compositor/system_keyboard_config.h"
 #include "config/output_identity.h"
 #include "greeter/greeter_config_io.h"
@@ -1542,17 +1543,12 @@ static void load_cursor_theme_for_scale(struct greeter_server* server, float sca
 static bool layout_output_at(struct greeter_output* output, int layout_x, int layout_y) {
   if (output->active) {
     struct greeter_server* server = output->server;
-    if (output->layout_output != NULL) {
-      wlr_output_layout_remove(server->output_layout, output->wlr_output);
-      output->layout_output = NULL;
-    }
-    output->layout_output = wlr_output_layout_add(server->output_layout, output->wlr_output, layout_x, layout_y);
-    if (output->layout_output == NULL) {
+    if (!output_layout_move(
+            server->output_layout, server->scene_output_layout, output->wlr_output, output->scene_output,
+            &output->layout_output, layout_x, layout_y
+        )) {
       wlr_log(WLR_ERROR, "failed to reposition output %s in layout", output->wlr_output->name);
       return false;
-    }
-    if (output->scene_output != NULL) {
-      wlr_scene_output_layout_add_output(server->scene_output_layout, output->layout_output, output->scene_output);
     }
     if (output->view != NULL && output->view->mapped) {
       configure_view(output->view);
