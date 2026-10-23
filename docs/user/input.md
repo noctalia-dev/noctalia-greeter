@@ -31,7 +31,12 @@ The greeter works without a mouse.
 | `Ctrl+←` / `Ctrl+→` | Move the cursor word-wise in a text field. In the password field, jump to the start or end |
 | `F3` | Open the session picker |
 | `F7` | Open the color scheme picker |
+| `XF86MonBrightnessUp` / `XF86MonBrightnessDown` | Raise or lower the screen brightness |
 | `Ctrl+Alt+F1`–`F12` | Switch to a virtual terminal (TTY) |
+
+The brightness keys adjust the backlight of the seat through logind's session
+API, so they work without extra privileges while the greeter is the foreground
+session. Machines without a backlight device ignore them.
 
 Long session and color scheme menus stay within the screen and show a scrollbar
 when their entries do not fit. Scroll with the mouse wheel over the menu, drag
