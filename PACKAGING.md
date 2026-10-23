@@ -93,6 +93,8 @@ Notes packagers hit often:
 - **libwebp** is required by the current Meson build for WebP wallpaper decoding.
 - **libjxl** is required for JPEG XL wallpaper decoding. It must provide both
   the `libjxl` and `libjxl_threads` pkg-config modules.
+- **tomlplusplus** is required to parse the greeter config file.
+- **nlohmann_json** is required to parse json for IPC.
 
 ### Vendored (no system package)
 
