@@ -5,6 +5,7 @@
 #include "core/key_symbols.h"
 #include "core/log.h"
 #include "core/resource_paths.h"
+#include "greetd/greetd_error_message.h"
 #include "greeter/appearance_config.h"
 #include "greeter/appearance_sync.h"
 #include "greeter/greeter_config_store.h"
@@ -1718,7 +1719,7 @@ void GreeterSurface::onAuthError(const GreetdError& error) {
   m_pendingResponse.clear();
   m_pendingReplies.clear();
   clearPasswordInput();
-  updateStatus(error.description, true);
+  updateStatus(greetdErrorMessage(error), true);
   kLog.warn("authentication failed: {}", error.description);
   if (!resetAuthSession()) {
     return;

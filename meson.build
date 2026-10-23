@@ -158,6 +158,7 @@ _greeter_sources = files(
   'src/ui/style.cpp',
   'src/accounts/accounts_icon.cpp',
   'src/greetd/greetd_client.cpp',
+  'src/greetd/greetd_error_message.cpp',
   'src/greeter/appearance_sync.cpp',
   'src/greeter/appearance_config.cpp',
   'src/greeter/session_config.cpp',
@@ -467,6 +468,16 @@ session_discovery_test = executable(
 )
 
 test('session-discovery', session_discovery_test)
+
+greetd_error_message_test = executable(
+  'greetd-error-message-test',
+  sources: files('tests/greetd_error_message_test.cpp', 'src/greetd/greetd_error_message.cpp'),
+  include_directories: include_directories('src'),
+  cpp_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow'],
+  build_by_default: false,
+)
+
+test('greetd-error-message', greetd_error_message_test)
 
 time_format_test = executable(
   'time-format-test',
