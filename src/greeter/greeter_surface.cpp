@@ -53,6 +53,8 @@ namespace {
   constexpr Logger kLog("greeter-surface");
   constexpr float kHeaderUserIconBase = 64.0f;
   constexpr float kHeaderAvatarBorderScale = 2.0f;
+  // Blur taps at quarter resolution; matches the shader's 40-tap cap.
+  constexpr float kWallpaperMaxBlurRadius = 40.0f;
 
   Button::ButtonStateColors
   makePaletteState(ColorRole bg, std::optional<ColorRole> border, ColorRole label, float alpha = 1.0f) {
@@ -1102,6 +1104,8 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
     m_wallpaper->setSize(sw, sh);
     m_wallpaper->setFillMode(m_wallpaperFillMode);
     m_wallpaper->setFillColor(m_wallpaperFillColor);
+    m_wallpaper->setBlurRadius(m_wallpaperBlur * kWallpaperMaxBlurRadius);
+    m_wallpaper->setTintColor(colorForRole(ColorRole::Surface, m_wallpaperTint));
   }
 
   m_backdrop->setPosition(ox, oy);
@@ -1923,6 +1927,8 @@ void GreeterSurface::clearWallpaperDisplay() {
   m_wallpaperPath.clear();
   m_wallpaperFillMode = WallpaperFillMode::Crop;
   m_wallpaperFillColor = rgba(0.0f, 0.0f, 0.0f, 0.0f);
+  m_wallpaperBlur = 0.0f;
+  m_wallpaperTint = 0.0f;
   m_wallpaperDirty = true;
 }
 
@@ -1941,6 +1947,8 @@ void GreeterSurface::applyConfiguredWallpaper() {
   m_wallpaperPath = wallpaper->path;
   m_wallpaperFillMode = wallpaper->fillMode;
   m_wallpaperFillColor = wallpaper->fillColor;
+  m_wallpaperBlur = wallpaper->blur;
+  m_wallpaperTint = wallpaper->tint;
   m_hasWallpaper = !m_wallpaperPath.empty() || m_wallpaperFillColor.a > 0.0f;
   m_wallpaperDirty = true;
 }

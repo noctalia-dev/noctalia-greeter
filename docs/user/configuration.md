@@ -62,7 +62,7 @@ Set these keys in `greeter.toml`. A command-line `--session` or `--user` value t
 | `[appearance].corner_radius_scale` | Corner-radius scale for the Synced appearance |
 | `[appearance].font_family` | Fontconfig family for the Synced appearance |
 | `[appearance.palette]` | Complete Synced palette; takes precedence over Sync appearance |
-| `[appearance.wallpaper]` | Default wallpaper `path`, `fill_mode`, and `fill_color`; `fill_color` also works without an image, and `fill_mode` accepts `center`, `crop`, `fit`, `stretch`, `repeat`, or `span` |
+| `[appearance.wallpaper]` | Default wallpaper `path`, `fill_mode`, `fill_color`, `blur`, and `tint`; `fill_color` also works without an image, `fill_mode` accepts `center`, `crop`, `fit`, `stretch`, `repeat`, or `span`, and `blur`/`tint` take an intensity from `0.0` (off, default) to `1.0` |
 | `[appearance.wallpapers.<connector>]` | Per-output wallpaper override using the same fill modes |
 | `[clock].enabled` | Show the clock; defaults to `true` |
 | `[clock].position` | `above-panel` (default), `top-left`, `top-center`, `top-right`, `bottom-left`, `bottom-center`, or `bottom-right` |

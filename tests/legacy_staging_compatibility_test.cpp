@@ -233,6 +233,36 @@ fill_mode = "center"
     {
       Fixture fixture(0700, 0600);
       std::ofstream(fixture.runtimeDirectory / "greeter.toml") << R"toml(
+[appearance.wallpaper]
+path = "/nix/store/example-wallpaper.png"
+blur = 0.75
+tint = 0.4
+
+[appearance.wallpapers.DP-1]
+blur = 0.0
+
+[appearance.wallpapers.DP-2]
+blur = 1.5
+)toml";
+
+      const ScopedStateDirectory stateDirectory(fixture.runtimeDirectory);
+      const auto appearance = loadGreeterWallpaperAppearance();
+      const auto wallpaper = appearance.has_value() ? appearance->wallpaperForOutput("") : std::nullopt;
+      expect("wallpaper blur loads", wallpaper.has_value() && wallpaper->blur == 0.75f, true, {}, passed);
+      expect("wallpaper tint loads", wallpaper.has_value() && wallpaper->tint == 0.4f, true, {}, passed);
+      const auto disabled = appearance.has_value() ? appearance->wallpaperForOutput("DP-1") : std::nullopt;
+      expect(
+          "per-output wallpaper blur can be disabled", disabled.has_value() && disabled->blur == 0.0f, true, {}, passed
+      );
+      const auto outOfRange = appearance.has_value() ? appearance->wallpaperForOutput("DP-2") : std::nullopt;
+      expect(
+          "out-of-range wallpaper blur is ignored", outOfRange.has_value() && outOfRange->blur == 0.0f, true, {}, passed
+      );
+    }
+
+    {
+      Fixture fixture(0700, 0600);
+      std::ofstream(fixture.runtimeDirectory / "greeter.toml") << R"toml(
 [appearance]
 scheme = "Noctalia"
 
