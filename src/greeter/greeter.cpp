@@ -141,6 +141,11 @@ bool Greeter::initialize(WaylandClient& client) {
   }
 
   kLog.info("greeter initialized ({} view(s))", m_views.size());
+
+  if (!m_views.empty()) {
+    GreeterSurface* surface = m_activeSurface != nullptr ? m_activeSurface : m_views.front().surface.get();
+    surface->startFingerprintAuth();
+  }
   return true;
 }
 
