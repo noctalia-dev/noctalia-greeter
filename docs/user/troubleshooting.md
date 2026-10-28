@@ -264,8 +264,11 @@ Choose the behavior that fits the system:
 - A custom Authselect profile can instead give `pam_fprintd` a shorter
   `timeout` or fewer `max-tries`, reducing the delay before password fallback.
 
-`[auth].allow_empty_password = true` only permits submitting an empty password
-field so fingerprint or smartcard PAM can start. It does not make fingerprint
+`[auth].allow_empty_password = true` starts PAM as soon as the password step
+appears, so a fingerprint can be scanned without pressing Enter first, and
+permits submitting an empty password field. A password submitted while the scan
+is running is queued for the password prompt. After the fingerprint module gives
+up, submitting an empty field starts a new scan. It does not make fingerprint
 and password authentication parallel. Keep `[auth].request_timeout` longer
 than the configured `pam_fprintd` timeout, or set it to `0`, so the greeter's
 watchdog does not expire before PAM reaches the password fallback.
