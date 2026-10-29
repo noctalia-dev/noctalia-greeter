@@ -15,6 +15,9 @@ struct GreeterOutputWallpaper {
   std::string path;
   WallpaperFillMode fillMode = WallpaperFillMode::Crop;
   Color fillColor = rgba(0.0f, 0.0f, 0.0f, 0.0f);
+  // Intensities in [0, 1]; 0 disables the effect.
+  float blur = 0.0f;
+  float tint = 0.0f;
 };
 
 struct GreeterWallpaperAppearance {

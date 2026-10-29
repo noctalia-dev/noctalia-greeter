@@ -278,6 +278,8 @@ private:
   std::string m_wallpaperPath;
   WallpaperFillMode m_wallpaperFillMode = WallpaperFillMode::Crop;
   Color m_wallpaperFillColor = rgba(0.0f, 0.0f, 0.0f, 0.0f);
+  float m_wallpaperBlur = 0.0f;
+  float m_wallpaperTint = 0.0f;
   WallpaperSpanParams m_wallpaperSpanParams;
   bool m_wallpaperDirty = false;
   bool m_hasWallpaper = false;
