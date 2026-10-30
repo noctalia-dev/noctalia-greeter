@@ -1627,6 +1627,17 @@ static void warp_cursor_to_initial_position(struct greeter_server* server) {
   }
 }
 
+// Sends the output's logical size and fractional scale to the view.
+static void send_output_geometry(struct greeter_view* view) {
+  int width = 0;
+  int height = 0;
+  wlr_output_effective_resolution(view->output->wlr_output, &width, &height);
+  if (width > 0 && height > 0) {
+    wlr_xdg_toplevel_set_size(view->toplevel, width, height);
+  }
+  notify_surface_scale(view->server, view->toplevel->base->surface, view->output);
+}
+
 static void configure_view(struct greeter_view* view) {
   if (view == NULL || !view->mapped || view->output == NULL || !view->output->active) {
     return;
@@ -1638,13 +1649,7 @@ static void configure_view(struct greeter_view* view) {
   wlr_output_layout_get_box(server->output_layout, output->wlr_output, &layout_box);
   wlr_scene_node_set_position(&view->scene_tree->node, layout_box.x, layout_box.y);
 
-  int width = 0;
-  int height = 0;
-  wlr_output_effective_resolution(output->wlr_output, &width, &height);
-  if (width > 0 && height > 0) {
-    wlr_xdg_toplevel_set_size(view->toplevel, width, height);
-  }
-  notify_surface_scale(server, view->toplevel->base->surface, output);
+  send_output_geometry(view);
   focus_view(view);
   schedule_output_frames(server);
 }
@@ -2306,6 +2311,11 @@ static void handle_xdg_commit(struct wl_listener* listener, void* data) {
   struct greeter_view* view = wl_container_of(listener, view, commit);
   struct wlr_xdg_surface* xdg = view->toplevel->base;
   if (xdg->initial_commit) {
+    // Size and scale the first configure, so the first frame already fits the
+    // output instead of being drawn at the integer wl_output scale and resized.
+    if (view->output != NULL && view->output->active) {
+      send_output_geometry(view);
+    }
     wlr_xdg_surface_schedule_configure(xdg);
     return;
   }
@@ -2453,6 +2463,9 @@ static void try_launch_greeter(void* data) {
   }
 
   warp_cursor_to_initial_position(server);
+  // Show the pointer only once it is centered, not at the layout origin while
+  // the outputs come up.
+  wlr_cursor_set_xcursor(server->cursor, server->cursor_mgr, "default");
 
   char** argv = child_argv(server->child_argc, server->child_argv_ptr);
   bool free_argv = server->child_argc <= 1 || (server->child_argc > 1 && strcmp(server->child_argv_ptr[1], "--") == 0);
@@ -2711,7 +2724,6 @@ int main(int argc, char** argv) {
 
   server.cursor_mgr = wlr_xcursor_manager_create(cursor_theme, cursor_size);
   wlr_cursor_attach_output_layout(server.cursor, server.output_layout);
-  wlr_cursor_set_xcursor(server.cursor, server.cursor_mgr, "default");
 
   server.new_output.notify = handle_new_output;
   wl_signal_add(&server.backend->events.new_output, &server.new_output);
