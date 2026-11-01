@@ -767,9 +767,6 @@ void GreeterSurface::startFingerprintAuth() {
   if (m_onAuthBeginRequested && !m_onAuthBeginRequested(this)) {
     return;
   }
-  // No armed response: the first secret prompt waits for typed input.
-  m_hasPendingResponse = false;
-  m_pendingResponse.clear();
   m_authenticating = true;
   kLog.info("greetd: create_session for '{}' (fingerprint)", m_username);
   if (!m_greetdClient->requestCreateSession(m_username)) {
@@ -1101,7 +1098,7 @@ void GreeterSurface::enterPasswordStep(std::size_t userIndex) {
     m_inputDispatcher.setFocus(m_passwordField->inputArea());
   }
   refreshSelectionLabels();
-  if (m_fingerprintAuth) {
+  if (authSessionLive()) {
     m_restartFingerprintAfterCancel = resetAuthSession();
     syncAuthInteractivity();
   } else {
@@ -1567,6 +1564,8 @@ void GreeterSurface::handleGreetdResponse(const GreetdResponse& response) {
     if (m_onAuthEnded) {
       m_onAuthEnded(this);
     }
+    // The conversation ended, unlock navigation. A restarting scan re-locks it.
+    m_authenticating = false;
     if (m_restartFingerprintAfterCancel && m_pendingReplies.empty()) {
       m_restartFingerprintAfterCancel = false;
       startFingerprintAuth();
@@ -1760,6 +1759,9 @@ void GreeterSurface::beginSessionStart() {
 
 bool GreeterSurface::resetAuthSession() {
   m_fingerprintAuth = false;
+  m_secretPromptWaiting = false;
+  m_hasPendingResponse = false;
+  m_pendingResponse.clear();
   if (m_greetdClient != nullptr && m_authSessionStarted) {
     if (!m_greetdClient->requestCancelSession()) {
       m_authSessionStarted = false;
@@ -2377,7 +2379,7 @@ void GreeterSurface::runBackAction() {
   m_passwordField->setValue("");
   m_password.clear();
   updateStatus("", false);
-  if (m_fingerprintAuth) {
+  if (authSessionLive()) {
     m_restartFingerprintAfterCancel = false;
     (void)resetAuthSession();
     syncAuthInteractivity();

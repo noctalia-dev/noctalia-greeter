@@ -255,6 +255,9 @@ private:
 
   [[nodiscard]] bool awaitingReply() const noexcept { return !m_pendingReplies.empty(); }
 
+  // Live conversation: session created or a reply (incl. cancel ack) outstanding.
+  [[nodiscard]] bool authSessionLive() const noexcept { return m_authSessionStarted || awaitingReply(); }
+
   std::string m_username;
   std::string m_password;
   std::string m_status;
