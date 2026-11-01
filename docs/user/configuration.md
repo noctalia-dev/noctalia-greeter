@@ -88,7 +88,8 @@ Set these keys in `greeter.toml`. A command-line `--session` or `--user` value t
 | `[pointer].accel_profile` | Libinput acceleration profile: `flat` (default) or `adaptive` |
 | `[pointer].accel_speed` | Libinput speed from `-1.0` to `1.0`; omitted leaves the device's speed unchanged |
 | `[keyboard].layout` / `.variant` / `.options` / `.numlock` | XKB keymap |
-| `[auth].allow_empty_password` | Start PAM as soon as the password step appears, so fprintd or smartcard PAM can run without pressing Enter, and permit an empty submission; this does not make password and fingerprint checks run in parallel |
+| `[auth].auto_start_pam` | Start PAM when the password step appears, so fprintd or smartcard runs without Enter; default `false` |
+| `[auth].allow_empty_password` | Permit an empty submission to reach PAM (passwordless, smartcard); fingerprint and password checks stay sequential |
 | `[auth].request_timeout` | Seconds to wait for each greetd reply (`0`–`3600`, default `60`); `0` disables the watchdog |
 
 Display and input settings have task-oriented guides:

@@ -246,6 +246,7 @@ private:
   bool m_canRebootToFirmware = false;
 
   bool m_allowEmptyPassword = false;
+  bool m_autoStartPam = false;
 
   // greetd replies in request order, so m_pendingReplies (a FIFO of these) tells
   // which request each reply answers.
@@ -274,7 +275,6 @@ private:
   bool m_hasPendingResponse = false;  // user-supplied input armed for next prompt
   bool m_fingerprintAuth = false;     // session started without input; scanning fingerprint
   bool m_restartFingerprintAfterCancel = false;
-  bool m_cancelPending = false; // cancel request while a reply was outstanding, sent once possible
   std::string m_pendingResponse;
   std::deque<AuthRequest> m_pendingReplies;
   std::function<void()> m_onExitRequested;
