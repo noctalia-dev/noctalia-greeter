@@ -352,6 +352,10 @@ void WaylandClient::setKeyboardEventCallback(WaylandSeat::KeyboardEventCallback 
   m_seatHandler.setKeyboardEventCallback(std::move(callback));
 }
 
+void WaylandClient::setLockKeysChangedCallback(WaylandSeat::LockKeysChangedCallback callback) {
+  m_seatHandler.setLockKeysChangedCallback(std::move(callback));
+}
+
 void WaylandClient::setOutputsChangedCallback(std::function<void()> callback) {
   m_outputsChangedCallback = std::move(callback);
 }

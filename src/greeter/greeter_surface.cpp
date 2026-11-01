@@ -529,6 +529,23 @@ void GreeterSurface::initialize(RenderContext* context) {
   m_statusLabel->setZIndex(6);
   m_root.addChild(std::move(status));
 
+  auto capsLockGlyph = std::make_unique<Glyph>();
+  capsLockGlyph->setGlyph("arrow-big-up-line");
+  capsLockGlyph->setGlyphSize(Style::fontSizeCaption());
+  capsLockGlyph->setHitTestVisible(false);
+  capsLockGlyph->setVisible(false);
+  m_capsLockGlyph = capsLockGlyph.get();
+  m_capsLockGlyph->setZIndex(6);
+  m_root.addChild(std::move(capsLockGlyph));
+
+  auto capsLockLabel = std::make_unique<Label>();
+  capsLockLabel->setText("Caps Lock is on");
+  capsLockLabel->setFontSize(Style::fontSizeCaption());
+  capsLockLabel->setVisible(false);
+  m_capsLockLabel = capsLockLabel.get();
+  m_capsLockLabel->setZIndex(6);
+  m_root.addChild(std::move(capsLockLabel));
+
   auto configErrorBanner = std::make_unique<RectNode>();
   configErrorBanner->setHitTestVisible(false);
   configErrorBanner->setVisible(false);
@@ -1052,6 +1069,8 @@ void GreeterSurface::syncScaledTypography() {
   m_loginButton->setGlyphSize(Style::fontSizeTitle());
   m_backButton->setGlyphSize(Style::fontSizeTitle());
   m_statusLabel->setFontSize(Style::fontSizeCaption());
+  m_capsLockGlyph->setGlyphSize(Style::fontSizeCaption());
+  m_capsLockLabel->setFontSize(Style::fontSizeCaption());
 }
 
 void GreeterSurface::enterPasswordStep(std::size_t userIndex) {
@@ -1177,9 +1196,11 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
 
   const float statusGap = Style::spaceSm();
   const float statusBlockHeight = hasStatus ? (statusGap + statusLineHeight) : 0.0f;
+  const bool showCapsLock = m_capsLockActive && m_passwordVisible;
+  const float capsLockBlockHeight = showCapsLock ? (statusGap + statusLineHeight) : 0.0f;
   const float panelTopPadding = panelPadding;
   const float panelBottomPadding = panelPadding;
-  const float panelInnerHeight = headerBlockHeight + contentBlockHeight + statusBlockHeight;
+  const float panelInnerHeight = headerBlockHeight + contentBlockHeight + capsLockBlockHeight + statusBlockHeight;
   const float minPanelHeight = 0.0f;
   const float maxPanelHeight = std::max(minPanelHeight, sh - panelPadding * 2.0f);
   const float panelHeight =
@@ -1208,6 +1229,8 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
         m_statusIsError ? colorForRole(ColorRole::Error) : colorForRole(ColorRole::OnSurfaceVariant)
     );
   }
+  m_capsLockGlyph->setColor(colorForRole(ColorRole::Primary));
+  m_capsLockLabel->setColor(colorForRole(ColorRole::Primary));
   if (m_configErrorBanner != nullptr && m_configErrorBanner->visible()) {
     constexpr float kBannerPadding = 14.0f;
     constexpr float kBannerMaxWidth = 960.0f;
@@ -1376,8 +1399,25 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
                                            : (contentTop + userBlockHeight + sessionRowGap);
   layoutPanelSessionSelector(contentLeft, sessionY, contentWidth, sessionRowH);
 
+  float statusY = contentTop + contentBlockHeight + statusGap;
+  m_capsLockGlyph->setVisible(showCapsLock);
+  m_capsLockLabel->setVisible(showCapsLock);
+  if (showCapsLock) {
+    (void)m_capsLockGlyph->measure(*renderer);
+    const auto glyphMetrics = renderer->measureGlyph(m_capsLockGlyph->codepoint(), m_capsLockGlyph->fontSize());
+    const float glyphW = glyphMetrics.right - glyphMetrics.left;
+    const float glyphY =
+        statusY + std::round(statusLineHeight * 0.5f - (glyphMetrics.top + glyphMetrics.bottom) * 0.5f);
+    m_capsLockGlyph->setPosition(contentLeft, glyphY);
+    m_capsLockLabel->measure(*renderer);
+    m_capsLockLabel->setPosition(
+        contentLeft + glyphW + Style::spaceSm(),
+        statusY + std::round((statusLineHeight - m_capsLockLabel->height()) * 0.5f)
+    );
+    statusY += capsLockBlockHeight;
+  }
+
   if (hasStatus) {
-    const float statusY = contentTop + contentBlockHeight + statusGap;
     m_statusLabel->setVisible(true);
     m_statusLabel->setPosition((contentLeft), (statusY));
   } else {
@@ -1605,6 +1645,14 @@ void GreeterSurface::setSharedAuthBlocked(const bool blocked) {
   m_sharedAuthBlocked = blocked;
   syncAuthInteractivity();
   commitImmediateFrame(false);
+}
+
+void GreeterSurface::setCapsLockActive(const bool active) {
+  if (m_capsLockActive == active) {
+    return;
+  }
+  m_capsLockActive = active;
+  requestLayout();
 }
 
 void GreeterSurface::setGreetdUnavailable(const std::string_view reason) {

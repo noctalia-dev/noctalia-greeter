@@ -26,7 +26,7 @@ greetd launches `noctalia-greeter-session`, which starts the bundled wlroots com
 | [Configuration](configuration.md) | Config-file precedence, remembered state, available keys, default user, and default session |
 | [Sync with Noctalia](sync.md) | Wallpapers, palette, monitor sync, Polkit, and passwordless authorization |
 | [Displays](displays.md) | Output selection, multi-monitor layout, modes, transforms, scale, and idle blanking |
-| [Keyboard and cursor](input.md) | Keyboard navigation, XKB layout, Num Lock, and cursor themes |
+| [Keyboard and cursor](input.md) | Keyboard navigation, XKB layout, Num Lock, Caps Lock hint, and cursor themes |
 | [Troubleshooting](troubleshooting.md) | Logs and fixes for startup, login, display, sync, and input problems |
 
 ## Requirements

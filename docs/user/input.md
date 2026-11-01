@@ -1,15 +1,16 @@
 ---
 title: Keyboard and cursor
-description: Configure keyboard navigation, XKB layouts, Num Lock, and cursor themes.
+description: Configure keyboard navigation, XKB layouts, Num Lock, the Caps Lock hint, and cursor themes.
 sidebar:
   order: 5
 ---
 
-Noctalia Greeter supports keyboard-only navigation and lets administrators configure the keyboard layout, Num Lock state, and cursor theme used on the login screen.
+Noctalia Greeter supports keyboard-only navigation and lets administrators configure the keyboard layout, Num Lock state, and cursor theme used on the login screen. It also shows a hint when Caps Lock is on.
 
 - [Keyboard controls](#keyboard-controls)
 - [Keyboard layout](#keyboard-layout)
 - [Num Lock](#num-lock)
+- [Caps Lock](#caps-lock)
 - [Cursor theme](#cursor-theme)
 - [NixOS](#nixos)
 
@@ -109,6 +110,12 @@ numlock = false
 ```
 
 This setting has no effect when the active keymap does not provide Num Lock.
+
+---
+
+## Caps Lock
+
+While Caps Lock is on, the password step shows a "Caps Lock is on" hint below the session selector. The hint follows the keyboard's Caps Lock state and disappears as soon as Caps Lock is turned off.
 
 ---
 
