@@ -767,7 +767,6 @@ void GreeterSurface::startFingerprintAuth() {
   if (m_onAuthBeginRequested && !m_onAuthBeginRequested(this)) {
     return;
   }
-  m_authenticating = true;
   kLog.info("greetd: create_session for '{}' (fingerprint)", m_username);
   if (!m_greetdClient->requestCreateSession(m_username)) {
     reportGreetdTransportError(
@@ -1544,9 +1543,13 @@ void GreeterSurface::handleGreetdResponse(const GreetdResponse& response) {
   const AuthRequest expected = m_pendingReplies.front();
   m_pendingReplies.pop_front();
 
-  // A cancel is queued behind this reply; the session it belongs to is gone.
-  if (expected != AuthRequest::Cancel
-      && std::find(m_pendingReplies.begin(), m_pendingReplies.end(), AuthRequest::Cancel) != m_pendingReplies.end()) {
+  // Conversation abandoned mid-reply, the client is idle, so send the deferred cancel.
+  if (m_cancelPending && expected != AuthRequest::Cancel) {
+    kLog.debug("greetd: dropping stale reply, sending deferred cancel");
+    m_cancelPending = false;
+    (void)resetAuthSession();
+    syncAuthInteractivity();
+    commitImmediateFrame(false);
     return;
   }
 
@@ -1566,6 +1569,7 @@ void GreeterSurface::handleGreetdResponse(const GreetdResponse& response) {
     }
     // The conversation ended, unlock navigation. A restarting scan re-locks it.
     m_authenticating = false;
+    m_cancelPending = false;
     if (m_restartFingerprintAfterCancel && m_pendingReplies.empty()) {
       m_restartFingerprintAfterCancel = false;
       startFingerprintAuth();
@@ -1681,6 +1685,7 @@ void GreeterSurface::setGreetdUnavailable(const std::string_view reason) {
   m_greetdUnavailable = true;
   m_fingerprintAuth = false;
   m_restartFingerprintAfterCancel = false;
+  m_cancelPending = false;
   m_authenticating = false;
   m_authSessionStarted = false;
   m_secretPromptWaiting = false;
@@ -1763,6 +1768,17 @@ bool GreeterSurface::resetAuthSession() {
   m_hasPendingResponse = false;
   m_pendingResponse.clear();
   if (m_greetdClient != nullptr && m_authSessionStarted) {
+    // Terminal handoff: start_session is in flight and the greeter is about to
+    // exit, so there is nothing to cancel and callers must not restart.
+    if (!m_pendingReplies.empty() && m_pendingReplies.front() == AuthRequest::StartSession) {
+      return false;
+    }
+    // A reply is still outstanding: greetd cannot accept a cancel yet. Record
+    // the intent; the next drained reply is answered with the cancel instead.
+    if (m_greetdClient->requestInFlight()) {
+      m_cancelPending = true;
+      return true;
+    }
     if (!m_greetdClient->requestCancelSession()) {
       m_authSessionStarted = false;
       reportGreetdTransportError(
@@ -1793,6 +1809,7 @@ void GreeterSurface::onAuthError(const GreetdError& error) {
   m_authenticating = false;
   m_fingerprintAuth = false;
   m_restartFingerprintAfterCancel = false;
+  m_cancelPending = false;
   m_secretPromptWaiting = false;
   m_hasPendingResponse = false;
   m_pendingResponse.clear();

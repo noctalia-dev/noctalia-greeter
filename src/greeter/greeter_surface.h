@@ -270,6 +270,7 @@ private:
   bool m_hasPendingResponse = false;  // user-supplied input armed for next prompt
   bool m_fingerprintAuth = false;     // session started without input; scanning fingerprint
   bool m_restartFingerprintAfterCancel = false;
+  bool m_cancelPending = false; // cancel request while a reply was outstanding, sent once possible
   std::string m_pendingResponse;
   std::deque<AuthRequest> m_pendingReplies;
   std::function<void()> m_onExitRequested;
