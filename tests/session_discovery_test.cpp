@@ -81,7 +81,7 @@ namespace {
 
   void testSessionArgv() {
     const greeter::SessionOption wayland{
-        .name = "Niri", .desktopId = "niri", .command = "niri", .desktopNames = "niri", .sessionType = "wayland",
+        .name = "Niri", .desktopId = "niri", .command = "niri", .desktopNames = "niri", .sessionType = "wayland"
     };
     expectArgv(greeter::sessionArgv(wayland), {"niri"}, "wayland session argv is unwrapped");
 
