@@ -81,12 +81,13 @@ namespace {
 
   void testSessionArgv() {
     const greeter::SessionOption wayland{
-        .name = "Niri", .command = "niri", .desktopNames = "niri", .sessionType = "wayland"
+        .name = "Niri", .desktopId = "niri", .command = "niri", .desktopNames = "niri", .sessionType = "wayland",
     };
     expectArgv(greeter::sessionArgv(wayland), {"niri"}, "wayland session argv is unwrapped");
 
     const greeter::SessionOption multiToken{
         .name = "GNOME",
+        .desktopId = "gnome-wayland",
         .command = "dbus-run-session gnome-session",
         .desktopNames = "GNOME",
         .sessionType = "wayland",
@@ -97,17 +98,17 @@ namespace {
     );
 
     const greeter::SessionOption x11{
-        .name = "Bspwm", .command = "/usr/bin/bspwm", .desktopNames = "bspwm", .sessionType = "x11"
+        .name = "Bspwm", .desktopId = "bspwm", .command = "/usr/bin/bspwm", .desktopNames = "bspwm", .sessionType = "x11"
     };
     expectArgv(
         greeter::sessionArgv(x11), {"noctalia-greeter-xsession", "/usr/bin/bspwm"},
         "x11 session argv is wrapped in noctalia-greeter-xsession"
     );
 
-    const greeter::SessionOption tty{.name = "Shell", .command = "/bin/sh", .desktopNames = {}, .sessionType = "tty"};
+    const greeter::SessionOption tty{.name = "Shell", .desktopId = {}, .command = "/bin/sh", .desktopNames = {}, .sessionType = "tty"};
     expectArgv(greeter::sessionArgv(tty), {"/bin/sh"}, "tty fallback session argv is unwrapped");
 
-    const greeter::SessionOption empty{.name = "Empty", .command = "  ", .desktopNames = {}, .sessionType = "wayland"};
+    const greeter::SessionOption empty{.name = "Empty", .desktopId = {}, .command = "  ", .desktopNames = {}, .sessionType = "wayland"};
     expect(greeter::sessionArgv(empty).empty(), "whitespace-only Exec= yields empty argv");
   }
 
