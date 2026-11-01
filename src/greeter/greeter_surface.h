@@ -243,6 +243,7 @@ private:
   bool m_canRebootToFirmware = false;
 
   bool m_allowEmptyPassword = false;
+  bool m_autoStartPam = false;
 
   // greetd replies in request order, so m_pendingReplies (a FIFO of these) tells
   // which request each reply answers.

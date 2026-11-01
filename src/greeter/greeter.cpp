@@ -405,6 +405,12 @@ void Greeter::syncOutputWindows() {
   }
   setActiveSurface(keyboardSurface);
 
+  // Late outputs: initialize's auto-start ran with no views. Retry once a
+  // password-step surface exists; the guards inside make this idempotent.
+  if (!m_initializing && m_activeSurface != nullptr) {
+    m_activeSurface->startFingerprintAuth();
+  }
+
   m_syncingOutputWindows = false;
   if (m_pendingOutputSync) {
     syncOutputWindows();

@@ -754,7 +754,7 @@ void GreeterSurface::setWindow(GreeterWindow* window) { m_window = window; }
 void GreeterSurface::setGreetdClient(GreetdClient* client) { m_greetdClient = client; }
 
 void GreeterSurface::startFingerprintAuth() {
-  if (!m_allowEmptyPassword
+  if (!m_autoStartPam
       || !m_passwordVisible
       || m_username.empty()
       || m_greetdClient == nullptr
@@ -1459,15 +1459,19 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
 void GreeterSurface::tryAuthenticate() {
   if (m_fingerprintAuth && m_greetdClient != nullptr && !m_greetdUnavailable && !m_sharedAuthBlocked) {
     if (m_secretPromptWaiting) {
-      if (m_password.empty()) {
-        // Fingerprint scan gave up; Enter with an empty field scans again.
-        m_restartFingerprintAfterCancel = resetAuthSession();
-        syncAuthInteractivity();
+      if (m_password.empty() && !m_allowEmptyPassword) {
+        updateStatus("Enter a password", true);
         commitImmediateFrame(false);
         return;
       }
+      // PAM wants a credential; an empty submit is a real answer for passwordless/smartcard.
       postAuthResponse(m_password);
-    } else if (!m_password.empty()) {
+    } else if (m_password.empty()) {
+      // Still scanning: Enter with an empty field restarts the scan.
+      m_restartFingerprintAfterCancel = resetAuthSession();
+      syncAuthInteractivity();
+      commitImmediateFrame(false);
+    } else {
       // Still scanning: arm the password for PAM's prompt once the scan ends.
       m_pendingResponse = m_password;
       m_hasPendingResponse = true;
@@ -2200,6 +2204,7 @@ void GreeterSurface::syncWallpaperTexture() {
 void GreeterSurface::loadPreferences() {
   const auto prefs = greeter::loadGreeterPreferences();
   m_allowEmptyPassword = prefs.allowEmptyPassword;
+  m_autoStartPam = prefs.autoStartPam;
   const auto initialSession = greeter::resolveInitialSessionName(prefs);
 
   if (initialSession.has_value()) {
