@@ -116,6 +116,16 @@ path = "/var/lib/noctalia-greeter/wallpaper-DP-2.webp"
 fill_mode = "crop"
 ```
 
+`blur` softens the wallpaper and `tint` lays the active scheme's surface color
+over it. Both take an intensity from `0.0` (off, the default) to `1.0`, can be
+set per connector, and work with every color scheme:
+
+```toml
+[appearance.wallpaper]
+blur = 0.75
+tint = 0.4
+```
+
 `span` treats all active greeter outputs as one logical desktop and gives each
 output the slice matching its configured position. It honors negative and
 staggered coordinates as well as the default side-by-side layout. On a pinned

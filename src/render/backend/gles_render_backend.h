@@ -1,5 +1,6 @@
 #pragma once
 
+#include "render/backend/gles_framebuffer.h"
 #include "render/backend/gles_texture_manager.h"
 #include "render/backend/render_backend.h"
 #include "render/core/shader_program.h"
@@ -15,6 +16,7 @@
 #include "render/programs/wallpaper_program.h"
 
 #include <EGL/egl.h>
+#include <array>
 
 class GlesRenderBackend final : public RenderBackend {
 public:
@@ -74,7 +76,7 @@ public:
       WallpaperSourceKind sourceKind2, TextureId texture2, const Color& sourceColor2, float surfaceWidth,
       float surfaceHeight, float width, float height, float imageWidth1, float imageHeight1, float imageWidth2,
       float imageHeight2, float progress, float fillMode, const TransitionParams& params, const Color& fillColor,
-      const Mat3& transform, const WallpaperSpanParams& span
+      const Mat3& transform, const WallpaperSpanParams& span, float blurRadius, const Color& tintColor
   ) override;
   void drawFullscreenTexture(TextureId texture, bool flipY) override;
   void drawFullscreenTint(Color color) override;
@@ -89,11 +91,18 @@ private:
   void drawFullscreenQuad(const ShaderProgram& program);
   void ensureFullscreenTextureProgram();
   void ensureFullscreenTintProgram();
+  // Reuses the two blur ping-pong targets; recreates them only when the size changes.
+  [[nodiscard]] bool ensureBlurFramebuffers(std::uint32_t width, std::uint32_t height);
+  // Wallpaper node bounds in buffer pixels, as a bottom-up GL viewport (x, y, width, height).
+  [[nodiscard]] std::array<GLint, 4>
+  wallpaperViewport(float surfaceWidth, float surfaceHeight, float width, float height, const Mat3& transform) const;
 
   EGLDisplay m_display = EGL_NO_DISPLAY;
   EGLConfig m_config = nullptr;
   EGLContext m_context = EGL_NO_CONTEXT;
   int m_maxTextureSize = 0;
+  std::uint32_t m_bufferWidth = 0;
+  std::uint32_t m_bufferHeight = 0;
   GlesTextureManager m_textureManager;
   RectProgram m_rectProgram;
   ImageProgram m_imageProgram;
@@ -107,4 +116,5 @@ private:
   BlurProgram m_blurProgram;
   ShaderProgram m_fullscreenTextureProgram;
   ShaderProgram m_fullscreenTintProgram;
+  std::array<GlesFramebuffer, 2> m_blurFramebuffers;
 };
