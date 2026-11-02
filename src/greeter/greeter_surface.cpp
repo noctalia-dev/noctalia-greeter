@@ -1100,6 +1100,10 @@ void GreeterSurface::enterPasswordStep(std::size_t userIndex) {
   refreshSelectionLabels();
   if (authSessionLive()) {
     m_restartFingerprintAfterCancel = resetAuthSession();
+    // The scan restarts only after the stale reply and cancel ack drain, show the wait now.
+    if (m_restartFingerprintAfterCancel && m_autoStartPam) {
+      updateStatus("Waiting for fingerprint reader...", false);
+    }
     syncAuthInteractivity();
   } else {
     startFingerprintAuth();
@@ -1470,6 +1474,10 @@ void GreeterSurface::tryAuthenticate() {
     } else if (m_password.empty()) {
       // Still scanning: Enter with an empty field restarts the scan.
       m_restartFingerprintAfterCancel = resetAuthSession();
+      // The scan restarts only after the stale reply and cancel ack drain, show the wait now.
+      if (m_restartFingerprintAfterCancel && m_autoStartPam) {
+        updateStatus("Waiting for fingerprint reader...", false);
+      }
       syncAuthInteractivity();
       commitImmediateFrame(false);
     } else {
