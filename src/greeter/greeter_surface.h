@@ -48,6 +48,8 @@ public:
   void setBoundOutputName(std::string outputName);
   void setWallpaperSpanParams(const WallpaperSpanParams& params);
   void setGreetdClient(GreetdClient* client);
+  // Start PAM right away so pam_fprintd can scan without pressing Enter first.
+  void startFingerprintAuth();
   void setUsername(const std::string& username);
   void setOnExitRequested(std::function<void()> callback);
   void setOnStateChanged(std::function<void(GreeterSurface*)> callback);
@@ -241,6 +243,7 @@ private:
   bool m_canRebootToFirmware = false;
 
   bool m_allowEmptyPassword = false;
+  bool m_autoStartPam = false;
 
   // greetd replies in request order, so m_pendingReplies (a FIFO of these) tells
   // which request each reply answers.
@@ -253,6 +256,14 @@ private:
 
   [[nodiscard]] bool awaitingReply() const noexcept { return !m_pendingReplies.empty(); }
 
+  // Live conversation: session created or a reply (incl. cancel ack) outstanding.
+  [[nodiscard]] bool authSessionLive() const noexcept { return m_authSessionStarted || awaitingReply(); }
+
+  // Cancel intended but not yet acked (deferred or queued); input stays live.
+  [[nodiscard]] bool cancelRequested() const noexcept {
+    return m_cancelPending || (!m_pendingReplies.empty() && m_pendingReplies.front() == AuthRequest::Cancel);
+  }
+
   std::string m_username;
   std::string m_password;
   std::string m_status;
@@ -263,6 +274,9 @@ private:
   bool m_authSessionStarted = false;
   bool m_secretPromptWaiting = false; // greetd wants secret input from the user
   bool m_hasPendingResponse = false;  // user-supplied input armed for next prompt
+  bool m_fingerprintAuth = false;     // session started without input; scanning fingerprint
+  bool m_restartFingerprintAfterCancel = false;
+  bool m_cancelPending = false; // cancel request while a reply was outstanding, sent once possible
   std::string m_pendingResponse;
   std::deque<AuthRequest> m_pendingReplies;
   std::function<void()> m_onExitRequested;

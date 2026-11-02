@@ -136,8 +136,10 @@ options = "grp:alt_shift_toggle"
 numlock = true
 
 [auth]
-# Allow an empty submit to start fprintd / smartcard PAM. Default false.
-# PAM remains serialized: this does not allow password input while pam_fprintd waits.
+# Start PAM when the password step appears so fprintd / smartcard runs without
+# pressing Enter; passwords typed during the scan are queued. Default false.
+auto_start_pam = false
+# Allow an empty submit to reach PAM (passwordless, smartcard). Default false.
 allow_empty_password = false
 # Seconds to wait for each greetd reply (0-3600). Keep this longer than any
 # fingerprint timeout; 0 disables the watchdog.

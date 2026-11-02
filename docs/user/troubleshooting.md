@@ -264,11 +264,19 @@ Choose the behavior that fits the system:
 - A custom Authselect profile can instead give `pam_fprintd` a shorter
   `timeout` or fewer `max-tries`, reducing the delay before password fallback.
 
-`[auth].allow_empty_password = true` only permits submitting an empty password
-field so fingerprint or smartcard PAM can start. It does not make fingerprint
-and password authentication parallel. Keep `[auth].request_timeout` longer
-than the configured `pam_fprintd` timeout, or set it to `0`, so the greeter's
-watchdog does not expire before PAM reaches the password fallback.
+`[auth].auto_start_pam = true` starts PAM when the password step appears, so a
+fingerprint can be scanned without pressing Enter. While the scan runs, a
+password is queued and an empty submit restarts it. When PAM asks for a
+credential, the submission goes to PAM as typed; `[auth].allow_empty_password`
+permits it to be empty (passwordless, smartcard). Neither key makes the two
+checks run in parallel. Keep `[auth].request_timeout` above the `pam_fprintd`
+timeout (or `0`) so the watchdog does not expire first.
+
+Cancelling a running attempt (Back, Esc, or switching users) while the reader
+is active can leave the reader busy until the PAM scan timeout, because greetd
+keeps the PAM worker alive until the module returns. The password step stays
+usable during that wait: submissions are queued and applied once the next
+attempt can start, and the status line shows what the greeter is waiting for.
 
 ### Wrong session is selected on startup
 
