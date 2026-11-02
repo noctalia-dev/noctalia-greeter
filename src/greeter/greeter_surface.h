@@ -259,6 +259,11 @@ private:
   // Live conversation: session created or a reply (incl. cancel ack) outstanding.
   [[nodiscard]] bool authSessionLive() const noexcept { return m_authSessionStarted || awaitingReply(); }
 
+  // Cancel intended but not yet acked (deferred or queued); input stays live.
+  [[nodiscard]] bool cancelRequested() const noexcept {
+    return m_cancelPending || (!m_pendingReplies.empty() && m_pendingReplies.front() == AuthRequest::Cancel);
+  }
+
   std::string m_username;
   std::string m_password;
   std::string m_status;
