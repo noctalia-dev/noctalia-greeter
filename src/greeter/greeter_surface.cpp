@@ -780,6 +780,7 @@ void GreeterSurface::startFingerprintAuth() {
   m_authSessionStarted = true;
   m_fingerprintAuth = true;
   m_pendingReplies.push_back(AuthRequest::CreateSession);
+  updateStatus("Waiting for fingerprint reader...", false);
   syncAuthInteractivity();
   commitImmediateFrame(false);
 }
@@ -1499,8 +1500,23 @@ void GreeterSurface::tryAuthenticate() {
     return;
   }
 
+  if (m_greetdClient == nullptr || m_greetdUnavailable || m_sharedAuthBlocked) {
+    return;
+  }
+  // greetd is lockstep: the next request goes out only after the cancel ack,
+  // so register the submit as intent instead of dropping it..
+  if (cancelRequested()) {
+    m_restartFingerprintAfterCancel = true;
+    if (!m_password.empty()) {
+      m_pendingResponse = m_password;
+      m_hasPendingResponse = true;
+    }
+    updateStatus("Canceling previous attempt...", false);
+    commitImmediateFrame(false);
+    return;
+  }
   // Ignore re-submits while a request is already in flight.
-  if (m_greetdClient == nullptr || m_greetdUnavailable || m_sharedAuthBlocked || awaitingReply()) {
+  if (awaitingReply()) {
     return;
   }
   if (m_username.empty()) {
@@ -1606,6 +1622,10 @@ void GreeterSurface::handleGreetdResponse(const GreetdResponse& response) {
     if (m_restartFingerprintAfterCancel && m_pendingReplies.empty()) {
       m_restartFingerprintAfterCancel = false;
       startFingerprintAuth();
+      // startFingerprintAuth no-op'd: honor input armed during the cancel window.
+      if (!m_fingerprintAuth && m_hasPendingResponse) {
+        tryAuthenticate();
+      }
     }
     syncAuthInteractivity();
     commitImmediateFrame(false);
@@ -1696,7 +1716,8 @@ void GreeterSurface::postAuthResponse(const std::string& data) {
 }
 
 void GreeterSurface::syncAuthInteractivity() {
-  const bool busy = m_greetdUnavailable || m_sharedAuthBlocked || (awaitingReply() && !m_fingerprintAuth);
+  const bool busy =
+      m_greetdUnavailable || m_sharedAuthBlocked || (awaitingReply() && !m_fingerprintAuth && !cancelRequested());
   if (m_passwordField != nullptr) {
     m_passwordField->setEnabled(!busy);
   }

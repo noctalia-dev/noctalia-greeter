@@ -292,6 +292,12 @@ permits it to be empty (passwordless, smartcard). Neither key makes the two
 checks run in parallel. Keep `[auth].request_timeout` above the `pam_fprintd`
 timeout (or `0`) so the watchdog does not expire first.
 
+Cancelling a running attempt (Back, Esc, or switching users) while the reader
+is active can leave the reader busy until the PAM scan timeout, because greetd
+keeps the PAM worker alive until the module returns. The password step stays
+usable during that wait: submissions are queued and applied once the next
+attempt can start, and the status line shows what the greeter is waiting for.
+
 ### Wrong session is selected on startup
 
 Use the desktop entry's **`Name=`** value from `noctalia-greeter sessions`, or its `.desktop` filename without the extension. A `Name=` match wins if both apply. Command-line `--session` takes precedence over `[session].default`, which takes precedence over the last-used `[session].last` value in `sync.toml`.
