@@ -1035,6 +1035,18 @@ namespace greeter::config {
     }
   }
 
+  bool canRewriteLegacyConfig(const std::filesystem::path& path) {
+    struct stat info{};
+    if (::stat(path.c_str(), &info) != 0 || !S_ISREG(info.st_mode)) {
+      return false;
+    }
+    // Treat explicitly read-only defaults as immutable even when invoked as root.
+    if ((info.st_mode & (S_IWUSR | S_IWGRP | S_IWOTH)) == 0) {
+      return false;
+    }
+    return ::faccessat(AT_FDCWD, path.c_str(), W_OK, AT_EACCESS) == 0;
+  }
+
   bool writeConfig(const std::filesystem::path& path, const GreeterConfigFile& config) {
     std::error_code ec;
     std::filesystem::create_directories(path.parent_path(), ec);
@@ -1173,6 +1185,12 @@ namespace {
     }
 
     if (hasRuntime) {
+      if (!greeter::config::canRewriteLegacyConfig(confPath)) {
+        kLog.info(
+            "migrated runtime keys into {}; leaving read-only {} unchanged", syncPath.string(), confPath.string()
+        );
+        return;
+      }
       conf.sessionLast.reset();
       conf.appearanceScheme.reset();
       if (migrateOutputs) {

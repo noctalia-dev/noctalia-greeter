@@ -55,5 +55,7 @@ jobs:
       - name: Build
         run: meson compile -C build-debug
 
-      - name: Test JPEG XL decoder, frame loop, and greetd responses
-        run: meson test -C build-debug jxl-decoder greeter-frame-loop greetd-client-response --print-errorlogs
+      - name: Test decoding, frame loop, greetd responses, and configuration
+        run: |
+          meson test -C build-debug jxl-decoder greeter-frame-loop \
+            greetd-client-response legacy-staging-compatibility --print-errorlogs

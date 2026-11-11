@@ -277,6 +277,12 @@ namespace {
     }
 
     if (hasRuntime) {
+      if (!greeter::config::canRewriteLegacyConfig(confPath)) {
+        kLog.info(
+            "migrated runtime keys into {}; leaving read-only {} unchanged", syncPath.string(), confPath.string()
+        );
+        return;
+      }
       conf.sessionLast.reset();
       conf.appearanceScheme.reset();
       if (migrateOutputs) {

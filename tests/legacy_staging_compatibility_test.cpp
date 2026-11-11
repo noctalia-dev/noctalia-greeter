@@ -7,11 +7,13 @@
 #include <algorithm>
 #include <array>
 #include <cerrno>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <limits>
 #include <optional>
 #include <stdexcept>
@@ -97,6 +99,44 @@ namespace {
   private:
     std::optional<std::string> previous;
   };
+
+  class ScopedStderrCapture {
+  public:
+    explicit ScopedStderrCapture(const std::filesystem::path& path) {
+      std::fflush(stderr);
+      originalFd = ::dup(STDERR_FILENO);
+      if (originalFd < 0) {
+        throw std::runtime_error("failed to duplicate stderr");
+      }
+      file = std::fopen(path.c_str(), "w");
+      if (file == nullptr || ::dup2(::fileno(file), STDERR_FILENO) < 0) {
+        if (file != nullptr) {
+          std::fclose(file);
+        }
+        ::close(originalFd);
+        throw std::runtime_error("failed to capture stderr");
+      }
+    }
+
+    ~ScopedStderrCapture() {
+      std::fflush(stderr);
+      ::dup2(originalFd, STDERR_FILENO);
+      ::close(originalFd);
+      std::fclose(file);
+    }
+
+    ScopedStderrCapture(const ScopedStderrCapture&) = delete;
+    ScopedStderrCapture& operator=(const ScopedStderrCapture&) = delete;
+
+  private:
+    int originalFd = -1;
+    FILE* file = nullptr;
+  };
+
+  std::string readFile(const std::filesystem::path& path) {
+    std::ifstream file(path, std::ios::binary);
+    return {std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
+  }
 
   [[nodiscard]] bool validate(
       const Fixture& fixture, const std::filesystem::path& stagingDirectory, const std::optional<uid_t> invokingUid,
@@ -190,6 +230,100 @@ on_hover = "#161616"
 )toml";
   }
 
+  void testConfigMigration(bool& passed) {
+    struct ConfigCase {
+      const char* name;
+      bool symlink;
+      bool readOnly;
+    };
+    for (const bool compositorFirst : {true, false}) {
+      for (const auto& configCase : std::array{
+               ConfigCase{"read-only symlink", true, true},
+               ConfigCase{"read-only regular file", false, true},
+               ConfigCase{"writable legacy file", false, false},
+               ConfigCase{"writable legacy symlink", true, false},
+           }) {
+        Fixture fixture(0700, 0600);
+        const auto configPath = fixture.runtimeDirectory / "greeter.toml";
+        const auto targetPath = configCase.symlink ? fixture.runtimeParent / "declarative.toml" : configPath;
+        constexpr std::string_view original = R"toml(# Preserve declarative defaults and comments.
+[session]
+last = "Niri"
+
+[appearance]
+scheme = "Synced"
+
+[keyboard]
+layout = "us"
+
+[output]
+layout = "DP-1:0,0; DP-2:1280,0"
+transforms = "DP-1:90; DP-2:normal"
+scales = "DP-1:2; DP-2:1.25"
+)toml";
+        std::ofstream(targetPath) << original;
+        Fixture::chmodOrThrow(targetPath, configCase.readOnly ? 0444 : 0644);
+        if (configCase.symlink) {
+          std::filesystem::create_symlink(targetPath, configPath);
+        }
+        const ScopedStateDirectory stateDirectory(fixture.runtimeDirectory);
+        const auto logPath = fixture.runtimeDirectory / "migration.log";
+        const std::string name = std::string(compositorFirst ? "compositor " : "client ") + configCase.name;
+        {
+          const ScopedStderrCapture capture(logPath);
+          if (compositorFirst) {
+            greeter_compositor_config config{};
+            greeter_compositor_config_load(fixture.runtimeDirectory.c_str(), &config);
+          } else {
+            (void)greeter::loadGreeterPreferences();
+          }
+        }
+        const std::string log = readFile(logPath);
+        expect(name + " has no migration warnings", log.find("[WRN]") == std::string::npos, true, log, passed);
+        const auto syncPath = fixture.runtimeDirectory / "sync.toml";
+        expect(name + " creates sync.toml", std::filesystem::is_regular_file(syncPath), true, {}, passed);
+        const auto sync = greeter::config::loadSync(syncPath);
+        expect(name + " migrates last session", sync.sessionLast == "Niri", true, {}, passed);
+        expect(name + " migrates scheme", sync.appearanceScheme == "Synced", true, {}, passed);
+        expect(name + " migrates layout", sync.outputLayout == kSyncedOutputLayout, true, {}, passed);
+        expect(name + " migrates transforms", sync.outputTransforms == kSyncedOutputTransforms, true, {}, passed);
+        expect(name + " migrates scales", sync.outputScales == kSyncedOutputScales, true, {}, passed);
+        const auto config = greeter::config::loadConfig(configPath);
+        expect(name + " keeps keyboard defaults", config.keyboardLayout == "us", true, {}, passed);
+        if (configCase.readOnly) {
+          expect(name + " preserves config bytes", readFile(configPath) == original, true, {}, passed);
+          expect(name + " preserves target bytes", readFile(targetPath) == original, true, {}, passed);
+          expect(
+              name + " preserves read-only permissions",
+              (std::filesystem::status(targetPath).permissions() & std::filesystem::perms::mask)
+                  == (std::filesystem::perms::owner_read
+                      | std::filesystem::perms::group_read
+                      | std::filesystem::perms::others_read),
+              true, {}, passed
+          );
+        } else {
+          expect(name + " strips legacy last session", !config.sessionLast.has_value(), true, {}, passed);
+          expect(name + " strips legacy scheme", !config.appearanceScheme.has_value(), true, {}, passed);
+          expect(name + " strips legacy layout", !config.outputLayout.has_value(), true, {}, passed);
+        }
+        if (configCase.symlink) {
+          expect(name + " preserves symlink", std::filesystem::is_symlink(configPath), true, {}, passed);
+          expect(
+              name + " preserves link target", std::filesystem::read_symlink(configPath) == targetPath, true, {}, passed
+          );
+        }
+        const auto preferences = greeter::loadGreeterPreferences();
+        expect(name + " loads migrated session", preferences.session == "Niri", true, {}, passed);
+        expect(name + " loads scheme", preferences.scheme == "Synced", true, {}, passed);
+        greeter_compositor_config compositorConfig{};
+        greeter_compositor_config_load(fixture.runtimeDirectory.c_str(), &compositorConfig);
+        expectOutputMappings(
+            name, compositorConfig, kSyncedOutputLayout, kSyncedOutputTransforms, kSyncedOutputScales, passed
+        );
+      }
+    }
+  }
+
 } // namespace
 
 int main() {
@@ -197,6 +331,10 @@ int main() {
   std::string error;
 
   try {
+    if (::setenv("NOCTALIA_GREETER_LOG", "stderr", 1) != 0) {
+      throw std::runtime_error("failed to set test logging");
+    }
+    testConfigMigration(passed);
     expectFillMode("center fill mode", "center", WallpaperFillMode::Center, passed);
     expectFillMode("crop fill mode", "crop", WallpaperFillMode::Crop, passed);
     expectFillMode("fit fill mode", "fit", WallpaperFillMode::Fit, passed);
