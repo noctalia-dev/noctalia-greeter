@@ -9,7 +9,7 @@ trap 'rm -rf "$test_dir"' EXIT INT TERM
 mkdir "$test_dir/runtime" "$test_dir/state"
 chmod 700 "$test_dir/runtime"
 
-for stage in credential-pending create-pending create-info prompt-waiting cancel-reselect old-error old-info error-cancel-pending cancel-error same-output idle-switch handoff; do
+for stage in credential-pending create-pending create-info prompt-waiting cancel-reselect reselect-before-ack old-error old-info error-cancel-pending cancel-error same-output idle-switch handoff; do
   if ! env \
     XDG_RUNTIME_DIR="$test_dir/runtime" \
     NOCTALIA_GREETER_STATE_DIR="$test_dir/state" \

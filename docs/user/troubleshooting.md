@@ -249,9 +249,9 @@ greetd did not answer a request before the watchdog expired. Inspect the greetd 
 After Back or an account change on any monitor, the greeter cancels the previous
 account's authentication before accepting another password. If PAM is still
 waiting on a device, cancellation waits for its pending reply. The new account
-can be selected during this wait, but password entry stays disabled until
-greetd confirms cancellation. Passwords and replies from the previous account
-are discarded.
+can be selected during this wait, but password entry stays usable: submissions 
+are queued and applied once greetd confirms cancellation. Passwords and replies
+from the previous account are discarded.
 
 If cancellation fails or greetd stops responding, the greeter disables login
 and asks for a greetd restart. Check the greetd journal for the underlying PAM
@@ -284,11 +284,19 @@ Choose the behavior that fits the system:
 - A custom Authselect profile can instead give `pam_fprintd` a shorter
   `timeout` or fewer `max-tries`, reducing the delay before password fallback.
 
-`[auth].allow_empty_password = true` only permits submitting an empty password
-field so fingerprint or smartcard PAM can start. It does not make fingerprint
-and password authentication parallel. Keep `[auth].request_timeout` longer
-than the configured `pam_fprintd` timeout, or set it to `0`, so the greeter's
-watchdog does not expire before PAM reaches the password fallback.
+`[auth].auto_start_pam = true` starts PAM when the password step appears, so a
+fingerprint can be scanned without pressing Enter. While the scan runs, a
+password is queued and an empty submit restarts it. When PAM asks for a
+credential, the submission goes to PAM as typed; `[auth].allow_empty_password`
+permits it to be empty (passwordless, smartcard). Neither key makes the two
+checks run in parallel. Keep `[auth].request_timeout` above the `pam_fprintd`
+timeout (or `0`) so the watchdog does not expire first.
+
+Cancelling a running attempt (Back, Esc, or switching users) while the reader
+is active can leave the reader busy until the PAM scan timeout, because greetd
+keeps the PAM worker alive until the module returns. The password step stays
+usable during that wait: submissions are queued and applied once the next
+attempt can start, and the status line shows what the greeter is waiting for.
 
 ### Wrong session is selected on startup
 
