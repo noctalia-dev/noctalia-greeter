@@ -14,7 +14,6 @@ cpp = meson.get_compiler('cpp')
 
 if get_option('buildtype') == 'release'
   add_project_arguments(
-    '-march=native', '-mtune=native',
     '-fomit-frame-pointer', '-ffunction-sections', '-fdata-sections',
     language: ['c', 'cpp'],
   )
@@ -22,6 +21,10 @@ if get_option('buildtype') == 'release'
     '-Wl,--gc-sections', '-Wl,--as-needed',
     language: ['c', 'cpp'],
   )
+endif
+
+if get_option('native_optimizations')
+  add_project_arguments('-march=native', '-mtune=native', language: ['c', 'cpp'])
 endif
 
 wayland_client_dep = dependency('wayland-client')
