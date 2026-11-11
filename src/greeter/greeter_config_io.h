@@ -19,6 +19,9 @@ struct greeter_compositor_config {
   char cursor_theme[128];
   int cursor_size;
   char cursor_path[512];
+  char pointer_accel_profile[16];
+  int pointer_accel_speed_set;
+  double pointer_accel_speed;
   char keyboard_layout[128];
   char keyboard_variant[128];
   char keyboard_options[256];

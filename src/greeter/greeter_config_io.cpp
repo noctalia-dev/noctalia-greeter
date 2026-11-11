@@ -48,6 +48,7 @@ namespace {
         || key == "appearance"
         || key == "output"
         || key == "cursor"
+        || key == "pointer"
         || key == "keyboard"
         || key == "auth"
         || key == "idle"
@@ -417,6 +418,24 @@ namespace {
           } else {
             kLog.warn("{}: invalid cursor.size value", path.string());
           }
+        } else if (keyView == "pointer") {
+          if (entryView == "accel_profile") {
+            const auto profile = stringValue(entryNode);
+            if (profile.has_value() && (*profile == "flat" || *profile == "adaptive")) {
+              config.pointerAccelProfile = *profile;
+            } else {
+              kLog.warn("{}: invalid pointer.accel_profile (expected flat or adaptive)", path.string());
+            }
+          } else if (entryView == "accel_speed") {
+            const auto speed = entryNode.value<double>();
+            if (speed.has_value() && std::isfinite(*speed) && *speed >= -1.0 && *speed <= 1.0) {
+              config.pointerAccelSpeed = *speed;
+            } else {
+              kLog.warn("{}: invalid pointer.accel_speed (expected a number from -1 to 1)", path.string());
+            }
+          } else {
+            warnUnknownSectionKey(path, keyView, entryView);
+          }
         } else if (keyView == "keyboard") {
           if (!isKnownKeyboardKey(entryView)) {
             warnUnknownSectionKey(path, keyView, entryView);
@@ -695,6 +714,20 @@ namespace {
     );
     if (!cursor.empty()) {
       root.insert("cursor", std::move(cursor));
+    }
+
+    toml::table pointer;
+    insertString(
+        pointer, "accel_profile", config.pointerAccelProfile,
+        [](toml::table& table, std::string_view key, const std::string& value) {
+          table.insert_or_assign(std::string(key), value);
+        }
+    );
+    if (config.pointerAccelSpeed.has_value()) {
+      pointer.insert_or_assign("accel_speed", *config.pointerAccelSpeed);
+    }
+    if (!pointer.empty()) {
+      root.insert("pointer", std::move(pointer));
     }
 
     toml::table keyboard;
@@ -1059,7 +1092,7 @@ namespace greeter::config {
     out << "# [appearance.wallpapers.<connector>] per-output wallpaper overrides\n";
     out << "# [output] name/use_synced_settings/layout/scale/scales/width/height/refresh_rate/transforms, "
            "[idle] timeout, [cursor] theme/size/path\n";
-    out << "# [keyboard] layout/variant/options/numlock\n";
+    out << "# [keyboard] layout/variant/options/numlock, [pointer] accel_profile/accel_speed\n";
     out << "# [auth] allow_empty_password (bool), request_timeout (0-3600 seconds; default 60, 0 disables)\n";
     out << "# [clock] enabled/position/time_format/date_format/time_font_size/date_font_size\n";
     out << '\n';
@@ -1206,6 +1239,11 @@ extern "C" void greeter_compositor_config_load(const char* state_dir, struct gre
   copyString(out->preferred_output, sizeof(out->preferred_output), config.outputName);
   copyString(out->cursor_theme, sizeof(out->cursor_theme), config.cursorTheme);
   copyString(out->cursor_path, sizeof(out->cursor_path), config.cursorPath);
+  copyString(out->pointer_accel_profile, sizeof(out->pointer_accel_profile), config.pointerAccelProfile);
+  if (config.pointerAccelSpeed.has_value()) {
+    out->pointer_accel_speed_set = 1;
+    out->pointer_accel_speed = *config.pointerAccelSpeed;
+  }
   copyString(out->keyboard_layout, sizeof(out->keyboard_layout), config.keyboardLayout);
   copyString(out->keyboard_variant, sizeof(out->keyboard_variant), config.keyboardVariant);
   copyString(out->keyboard_options, sizeof(out->keyboard_options), config.keyboardOptions);

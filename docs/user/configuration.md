@@ -85,6 +85,8 @@ Set these keys in `greeter.toml`. A command-line `--session` or `--user` value t
 | `[output].scale` | Manual UI scale for every output |
 | `[idle].timeout` | Seconds before outputs blank; `0` disables |
 | `[cursor].theme` / `.size` / `.path` | Cursor theme |
+| `[pointer].accel_profile` | Libinput acceleration profile: `flat` (default) or `adaptive` |
+| `[pointer].accel_speed` | Libinput speed from `-1.0` to `1.0`; omitted leaves the device's speed unchanged |
 | `[keyboard].layout` / `.variant` / `.options` / `.numlock` | XKB keymap |
 | `[auth].allow_empty_password` | Permit an empty submission to start fprintd or smartcard PAM; this does not make password and fingerprint checks run in parallel |
 | `[auth].request_timeout` | Seconds to wait for each greetd reply (`0`–`3600`, default `60`); `0` disables the watchdog |

@@ -2,6 +2,7 @@
 
 #include "compositor/output_layout_move.h"
 #include "compositor/output_render.h"
+#include "compositor/pointer_config.h"
 #include "compositor/system_keyboard_config.h"
 #include "config/output_identity.h"
 #include "greeter/greeter_config_io.h"
@@ -297,6 +298,9 @@ struct greeter_server {
   char cursor_theme[128];
   int cursor_size;
   char cursor_path[512];
+  char pointer_accel_profile[16];
+  bool pointer_accel_speed_set;
+  double pointer_accel_speed;
   char keyboard_layout[128];
   char keyboard_variant[128];
   char keyboard_options[256];
@@ -761,6 +765,9 @@ static void read_greeter_config(struct greeter_server* server) {
   if (config.cursor_path[0] != '\0') {
     snprintf(server->cursor_path, sizeof(server->cursor_path), "%s", config.cursor_path);
   }
+  snprintf(server->pointer_accel_profile, sizeof(server->pointer_accel_profile), "%s", config.pointer_accel_profile);
+  server->pointer_accel_speed_set = config.pointer_accel_speed_set != 0;
+  server->pointer_accel_speed = config.pointer_accel_speed;
   if (config.keyboard_layout[0] != '\0') {
     snprintf(server->keyboard_layout, sizeof(server->keyboard_layout), "%s", config.keyboard_layout);
   }
@@ -2123,7 +2130,7 @@ static void configure_libinput_touchpad(struct wlr_input_device* device) {
   wlr_log(WLR_INFO, "touchpad: enabled tap-to-click for %s", device->name);
 }
 
-static void configure_libinput_pointer(struct wlr_input_device* device) {
+static void configure_libinput_pointer(struct greeter_server* server, struct wlr_input_device* device) {
   if (!wlr_input_device_is_libinput(device)) {
     return;
   }
@@ -2133,10 +2140,10 @@ static void configure_libinput_pointer(struct wlr_input_device* device) {
     return;
   }
 
-  if (libinput_device_config_accel_is_available(libinput_dev)) {
-    libinput_device_config_accel_set_profile(libinput_dev, LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT);
-    wlr_log(WLR_INFO, "pointer: disabled acceleration for %s", device->name);
-  }
+  pointer_config_apply(
+      libinput_dev, device->name, server->pointer_accel_profile,
+      server->pointer_accel_speed_set ? &server->pointer_accel_speed : NULL
+  );
 }
 
 static void add_keyboard(struct greeter_server* server, struct wlr_input_device* device) {
@@ -2239,7 +2246,7 @@ static void handle_new_input(struct wl_listener* listener, void* data) {
     return;
   case WLR_INPUT_DEVICE_POINTER:
     configure_libinput_touchpad(device);
-    configure_libinput_pointer(device);
+    configure_libinput_pointer(server, device);
     wlr_cursor_attach_input_device(server->cursor, device);
     caps |= WL_SEAT_CAPABILITY_POINTER;
     break;

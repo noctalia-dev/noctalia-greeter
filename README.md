@@ -54,6 +54,9 @@ After installation:
 Administrator settings in `greeter.toml` survive startup migration, appearance
 Sync, and login-screen choices unchanged. Mutable state lives in `sync.toml`.
 
+Configure mouse speed and acceleration under `[pointer]`; see
+[Pointer sensitivity](docs/user/input.md#pointer-sensitivity).
+
 ## Scope
 
 Noctalia Greeter is a **display/login greeter** for greetd. It handles user/session selection and authentication UI.

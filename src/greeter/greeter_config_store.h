@@ -74,6 +74,9 @@ namespace greeter::config {
     std::optional<int> cursorSize;
     std::optional<std::string> cursorPath;
 
+    std::optional<std::string> pointerAccelProfile;
+    std::optional<double> pointerAccelSpeed;
+
     std::optional<std::string> keyboardLayout;
     std::optional<std::string> keyboardVariant;
     std::optional<std::string> keyboardOptions;

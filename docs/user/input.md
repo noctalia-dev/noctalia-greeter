@@ -1,6 +1,6 @@
 ---
 title: Keyboard and cursor
-description: Configure keyboard navigation, XKB layouts, Num Lock, and cursor themes.
+description: Configure keyboard navigation, XKB layouts, Num Lock, cursor themes, and pointer sensitivity.
 sidebar:
   order: 5
 ---
@@ -15,6 +15,7 @@ that control is removed or its menu is closed.
 - [Keyboard layout](#keyboard-layout)
 - [Num Lock](#num-lock)
 - [Cursor theme](#cursor-theme)
+- [Pointer sensitivity](#pointer-sensitivity)
 - [NixOS](#nixos)
 
 ---
@@ -178,6 +179,33 @@ Add `XCURSOR_PATH` when the theme is not in the default search path.
 
 ---
 
+## Pointer sensitivity
+
+Set pointer acceleration and speed in `greeter.toml`:
+
+```toml
+[pointer]
+accel_profile = "adaptive"
+accel_speed = 0.3
+```
+
+`accel_profile` accepts `flat` (the existing default) or `adaptive`. Flat scales
+movement by a constant factor; adaptive acceleration changes with movement speed.
+`accel_speed` accepts numbers from `-1.0` (slowest) to `1.0` (fastest), with
+`0.0` selecting the device's neutral speed. Omitting it leaves the libinput
+speed unchanged. Set the same profile and speed as your desktop to match its
+pointer behavior.
+
+The settings apply to libinput mice, trackballs, and touchpads that support
+acceleration, including devices connected after startup. Unsupported settings
+are logged and leave that device's setting unchanged; an unsupported profile
+does not prevent applying a supported speed. Invalid values are ignored with
+a warning. Restart the greeter session after editing the configuration.
+
+These settings belong in `greeter.toml`; appearance Sync does not change them.
+
+---
+
 ## NixOS
 
 NixOS has two different Noctalia Greeter modules. Configure the option path belonging to the module you enabled; do not enable both modules at once.
@@ -197,6 +225,10 @@ services.displayManager.noctalia-greeter = {
 
   settings = {
     cursor.size = 24;
+    pointer = {
+      accel_profile = "adaptive";
+      accel_speed = 0.3;
+    };
     keyboard = {
       layout = "us,cz";
       options = "grp:alt_shift_toggle";

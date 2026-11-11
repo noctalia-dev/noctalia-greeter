@@ -130,6 +130,13 @@ size = 24
 # Colon-separated search path when the theme is not under the default icon dirs.
 path = "/usr/share/icons"
 
+[pointer]
+# Acceleration profile: "flat" (default) or "adaptive".
+accel_profile = "flat"
+# Optional libinput speed: -1.0 (slowest) to 1.0 (fastest), 0.0 is neutral.
+# Omit to leave the device's speed unchanged.
+# accel_speed = 0.0
+
 [keyboard]
 # Comma-separated for multiple layouts.
 layout = "us,cz"

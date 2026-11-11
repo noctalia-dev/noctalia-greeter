@@ -58,4 +58,4 @@ jobs:
       - name: Test decoding, frame loop, login flow, greetd responses, and configuration
         run: |
           meson test -C build-debug jxl-decoder greeter-frame-loop greeter-login-flow \
-            greetd-client-response legacy-staging-compatibility --print-errorlogs
+            pointer-config greetd-client-response legacy-staging-compatibility --print-errorlogs

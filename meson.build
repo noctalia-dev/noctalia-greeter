@@ -301,6 +301,7 @@ noctalia_greeter_compositor_executable = executable('noctalia-greeter-compositor
     'src/compositor/noctalia_compositor.c',
     'src/compositor/output_layout_move.c',
     'src/compositor/output_render.c',
+    'src/compositor/pointer_config.c',
     'src/compositor/system_keyboard_config.c',
     'src/config/output_identity.c',
     'src/core/log.cpp',
@@ -321,6 +322,23 @@ noctalia_greeter_compositor_executable = executable('noctalia-greeter-compositor
   ],
   install: true,
 )
+
+pointer_config_test = executable(
+  'pointer-config-test',
+  sources: files(
+    'tests/pointer_config_test.cpp',
+    'src/compositor/pointer_config.c',
+    'src/greeter/greeter_config_io.cpp',
+    'src/core/log.cpp',
+  ),
+  dependencies: [libinput_dep, wlroots_dep, tomlplusplus_dep],
+  include_directories: include_directories('src'),
+  c_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-DWLR_USE_UNSTABLE'],
+  cpp_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow'],
+  build_by_default: false,
+)
+
+test('pointer-config', pointer_config_test)
 
 greetd_client_response_test = executable(
   'greetd-client-response-test',
