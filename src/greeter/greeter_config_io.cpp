@@ -1035,18 +1035,6 @@ namespace greeter::config {
     }
   }
 
-  bool canRewriteLegacyConfig(const std::filesystem::path& path) {
-    struct stat info{};
-    if (::stat(path.c_str(), &info) != 0 || !S_ISREG(info.st_mode)) {
-      return false;
-    }
-    // Treat explicitly read-only defaults as immutable even when invoked as root.
-    if ((info.st_mode & (S_IWUSR | S_IWGRP | S_IWOTH)) == 0) {
-      return false;
-    }
-    return ::faccessat(AT_FDCWD, path.c_str(), W_OK, AT_EACCESS) == 0;
-  }
-
   bool writeConfig(const std::filesystem::path& path, const GreeterConfigFile& config) {
     std::error_code ec;
     std::filesystem::create_directories(path.parent_path(), ec);
@@ -1152,7 +1140,7 @@ namespace {
     greeter::config::GreeterSyncFile sync =
         hasLegacyState ? greeter::config::loadSync(legacyStatePath) : greeter::config::GreeterSyncFile{};
 
-    greeter::config::GreeterConfigFile conf = greeter::config::loadConfig(confPath);
+    const greeter::config::GreeterConfigFile conf = greeter::config::loadConfig(confPath);
     const bool migrateOutputs = conf.outputUseSyncedSettings.value_or(true);
     const bool hasRuntime = (conf.sessionLast.has_value() && !conf.sessionLast->empty())
         || (conf.appearanceScheme.has_value() && !conf.appearanceScheme->empty())
@@ -1185,24 +1173,8 @@ namespace {
     }
 
     if (hasRuntime) {
-      if (!greeter::config::canRewriteLegacyConfig(confPath)) {
-        kLog.info(
-            "migrated runtime keys into {}; leaving read-only {} unchanged", syncPath.string(), confPath.string()
-        );
-        return;
-      }
-      conf.sessionLast.reset();
-      conf.appearanceScheme.reset();
-      if (migrateOutputs) {
-        conf.outputLayout.reset();
-        conf.outputTransforms.reset();
-        conf.outputScales.reset();
-      }
-      if (!greeter::config::writeConfig(confPath, conf)) {
-        kLog.warn("migrated sync.toml but failed to strip runtime keys from {}", confPath.string());
-        return;
-      }
-      kLog.info("migrated runtime keys from greeter.toml into {}", syncPath.string());
+      // Keep declarative settings intact so they still override later Sync/UI changes.
+      kLog.info("copied legacy runtime keys from {} into {}", confPath.string(), syncPath.string());
     } else {
       kLog.info("migrated {} to {}", legacyStatePath.string(), syncPath.string());
     }

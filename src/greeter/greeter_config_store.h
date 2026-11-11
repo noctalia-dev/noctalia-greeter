@@ -120,9 +120,6 @@ namespace greeter::config {
   // Writes declarative keys only; never persists session.last.
   [[nodiscard]] bool writeConfig(const std::filesystem::path& path, const GreeterConfigFile& config);
 
-  // Optional legacy cleanup must preserve read-only files, including symlink targets.
-  [[nodiscard]] bool canRewriteLegacyConfig(const std::filesystem::path& path);
-
   [[nodiscard]] GreeterSyncFile loadSync(const std::filesystem::path& path);
   [[nodiscard]] bool writeSync(const std::filesystem::path& path, const GreeterSyncFile& sync);
 

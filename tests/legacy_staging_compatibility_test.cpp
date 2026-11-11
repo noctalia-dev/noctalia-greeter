@@ -290,9 +290,9 @@ scales = "DP-1:2; DP-2:1.25"
         expect(name + " migrates scales", sync.outputScales == kSyncedOutputScales, true, {}, passed);
         const auto config = greeter::config::loadConfig(configPath);
         expect(name + " keeps keyboard defaults", config.keyboardLayout == "us", true, {}, passed);
+        expect(name + " preserves config bytes", readFile(configPath) == original, true, {}, passed);
+        expect(name + " preserves target bytes", readFile(targetPath) == original, true, {}, passed);
         if (configCase.readOnly) {
-          expect(name + " preserves config bytes", readFile(configPath) == original, true, {}, passed);
-          expect(name + " preserves target bytes", readFile(targetPath) == original, true, {}, passed);
           expect(
               name + " preserves read-only permissions",
               (std::filesystem::status(targetPath).permissions() & std::filesystem::perms::mask)
@@ -301,10 +301,6 @@ scales = "DP-1:2; DP-2:1.25"
                       | std::filesystem::perms::others_read),
               true, {}, passed
           );
-        } else {
-          expect(name + " strips legacy last session", !config.sessionLast.has_value(), true, {}, passed);
-          expect(name + " strips legacy scheme", !config.appearanceScheme.has_value(), true, {}, passed);
-          expect(name + " strips legacy layout", !config.outputLayout.has_value(), true, {}, passed);
         }
         if (configCase.symlink) {
           expect(name + " preserves symlink", std::filesystem::is_symlink(configPath), true, {}, passed);
@@ -636,26 +632,39 @@ refresh_rate = 120
       const char* name;
       bool existingSync;
       bool compositorFirst;
+      std::optional<bool> useSyncedSettings;
     };
     for (const auto& startup : std::array{
-             OutputStartupCase{"existing sync", true, true},
-             OutputStartupCase{"first compositor startup", false, true},
-             OutputStartupCase{"first client startup", false, false},
+             OutputStartupCase{"sync first, default output sync", true, true, std::nullopt},
+             OutputStartupCase{"sync first, output sync enabled", true, true, true},
+             OutputStartupCase{"sync first, output sync disabled", true, true, false},
+             OutputStartupCase{"compositor first, default output sync", false, true, std::nullopt},
+             OutputStartupCase{"compositor first, output sync enabled", false, true, true},
+             OutputStartupCase{"compositor first, output sync disabled", false, true, false},
+             OutputStartupCase{"client first, default output sync", false, false, std::nullopt},
+             OutputStartupCase{"client first, output sync enabled", false, false, true},
+             OutputStartupCase{"client first, output sync disabled", false, false, false},
          }) {
       Fixture fixture(0700, 0600);
       const auto configPath = fixture.runtimeDirectory / "greeter.toml";
-      std::ofstream(configPath) << R"toml(
+      {
+        std::ofstream configFile(configPath);
+        configFile << R"toml(# Keep this comment and the configured display arrangement.
 [appearance]
-scheme = "Synced"
+scheme = "Noctalia"
 
 [output]
-use_synced_settings = false
 name = "DP-2"
 layout = "DP-1:10,20; DP-2:1800,20"
 transforms = "DP-1:normal; DP-2:180"
 scales = "DP-1:1.25; DP-2:1.5"
 scale = 1.5
 )toml";
+        if (startup.useSyncedSettings.has_value()) {
+          configFile << "use_synced_settings = " << (*startup.useSyncedSettings ? "true" : "false") << '\n';
+        }
+      }
+      const std::string original = readFile(configPath);
       const ScopedStateDirectory stateDirectory(fixture.runtimeDirectory);
       if (startup.existingSync) {
         expect(
@@ -692,8 +701,10 @@ scale = 1.5
       );
 
       const auto preserved = greeter::config::loadConfig(configPath);
+      expect("startup preserves declarative bytes", readFile(configPath) == original, true, startup.name, passed);
       expect(
-          "output opt-out remains declarative", preserved.outputUseSyncedSettings == false, true, startup.name, passed
+          "output sync setting remains declarative", preserved.outputUseSyncedSettings == startup.useSyncedSettings,
+          true, startup.name, passed
       );
       expect(
           "manual layout remains declarative", preserved.outputLayout == "DP-1:10,20; DP-2:1800,20", true, startup.name,
@@ -707,6 +718,32 @@ scale = 1.5
           "manual scales remain declarative", preserved.outputScales == "DP-1:1.25; DP-2:1.5", true, startup.name,
           passed
       );
+      expect("manual scheme remains declarative", preserved.appearanceScheme == "Noctalia", true, startup.name, passed);
+
+      expect(
+          "later sync accepts conflicting output mappings",
+          greeter::applyAppearanceSyncGreeterConf(
+              std::string(kSyncedOutputLayout), std::string(kSyncedOutputTransforms), std::string(kSyncedOutputScales),
+              std::nullopt
+          ),
+          true, startup.name, passed
+      );
+      auto preferences = greeter::loadGreeterPreferences();
+      preferences.session = "GNOME";
+      preferences.scheme = "Dracula";
+      expect("picker state saves", greeter::saveGreeterPreferences(preferences), true, startup.name, passed);
+      expect("sync and picker preserve config bytes", readFile(configPath) == original, true, startup.name, passed);
+      expect(
+          "declarative scheme wins after sync and picker changes",
+          greeter::loadGreeterPreferences().scheme == "Noctalia", true, startup.name, passed
+      );
+      greeter_compositor_config_load(fixture.runtimeDirectory.c_str(), &config);
+      expectOutputMappings(
+          startup.name, config, "DP-1:10,20; DP-2:1800,20", "DP-1:normal; DP-2:180", "DP-1:1.25; DP-2:1.5", passed
+      );
+      const auto sync = greeter::config::loadSync(fixture.runtimeDirectory / "sync.toml");
+      expect("picker session remains mutable", sync.sessionLast == "GNOME", true, startup.name, passed);
+      expect("picker scheme remains mutable", sync.appearanceScheme == "Dracula", true, startup.name, passed);
     }
 
     {

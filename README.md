@@ -51,6 +51,9 @@ After installation:
 - [Set up optional Sync with Noctalia](docs/user/sync.md)
 - [Troubleshoot a login or display problem](docs/user/troubleshooting.md)
 
+Administrator settings in `greeter.toml` survive startup migration, appearance
+Sync, and login-screen choices unchanged. Mutable state lives in `sync.toml`.
+
 ## Scope
 
 Noctalia Greeter is a **display/login greeter** for greetd. It handles user/session selection and authentication UI.

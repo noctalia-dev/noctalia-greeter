@@ -27,10 +27,10 @@ If `greeter.toml` is missing, the greeter uses built-in defaults. System setup c
 
 On NixOS, use `services.displayManager.noctalia-greeter.settings` with both the nixpkgs, and project flake modules. Both materialize `greeter.toml` using a tmpfiles `L+` entry.
 
-When importing legacy runtime state, a read-only `greeter.toml` (including a
-symlink to a Nix store file) stays unchanged. Migrated values are saved in the
-writable `sync.toml`; migration does not require write access to the declarative
-file or report a failed cleanup for a read-only file.
+Startup migration copies legacy runtime values into writable `sync.toml` and
+preserves `greeter.toml` byte for byte, including writable files, comments, and
+symlink targets. Declarative scheme, layout, transform, and scale settings keep
+their priority over later Sync updates and login-screen choices.
 
 The **Synced** scheme uses a complete `[appearance.palette]` from `greeter.toml` when present, otherwise the same keys from `sync.toml`. Legacy live `appearance.json` is migrated into `sync.toml` once. See [Sync with Noctalia](sync.md) for the complete precedence and authorization model.
 

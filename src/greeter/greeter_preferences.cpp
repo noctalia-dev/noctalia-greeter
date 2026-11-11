@@ -244,7 +244,7 @@ namespace {
     greeter::config::GreeterSyncFile sync =
         hasLegacyState ? greeter::config::loadSync(legacyStatePath) : greeter::config::GreeterSyncFile{};
 
-    greeter::config::GreeterConfigFile conf = greeter::config::loadConfig(confPath);
+    const greeter::config::GreeterConfigFile conf = greeter::config::loadConfig(confPath);
     const bool migrateOutputs = conf.outputUseSyncedSettings.value_or(true);
     const bool hasRuntime = (conf.sessionLast.has_value() && !conf.sessionLast->empty())
         || (conf.appearanceScheme.has_value() && !conf.appearanceScheme->empty())
@@ -277,24 +277,8 @@ namespace {
     }
 
     if (hasRuntime) {
-      if (!greeter::config::canRewriteLegacyConfig(confPath)) {
-        kLog.info(
-            "migrated runtime keys into {}; leaving read-only {} unchanged", syncPath.string(), confPath.string()
-        );
-        return;
-      }
-      conf.sessionLast.reset();
-      conf.appearanceScheme.reset();
-      if (migrateOutputs) {
-        conf.outputLayout.reset();
-        conf.outputTransforms.reset();
-        conf.outputScales.reset();
-      }
-      if (!greeter::config::writeConfig(confPath, conf)) {
-        kLog.warn("migrated sync.toml but failed to strip runtime keys from {}", confPath.string());
-        return;
-      }
-      kLog.info("migrated runtime keys from greeter.toml into {}", syncPath.string());
+      // Keep declarative settings intact so they still override later Sync/UI changes.
+      kLog.info("copied legacy runtime keys from {} into {}", confPath.string(), syncPath.string());
     } else {
       kLog.info("migrated {} to {}", legacyStatePath.string(), syncPath.string());
     }

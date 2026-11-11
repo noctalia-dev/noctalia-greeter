@@ -535,6 +535,27 @@ test(
   timeout: 30,
 )
 
+greeter_login_flow_test = executable(
+  'greeter-login-flow-test',
+  sources: files('tests/greeter_login_flow_test.cpp'),
+  objects: noctalia_greeter_executable.extract_objects(_greeter_sources),
+  dependencies: _greeter_dependencies,
+  include_directories: _greeter_inc,
+  cpp_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow'],
+  build_by_default: false,
+)
+
+test(
+  'greeter-login-flow',
+  find_program('python3'),
+  args: [
+    meson.project_source_root() / 'tests/greeter_login_flow_test.py',
+    noctalia_greeter_compositor_executable,
+    greeter_login_flow_test,
+  ],
+  timeout: 60,
+)
+
 wallpaper_program_pixel_test = executable(
   'wallpaper-program-pixel-test',
   sources: files(
