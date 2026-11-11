@@ -66,6 +66,7 @@ public:
 
   void setPointerEventCallback(WaylandSeat::PointerEventCallback callback);
   void setKeyboardEventCallback(WaylandSeat::KeyboardEventCallback callback);
+  void setLockKeysChangedCallback(WaylandSeat::LockKeysChangedCallback callback);
   void setOutputsChangedCallback(std::function<void()> callback);
   void setPreferredOutputName(std::optional<std::string> name);
 
