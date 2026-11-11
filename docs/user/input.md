@@ -38,6 +38,13 @@ The greeter works without a mouse.
 | `F7` | Open the color scheme picker |
 | `Ctrl+Alt+F1`–`F12` | Switch to a virtual terminal (TTY) |
 
+Returning to the user list with Back or `Esc` cancels the active login,
+including an attempt started on another monitor. Choosing another account
+clears entered passwords across all monitors. Password entry stays disabled
+until the previous attempt has been cancelled; a busy PAM device may take time to return its
+pending reply. Once the desktop session handoff has started, account changes
+are blocked until it finishes.
+
 Long session and color scheme menus stay within the screen and show a scrollbar
 when their entries do not fit. Scroll with the mouse wheel over the menu, drag
 the scrollbar thumb, or click its track. Using `↑` / `↓` automatically scrolls

@@ -57,6 +57,9 @@ Sync, and login-screen choices unchanged. Mutable state lives in `sync.toml`.
 Configure mouse speed and acceleration under `[pointer]`; see
 [Pointer sensitivity](docs/user/input.md#pointer-sensitivity).
 
+Account switching and login cancellation are shared across monitors; see
+[Keyboard controls](docs/user/input.md#keyboard-controls).
+
 ## Scope
 
 Noctalia Greeter is a **display/login greeter** for greetd. It handles user/session selection and authentication UI.

@@ -312,6 +312,9 @@ void Greeter::syncOutputWindows() {
     view.surface->setGreetdClient(&m_greetdClient);
     view.surface->setOnExitRequested([this]() { m_exitRequested = true; });
     view.surface->setOnStateChanged([this](GreeterSurface* source) { syncStateFrom(source); });
+    view.surface->setOnUserSelectionRequested([this]() {
+      return m_authSurface == nullptr || m_authSurface->cancelAuthentication();
+    });
     view.surface->setOnAuthBeginRequested([this](GreeterSurface* source) { return claimAuthSurface(source); });
     view.surface->setOnAuthEnded([this](GreeterSurface* source) { releaseAuthSurface(source); });
     view.surface->setOnGreetdTransportError([this](const GreetdError& error) { onGreetdTransportError(error); });

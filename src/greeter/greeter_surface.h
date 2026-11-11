@@ -51,6 +51,7 @@ public:
   void setUsername(const std::string& username);
   void setOnExitRequested(std::function<void()> callback);
   void setOnStateChanged(std::function<void(GreeterSurface*)> callback);
+  void setOnUserSelectionRequested(std::function<bool()> callback);
   void setOnAuthBeginRequested(std::function<bool(GreeterSurface*)> callback);
   void setOnAuthEnded(std::function<void(GreeterSurface*)> callback);
   void setOnGreetdTransportError(std::function<void(const GreetdError&)> callback);
@@ -66,6 +67,9 @@ public:
   // Prevent this surface from starting a second conversation on the shared
   // greetd connection while another output owns authentication.
   void setSharedAuthBlocked(bool blocked);
+  // Cancel before changing the shared account selection. Keep ownership until
+  // the cancel reply; refuse changes once the session handoff has started.
+  [[nodiscard]] bool cancelAuthentication();
   // True while this surface is mid-conversation with greetd.
   [[nodiscard]] bool authInProgress() const noexcept { return m_authenticating; }
 
@@ -260,11 +264,13 @@ private:
   bool m_greetdUnavailable = false;
   bool m_sharedAuthBlocked = false;
   bool m_authSessionStarted = false;
+  bool m_authCancelRequested = false;
   bool m_secretPromptWaiting = false; // greetd wants secret input from the user
   bool m_hasPendingResponse = false;  // user-supplied input armed for next prompt
   std::string m_pendingResponse;
   std::deque<AuthRequest> m_pendingReplies;
   std::function<void()> m_onExitRequested;
+  std::function<bool()> m_onUserSelectionRequested;
   std::function<bool(GreeterSurface*)> m_onAuthBeginRequested;
   std::function<void(GreeterSurface*)> m_onAuthEnded;
   std::function<void(const GreetdError&)> m_onGreetdTransportError;

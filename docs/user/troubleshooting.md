@@ -244,6 +244,19 @@ available, you will still need to unlock the keyring separately.
 
 greetd did not answer a request before the watchdog expired. Inspect the greetd journal for a stalled or crashed PAM or session worker, then restart greetd. `[auth].request_timeout` controls the watchdog; its default is `60` seconds, and `0` disables it. See [Configuration](configuration.md).
 
+### Waiting for the previous login attempt to finish
+
+After Back or an account change on any monitor, the greeter cancels the previous
+account's authentication before accepting another password. If PAM is still
+waiting on a device, cancellation waits for its pending reply. The new account
+can be selected during this wait, but password entry stays disabled until
+greetd confirms cancellation. Passwords and replies from the previous account
+are discarded.
+
+If cancellation fails or greetd stops responding, the greeter disables login
+and asks for a greetd restart. Check the greetd journal for the underlying PAM
+or connection error.
+
 ### Fingerprint blocks password login
 
 PAM authentication is serialized. While `pam_fprintd` is waiting for a

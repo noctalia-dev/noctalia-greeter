@@ -51,6 +51,7 @@
 
 namespace {
   constexpr Logger kLog("greeter-surface");
+  constexpr const char* kAuthCancelStatus = "Waiting for the previous login attempt to finish...";
   constexpr float kHeaderUserIconBase = 64.0f;
   constexpr float kHeaderAvatarBorderScale = 2.0f;
   // Blur taps at quarter resolution; matches the shader's 40-tap cap.
@@ -763,6 +764,10 @@ void GreeterSurface::setOnStateChanged(std::function<void(GreeterSurface*)> call
   m_onStateChanged = std::move(callback);
 }
 
+void GreeterSurface::setOnUserSelectionRequested(std::function<bool()> callback) {
+  m_onUserSelectionRequested = std::move(callback);
+}
+
 void GreeterSurface::setOnAuthBeginRequested(std::function<bool(GreeterSurface*)> callback) {
   m_onAuthBeginRequested = std::move(callback);
 }
@@ -787,6 +792,9 @@ void GreeterSurface::mirrorStateFrom(const GreeterSurface& other) {
   }
 
   const bool schemeChanged = m_selectedScheme != other.m_selectedScheme;
+  if (m_username != other.m_username || m_passwordVisible != other.m_passwordVisible) {
+    clearPasswordInput();
+  }
 
   m_selectedUser = other.m_selectedUser;
   m_selectedSession = other.m_selectedSession;
@@ -1060,6 +1068,9 @@ void GreeterSurface::enterPasswordStep(std::size_t userIndex) {
   if (userIndex >= m_users.size()) {
     return;
   }
+  if (m_onUserSelectionRequested && !m_onUserSelectionRequested()) {
+    return;
+  }
   m_selectedUser = userIndex;
   setUsername(m_users[userIndex]);
   m_userMenuOpen = false;
@@ -1071,6 +1082,7 @@ void GreeterSurface::enterPasswordStep(std::size_t userIndex) {
     m_inputDispatcher.setFocus(m_passwordField->inputArea());
   }
   refreshSelectionLabels();
+  updateStatus(m_authCancelRequested || m_sharedAuthBlocked ? kAuthCancelStatus : "", false);
   notifyStateChanged();
   commitImmediateFrame(true);
 }
@@ -1491,6 +1503,15 @@ void GreeterSurface::handleGreetdResponse(const GreetdResponse& response) {
   const AuthRequest expected = m_pendingReplies.front();
   m_pendingReplies.pop_front();
 
+  if (m_authCancelRequested && expected != AuthRequest::Cancel) {
+    // This reply belongs to the previous account. It must never supply a
+    // prompt or start a session for the newly displayed selection.
+    (void)resetAuthSession();
+    syncAuthInteractivity();
+    commitImmediateFrame(false);
+    return;
+  }
+
   const char* reqName = expected == AuthRequest::CreateSession ? "create_session"
       : expected == AuthRequest::PostAuthData                  ? "post_auth_data"
       : expected == AuthRequest::StartSession                  ? "start_session"
@@ -1502,6 +1523,19 @@ void GreeterSurface::handleGreetdResponse(const GreetdResponse& response) {
 
   // Cancel ack drained the queue; re-enable input it had locked.
   if (expected == AuthRequest::Cancel) {
+    if (m_authCancelRequested) {
+      if (response.type != GreetdResponseType::Success) {
+        reportGreetdTransportError(
+            response.type == GreetdResponseType::Error
+                ? response.error
+                : GreetdError{GreetdErrorType::Error, "Unexpected response while cancelling authentication"}
+        );
+        return;
+      }
+      m_authCancelRequested = false;
+      updateStatus("", false);
+      notifyStateChanged();
+    }
     if (m_onAuthEnded) {
       m_onAuthEnded(this);
     }
@@ -1593,7 +1627,7 @@ void GreeterSurface::postAuthResponse(const std::string& data) {
 }
 
 void GreeterSurface::syncAuthInteractivity() {
-  const bool busy = m_greetdUnavailable || m_sharedAuthBlocked || awaitingReply();
+  const bool busy = m_greetdUnavailable || m_sharedAuthBlocked || m_authCancelRequested || awaitingReply();
   if (m_passwordField != nullptr) {
     m_passwordField->setEnabled(!busy);
   }
@@ -1613,6 +1647,7 @@ void GreeterSurface::setSharedAuthBlocked(const bool blocked) {
 
 void GreeterSurface::setGreetdUnavailable(const std::string_view reason) {
   m_greetdUnavailable = true;
+  m_authCancelRequested = false;
   m_authenticating = false;
   m_authSessionStarted = false;
   m_secretPromptWaiting = false;
@@ -1685,6 +1720,28 @@ void GreeterSurface::beginSessionStart() {
   }
 
   m_pendingReplies.push_back(AuthRequest::StartSession);
+}
+
+bool GreeterSurface::cancelAuthentication() {
+  if (!m_pendingReplies.empty() && m_pendingReplies.front() == AuthRequest::StartSession) {
+    return false;
+  }
+  if (m_authCancelRequested || (!m_authSessionStarted && !awaitingReply())) {
+    return true;
+  }
+  m_authCancelRequested = true;
+  m_authenticating = false;
+  m_secretPromptWaiting = false;
+  m_hasPendingResponse = false;
+  m_pendingResponse.clear();
+  clearPasswordInput();
+  updateStatus(kAuthCancelStatus, false);
+  // IPC is lockstep. Drain the outstanding reply before sending cancel, and
+  // keep the shared owner through both that reply and the cancel ack.
+  const bool cancelled = awaitingReply() || resetAuthSession();
+  syncAuthInteractivity();
+  commitImmediateFrame(false);
+  return cancelled;
 }
 
 bool GreeterSurface::resetAuthSession() {
@@ -2303,10 +2360,13 @@ void GreeterSurface::runBackAction() {
   if (!showsUserDropdown()) {
     return;
   }
+  if (m_onUserSelectionRequested && !m_onUserSelectionRequested()) {
+    return;
+  }
   m_passwordVisible = false;
   m_passwordField->setValue("");
   m_password.clear();
-  updateStatus("", false);
+  updateStatus(m_authCancelRequested || m_sharedAuthBlocked ? kAuthCancelStatus : "", false);
   if (m_userSelectArea != nullptr) {
     m_inputDispatcher.setFocus(m_userSelectArea);
   }
@@ -3174,7 +3234,7 @@ void GreeterSurface::activateMenuHighlight() {
 }
 
 bool GreeterSurface::handleNavigationKey(std::uint32_t sym, std::uint32_t utf32, std::uint32_t modifiers) {
-  if (m_authenticating) {
+  if (m_authenticating && !KeySymbol::isEscape(sym)) {
     return false;
   }
   const bool shift = (modifiers & KeyMod::Shift) != 0;
