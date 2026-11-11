@@ -145,7 +145,7 @@ sudo zypper install noctalia-greeter-git
 ### Debian and Ubuntu
 
 The community-maintained Noctalia APT repository provides `noctalia-greeter`
-for Debian Trixie, Debian Sid, and Ubuntu 26.04. Follow the shared
+for Debian Trixie, Debian Sid, and Ubuntu 26.04 and 26.10. Follow the shared
 [Debian repository setup instructions](https://docs.noctalia.dev/noctalia/getting-started/installation/#debian),
 then install:
 
@@ -156,7 +156,7 @@ sudo apt update
 sudo apt install -t trixie-backports noctalia-greeter
 ```
 </TabItem>
-<TabItem label="Debian Sid or Ubuntu 26.04">
+<TabItem label="Debian Sid or Ubuntu 26.04 or 26.10">
 ```sh
 sudo apt update
 sudo apt install noctalia-greeter
