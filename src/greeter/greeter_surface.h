@@ -151,7 +151,6 @@ private:
   };
   [[nodiscard]] MenuScroll* activeMenuScroll();
   void scrollSelectorMenu(int delta);
-  void invalidateMenuPointers();
   void applyMenuHighlight();
   void buildMenu(
       const std::vector<std::string>& names, std::size_t selected, Box* anchor, bool upward, bool rightAlign, int zBase,

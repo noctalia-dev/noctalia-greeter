@@ -3146,13 +3146,6 @@ void GreeterSurface::scrollSelectorMenu(int delta) {
   }
 }
 
-void GreeterSurface::invalidateMenuPointers() {
-  // Rows are transient, but the shared Noctalia scrollbar stays alive through
-  // relayouts so its pointer capture and hover animation can continue.
-  const MenuScroll* scroll = activeMenuScroll();
-  m_inputDispatcher.invalidateTransientPointers(scroll != nullptr ? scroll->bar : nullptr);
-}
-
 bool GreeterSurface::pointerInUserMenuScrollArea(float x, float y) const {
   const auto inRect = [x, y](const Node* node) {
     if (node == nullptr || !node->visible()) {
@@ -3330,6 +3323,7 @@ void GreeterSurface::clearUserMenuRows() {
     (void)m_root.removeChild(icon);
   }
   for (auto* area : m_userMenuAreas) {
+    m_inputDispatcher.invalidatePointersFor(area);
     (void)m_root.removeChild(area);
   }
   for (auto* row : m_userMenuRows) {
@@ -3342,11 +3336,11 @@ void GreeterSurface::clearUserMenuRows() {
 }
 
 void GreeterSurface::clearUserMenu() {
-  invalidateMenuPointers();
   clearUserMenuRows();
   m_userMenuSearchQuery.clear();
   m_userMenuScrollOffset = 0;
   if (m_userMenuSearchField != nullptr) {
+    m_inputDispatcher.invalidatePointersFor(m_userMenuSearchField);
     m_userMenuSearchField->setValue("");
     m_userMenuSearchField->setVisible(false);
   }
@@ -3354,7 +3348,6 @@ void GreeterSurface::clearUserMenu() {
 }
 
 void GreeterSurface::clearSessionMenu() {
-  invalidateMenuPointers();
   if (m_sessionMenuPanel != nullptr) {
     (void)m_root.removeChild(m_sessionMenuPanel);
     m_sessionMenuPanel = nullptr;
@@ -3363,6 +3356,7 @@ void GreeterSurface::clearSessionMenu() {
     (void)m_root.removeChild(label);
   }
   for (auto* area : m_sessionMenuAreas) {
+    m_inputDispatcher.invalidatePointersFor(area);
     (void)m_root.removeChild(area);
   }
   for (auto* row : m_sessionMenuRows) {
@@ -3372,13 +3366,13 @@ void GreeterSurface::clearSessionMenu() {
   m_sessionMenuAreas.clear();
   m_sessionMenuRows.clear();
   if (!m_sessionMenuOpen && m_sessionMenuScroll.bar != nullptr) {
+    m_inputDispatcher.invalidatePointersFor(m_sessionMenuScroll.bar);
     (void)m_root.removeChild(m_sessionMenuScroll.bar);
     m_sessionMenuScroll = {};
   }
 }
 
 void GreeterSurface::clearSchemeMenu() {
-  invalidateMenuPointers();
   if (m_schemeMenuPanel != nullptr) {
     (void)m_root.removeChild(m_schemeMenuPanel);
     m_schemeMenuPanel = nullptr;
@@ -3387,6 +3381,7 @@ void GreeterSurface::clearSchemeMenu() {
     (void)m_root.removeChild(label);
   }
   for (auto* area : m_schemeMenuAreas) {
+    m_inputDispatcher.invalidatePointersFor(area);
     (void)m_root.removeChild(area);
   }
   for (auto* row : m_schemeMenuRows) {
@@ -3396,6 +3391,7 @@ void GreeterSurface::clearSchemeMenu() {
   m_schemeMenuAreas.clear();
   m_schemeMenuRows.clear();
   if (!m_schemeMenuOpen && m_schemeMenuScroll.bar != nullptr) {
+    m_inputDispatcher.invalidatePointersFor(m_schemeMenuScroll.bar);
     (void)m_root.removeChild(m_schemeMenuScroll.bar);
     m_schemeMenuScroll = {};
   }

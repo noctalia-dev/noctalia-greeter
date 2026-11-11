@@ -7,6 +7,10 @@ sidebar:
 
 Noctalia Greeter supports keyboard-only navigation and lets administrators configure the keyboard layout, Num Lock state, and cursor theme used on the login screen.
 
+Power buttons activate with a single click, including when the password field
+has focus. Interface relayouts preserve a held button or scrollbar drag unless
+that control is removed or its menu is closed.
+
 - [Keyboard controls](#keyboard-controls)
 - [Keyboard layout](#keyboard-layout)
 - [Num Lock](#num-lock)

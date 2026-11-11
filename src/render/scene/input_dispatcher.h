@@ -22,7 +22,8 @@ public:
 
   void setFocus(InputArea* area);
   void setCursorShapeCallback(std::function<void(std::uint32_t serial, std::uint32_t shape)> callback);
-  void invalidateTransientPointers(const Node* preservedSubtree = nullptr);
+  // Call before removing a subtree containing hovered or captured input areas.
+  void invalidatePointersFor(const Node* subtree);
 
 private:
   Node* m_sceneRoot = nullptr;
