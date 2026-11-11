@@ -249,9 +249,9 @@ greetd did not answer a request before the watchdog expired. Inspect the greetd 
 After Back or an account change on any monitor, the greeter cancels the previous
 account's authentication before accepting another password. If PAM is still
 waiting on a device, cancellation waits for its pending reply. The new account
-can be selected during this wait, but password entry stays disabled until
-greetd confirms cancellation. Passwords and replies from the previous account
-are discarded.
+can be selected during this wait, but password entry stays usable: submissions 
+are queued and applied once greetd confirms cancellation. Passwords and replies
+from the previous account are discarded.
 
 If cancellation fails or greetd stops responding, the greeter disables login
 and asks for a greetd restart. Check the greetd journal for the underlying PAM

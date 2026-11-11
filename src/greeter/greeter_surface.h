@@ -264,7 +264,7 @@ private:
 
   // Cancel intended but not yet acked (deferred or queued); input stays live.
   [[nodiscard]] bool cancelRequested() const noexcept {
-    return m_cancelPending || (!m_pendingReplies.empty() && m_pendingReplies.front() == AuthRequest::Cancel);
+    return m_authCancelRequested || (!m_pendingReplies.empty() && m_pendingReplies.front() == AuthRequest::Cancel);
   }
 
   std::string m_username;

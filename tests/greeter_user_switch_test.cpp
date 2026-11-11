@@ -251,7 +251,7 @@ allow_empty_password = true
           server.request("post_auth_message_response").at("response") == "old-account-token", "wrong initial credential"
       );
     }
-    if (stage == "prompt-waiting" || stage == "cancel-reselect") {
+    if (stage == "prompt-waiting" || stage == "cancel-reselect" || stage == "reselect-before-ack") {
       server.prompt(greeter, client, "secret");
       server.noRequest();
     }
@@ -266,7 +266,7 @@ allow_empty_password = true
       server.request("cancel_session");
     }
 
-    selectUser(greeter, stage == "same-output" ? 0 : 1, "dummy-user-01");
+    selectUser(greeter, (stage == "same-output" || stage == "reselect-before-ack") ? 0 : 1, "dummy-user-01");
     if (stage == "handoff") {
       server.noRequest();
       server.reply(greeter, client, {{"type", "success"}});
@@ -275,7 +275,11 @@ allow_empty_password = true
       require(pollCount.load() == before, "account change swallowed the terminal handoff");
       return;
     }
-    if (stage != "prompt-waiting" && stage != "cancel-reselect" && stage != "error-cancel-pending") {
+    if (stage != "prompt-waiting" && stage != "cancel-reselect" && stage != "error-cancel-pending"
+        && stage != "reselect-before-ack") {
+      server.noRequest();
+      focusOutput(0);
+      submit(greeter, "queued-account-token");
       server.noRequest();
       if (stage == "create-pending") {
         server.prompt(greeter, client, "secret");
@@ -296,12 +300,33 @@ allow_empty_password = true
       selectUser(greeter, 0, "dummy-user-02");
       server.noRequest();
     }
-    // Credentials cannot be submitted to either account until cancellation ends.
+    if (stage == "reselect-before-ack") {
+      // Reselecting while the cancel ack is outstanding keeps authentication
+      // ownership here: the other output cannot begin authentication and the
+      // shared client must not disconnect.
+      focusOutput(1);
+      submit(greeter, "must-not-begin-auth");
+      server.noRequest();
+      server.reply(greeter, client, {{"type", "success"}});
+      server.noRequest();
+      focusOutput(0);
+      submit(greeter, "fresh-account-token");
+      const auto create = server.request("create-session");
+      require(create.at("username") == "dummy-user-01", "reselection before the cancel ack lost the account");
+      server.prompt(greeter, client, "secret");
+      require(server.request("post_auth_message_response").at("response") == "fresh-account-token",
+          "the fresh credential did not reach the restarted conversation");
+      finish(server, greeter, client);
+      return;
+    }
+    // Submissions during the cancel window are queued on the owning output;
+    // the other output cannot begin authentication while it owns the
+    // shared connection
     focusOutput(0);
-    submit(greeter, "must-not-be-queued");
+    submit(greeter, "queued-account-token");
     server.noRequest();
     focusOutput(1);
-    submit(greeter, "must-not-be-queued-either");
+    submit(greeter, "must-not-cross-surface");
     server.noRequest();
     if (stage == "cancel-error") {
       server.reply(
@@ -312,8 +337,6 @@ allow_empty_password = true
     }
     server.reply(greeter, client, {{"type", "success"}});
 
-    focusOutput(stage == "credential-pending" ? 1 : 0);
-    submit(greeter, "new-account-token");
     const auto create = server.request("create_session");
     require(
         create.at("username") == (stage == "cancel-reselect" ? "dummy-user-02" : "dummy-user-01"),
@@ -321,8 +344,8 @@ allow_empty_password = true
     );
     server.prompt(greeter, client, "secret");
     require(
-        server.request("post_auth_message_response").at("response") == "new-account-token",
-        "old or cancelled credentials leaked into the new login"
+        server.request("post_auth_message_response").at("response") == "queued-account-token",
+        "the submission queued during cancellation did not reach the new login"
     );
     finish(server, greeter, client);
   }

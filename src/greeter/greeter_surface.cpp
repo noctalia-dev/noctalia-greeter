@@ -1592,7 +1592,15 @@ void GreeterSurface::handleGreetdResponse(const GreetdResponse& response) {
   // never supply a prompt or start a session for the new selection.
   if (m_authCancelRequested && expected != AuthRequest::Cancel) {
     kLog.debug("greetd: dropping stale reply, sending deferred cancel");
+    // Input armed while the cancel was pending must survive the cleanup of the
+    // previous attempt; it answers the restarted conversation's first prompt.
+    const std::string armedResponse = m_pendingResponse;
+    const bool hasArmedResponse = m_hasPendingResponse;
     (void)resetAuthSession();
+    if (hasArmedResponse && !m_greetdUnavailable) {
+      m_pendingResponse = armedResponse;
+      m_hasPendingResponse = true;
+    }
     syncAuthInteractivity();
     commitImmediateFrame(false);
     return;
@@ -1876,7 +1884,10 @@ bool GreeterSurface::resetAuthSession() {
     return true;
   }
   m_authSessionStarted = false;
-  if (m_onAuthEnded) {
+  // Release ownership only once the conversation has fully drained: while a
+  // cancel ack is still outstanding the shared client must keep routing replies
+  // here, and another surface must not begin authentication mid-handshake.
+  if (m_pendingReplies.empty() && m_onAuthEnded) {
     m_onAuthEnded(this);
   }
   return true;

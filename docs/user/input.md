@@ -40,10 +40,11 @@ The greeter works without a mouse.
 
 Returning to the user list with Back or `Esc` cancels the active login,
 including an attempt started on another monitor. Choosing another account
-clears entered passwords across all monitors. Password entry stays disabled
-until the previous attempt has been cancelled; a busy PAM device may take time to return its
-pending reply. Once the desktop session handoff has started, account changes
-are blocked until it finishes.
+clears entered passwords across all monitors. Password entry stays usable 
+during the wait: submissions made during the wait are queued and applied once
++the previous attempt has been cancelled. A busy PAM device may take time to
++return its pending reply. Once the desktop session handoff has started,
++account changes are blocked until it finishes.
 
 Long session and color scheme menus stay within the screen and show a scrollbar
 when their entries do not fit. Scroll with the mouse wheel over the menu, drag
