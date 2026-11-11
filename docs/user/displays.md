@@ -40,6 +40,11 @@ Per-output wallpaper entries continue to use connector names.
 By default, the greeter shows the same login interface on every connected
 monitor. Each display uses its own resolution and scale.
 
+If a connected display has no usable mode yet (for example, while a dock or
+adapter initializes), the compositor skips it and keeps the other selected
+displays available. It retries when the backend reports an output change with
+a usable mode.
+
 On laptops, the compositor follows the libinput lid switch. While the lid is
 closed and an external display can be enabled, internal `eDP-*` and `LVDS-*`
 outputs are disabled and removed from the greeter layout. They return when the

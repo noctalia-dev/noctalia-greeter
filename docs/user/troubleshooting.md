@@ -59,6 +59,13 @@ For a source checkout, `sudo ./scripts/setup_greeter_system.sh` performs the com
 
 Treat this like a blank screen: inspect the current-boot logs, confirm that the state directory was recreated with the right owner, and check that referenced wallpaper files still exist. A tmpfiles rule that assumes a different greeter account can recreate the directory with the wrong ownership.
 
+If the compositor reports `no usable mode (0x0)` for an external display, its
+connector is present but has no usable resolution yet. The compositor skips
+that output while keeping other selected displays usable, then retries on a
+backend output change. Check the display's power, cable, dock, and adapter if
+it never acquires a mode. An explicit output pin still limits the greeter to
+the selected display; remove the pin to allow another connected display.
+
 ### Intel eDP stays black until a VT switch
 
 If the compositor log shows a successful output modeset and first frame, but an

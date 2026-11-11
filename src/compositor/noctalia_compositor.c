@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "compositor/output_layout_move.h"
+#include "compositor/output_render.h"
 #include "compositor/system_keyboard_config.h"
 #include "config/output_identity.h"
 #include "greeter/greeter_config_io.h"
@@ -1282,28 +1283,6 @@ static bool initialize_output_render(struct greeter_output* output) {
   return true;
 }
 
-static bool render_output_black(struct greeter_output* output, struct wlr_output_state* state) {
-  struct wlr_render_pass* pass = wlr_output_begin_render_pass(output->wlr_output, state, NULL);
-  if (pass == NULL) {
-    wlr_log(WLR_ERROR, "failed to begin black frame for output %s", output->wlr_output->name);
-    return false;
-  }
-
-  wlr_render_pass_add_rect(
-      pass,
-      &(struct wlr_render_rect_options){
-          .box = {.width = state->buffer->width, .height = state->buffer->height},
-          .color = {0.0f, 0.0f, 0.0f, 1.0f},
-          .blend_mode = WLR_RENDER_BLEND_MODE_NONE,
-      }
-  );
-  if (!wlr_render_pass_submit(pass)) {
-    wlr_log(WLR_ERROR, "failed to render black frame for output %s", output->wlr_output->name);
-    return false;
-  }
-  return true;
-}
-
 static bool clear_enabled_output(struct greeter_output* output) {
   if (!output->wlr_output->enabled) {
     return true;
@@ -1314,7 +1293,7 @@ static bool clear_enabled_output(struct greeter_output* output) {
 
   struct wlr_output_state state;
   wlr_output_state_init(&state);
-  const bool rendered = render_output_black(output, &state);
+  const bool rendered = output_render_black(output->wlr_output, &state);
   const bool committed = rendered && wlr_output_commit_state(output->wlr_output, &state);
   wlr_output_state_finish(&state);
   if (!committed) {
@@ -1484,7 +1463,7 @@ static bool commit_output_enabled(struct greeter_output* output) {
   const int mode_height = mode != NULL ? mode->height : 0;
   const float scale = output_ui_scale(server, output->wlr_output, mode_width, mode_height);
   wlr_output_state_set_scale(&state, scale);
-  const bool rendered = render_output_black(output, &state);
+  const bool rendered = output_render_black(output->wlr_output, &state);
   const bool ok = rendered && wlr_output_commit_state(output->wlr_output, &state);
   wlr_output_state_finish(&state);
   if (!ok) {
