@@ -311,7 +311,7 @@ allow_empty_password = true
       server.noRequest();
       focusOutput(0);
       submit(greeter, "fresh-account-token");
-      const auto create = server.request("create-session");
+      const auto create = server.request("create_session");
       require(create.at("username") == "dummy-user-01", "reselection before the cancel ack lost the account");
       server.prompt(greeter, client, "secret");
       require(server.request("post_auth_message_response").at("response") == "fresh-account-token",
@@ -319,12 +319,14 @@ allow_empty_password = true
       finish(server, greeter, client);
       return;
     }
-    // Submissions during the cancel window are queued on the owning output;
-    // the other output cannot begin authentication while it owns the
-    // shared connection
-    focusOutput(0);
-    submit(greeter, "queued-account-token");
-    server.noRequest();
+    // Stages that skipped the pre-drain submit arm their credential here;
+    // deferred stages already hold it from before the stale reply. The other
+    // output cannot begin authentication while the owner owns the connection.
+    if (stage == "prompt-waiting" || stage == "cancel-reselect" || stage == "error-cancel-pending") {
+      focusOutput(0);
+      submit(greeter, "queued-account-token");
+      server.noRequest();
+    }
     focusOutput(1);
     submit(greeter, "must-not-cross-surface");
     server.noRequest();
