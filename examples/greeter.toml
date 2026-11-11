@@ -27,6 +27,9 @@ scheme = "Synced"
 password_style = "random"
 # Hide the Noctalia brand logo on the login screen.
 hide_logo = false
+# Show each user's AccountsService/GECOS full name instead of their username,
+# falling back to the username when no full name is known.
+show_real_names = false
 # Power controls: bottom-right (default), bottom-left, top-left, top-right, or hidden.
 power_buttons_position = "bottom-right"
 # Scheme picker: top-right (default), top-left, bottom-left, bottom-right, or hidden.
