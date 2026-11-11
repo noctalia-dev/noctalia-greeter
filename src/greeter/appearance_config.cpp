@@ -45,6 +45,12 @@ namespace {
         out.fillColor = color;
       }
     }
+    if (wallpaper.blur.has_value()) {
+      out.blur = *wallpaper.blur;
+    }
+    if (wallpaper.tint.has_value()) {
+      out.tint = *wallpaper.tint;
+    }
   }
 
   [[nodiscard]] greeter::config::GreeterTomlWallpaper mergeTomlWallpaper(
@@ -59,6 +65,12 @@ namespace {
     }
     if (preferred.fillColor.has_value()) {
       result.fillColor = preferred.fillColor;
+    }
+    if (preferred.blur.has_value()) {
+      result.blur = preferred.blur;
+    }
+    if (preferred.tint.has_value()) {
+      result.tint = preferred.tint;
     }
     return result;
   }

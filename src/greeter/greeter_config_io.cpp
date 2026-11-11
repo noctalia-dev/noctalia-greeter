@@ -165,7 +165,24 @@ namespace {
     return std::nullopt;
   }
 
-  [[nodiscard]] greeter::config::GreeterTomlWallpaper parseWallpaperTable(const toml::table& table) {
+  [[nodiscard]] std::optional<float>
+  wallpaperIntensityValue(const std::filesystem::path& path, const toml::table& table, std::string_view key) {
+    const auto* node = table.get(key);
+    if (node == nullptr) {
+      return std::nullopt;
+    }
+    if (const auto value = node->value<double>()) {
+      const auto intensity = static_cast<float>(*value);
+      if (std::isfinite(intensity) && intensity >= 0.0f && intensity <= 1.0f) {
+        return intensity;
+      }
+    }
+    kLog.warn("{}: invalid wallpaper {} value (expected 0.0-1.0)", path.string(), key);
+    return std::nullopt;
+  }
+
+  [[nodiscard]] greeter::config::GreeterTomlWallpaper
+  parseWallpaperTable(const std::filesystem::path& path, const toml::table& table) {
     greeter::config::GreeterTomlWallpaper wallpaper;
     if (const auto* pathNode = table.get("path")) {
       wallpaper.path = stringValue(*pathNode);
@@ -176,6 +193,8 @@ namespace {
     if (const auto* fillColorNode = table.get("fill_color")) {
       wallpaper.fillColor = stringValue(*fillColorNode);
     }
+    wallpaper.blur = wallpaperIntensityValue(path, table, "blur");
+    wallpaper.tint = wallpaperIntensityValue(path, table, "tint");
     return wallpaper;
   }
 
@@ -270,7 +289,7 @@ namespace {
             }
           } else if (entryView == "wallpaper") {
             if (const auto* wallpaperTable = entryNode.as_table()) {
-              config.appearance.wallpaper = parseWallpaperTable(*wallpaperTable);
+              config.appearance.wallpaper = parseWallpaperTable(path, *wallpaperTable);
             } else {
               kLog.warn("{}: appearance.wallpaper must be a table", path.string());
             }
@@ -278,7 +297,8 @@ namespace {
             if (const auto* wallpapersTable = entryNode.as_table()) {
               for (const auto& [connectorKey, connectorNode] : *wallpapersTable) {
                 if (const auto* connectorTable = connectorNode.as_table()) {
-                  config.appearance.wallpapers[std::string(connectorKey.str())] = parseWallpaperTable(*connectorTable);
+                  config.appearance.wallpapers[std::string(connectorKey.str())] =
+                      parseWallpaperTable(path, *connectorTable);
                 } else {
                   kLog.warn("{}: appearance.wallpapers.{} must be a table", path.string(), connectorKey.str());
                 }
@@ -459,6 +479,12 @@ namespace {
           t.insert_or_assign(std::string(key), value);
         }
     );
+    if (wallpaper.blur.has_value()) {
+      table.insert_or_assign("blur", static_cast<double>(*wallpaper.blur));
+    }
+    if (wallpaper.tint.has_value()) {
+      table.insert_or_assign("tint", static_cast<double>(*wallpaper.tint));
+    }
     return table;
   }
 
@@ -1028,7 +1054,8 @@ namespace greeter::config {
     out << "# [session] default, [user] default\n";
     out << "# [appearance] scheme, password_style, hide_logo, power_buttons_position, scheme_selector_position, "
            "theme_mode, corner_radius_scale, font_family\n";
-    out << "# [appearance.palette] full color role table, [appearance.wallpaper] path/fill_mode/fill_color\n";
+    out << "# [appearance.palette] full color role table, [appearance.wallpaper] "
+           "path/fill_mode/fill_color/blur/tint\n";
     out << "# [appearance.wallpapers.<connector>] per-output wallpaper overrides\n";
     out << "# [output] name/use_synced_settings/layout/scale/scales/width/height/refresh_rate/transforms, "
            "[idle] timeout, [cursor] theme/size/path\n";

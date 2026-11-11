@@ -149,7 +149,7 @@ public:
       WallpaperSourceKind sourceKind2, TextureId texture2, const Color& sourceColor2, float surfaceWidth,
       float surfaceHeight, float width, float height, float imageWidth1, float imageHeight1, float imageWidth2,
       float imageHeight2, float progress, float fillMode, const TransitionParams& params, const Color& fillColor,
-      const Mat3& transform, const WallpaperSpanParams& span
+      const Mat3& transform, const WallpaperSpanParams& span, float blurRadius, const Color& tintColor
   ) = 0;
   virtual void drawFullscreenTexture(TextureId texture, bool flipY) = 0;
   virtual void drawFullscreenTint(Color color) = 0;
