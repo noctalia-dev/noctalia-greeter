@@ -84,6 +84,8 @@ enabled = true
 position = "above-panel"
 # Noctalia-compatible bare strftime or C++ chrono formats. Empty hides that line.
 time_format = "{:%H:%M}"
+# Locale-preferred date, matching Noctalia's default.
+# Uses the inherited time locale, then system locale files, then en_US.UTF-8 (if installed).
 date_format = "%A, %x"
 # Font sizes in logical pixels before UI scaling; positive integers or decimals.
 time_font_size = 48

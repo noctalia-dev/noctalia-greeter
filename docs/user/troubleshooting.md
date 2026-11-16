@@ -415,6 +415,16 @@ This is expected when using seatd without logind or elogind: Polkit has no activ
 
 ## Appearance and input
 
+### Date format or language differs from the desktop
+
+The default clock format `%A, %x` matches Noctalia and follows the greeter's time locale. `MM/DD/YY` is the C locale's date format; US English also uses month-first dates. This alone does not mean the clock has a hardcoded US format.
+
+greetd constructs the greeter's environment through PAM and optional profile scripts, so locale variables from the desktop or greetd service may not reach the greeter. If `LC_ALL`, `LC_TIME`, and `LANG` are all missing or empty, the greeter loads the system time locale from `/etc/locale.conf` or `/etc/default/locale`. With neither file configured, it tries installed locales in this order: `en_US.UTF-8`, `C.UTF-8`, `C`.
+
+Look for the `locale:` startup log line. It reports `LANG`, `LC_ALL`, `LC_TIME`, and the active `LC_TIME`. A warning means the requested locale could not be loaded; check installed locales with `locale -a`. Running `locale` in your desktop terminal shows that terminal's environment, which can differ from the greeter's.
+
+Correct the system locale configuration or set `LC_TIME` explicitly in greetd's session command, as shown under [Clock](configuration.md#clock). An inherited `LC_ALL` overrides both `LC_TIME` and `LANG`, including when it is `C` or `C.UTF-8`. Restart greetd after changing its environment. To choose a fixed presentation instead, set `[clock].date_format` in `greeter.toml`.
+
 ### User avatars are missing
 
 Install and enable AccountsService, commonly provided by an `accountsservice` package and `accounts-daemon` service. The greeter reads each user's `IconFile` from AccountsService and displays a fallback when the service or image is unavailable. Avatars are not copied by appearance sync.

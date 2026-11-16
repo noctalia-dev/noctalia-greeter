@@ -105,6 +105,7 @@ _greeter_sources = files(
   'src/core/resource_paths.cpp',
   'src/core/ui_phase.cpp',
   'src/time/time_format.cpp',
+  'src/time/time_locale.cpp',
   'src/wayland/wayland_client.cpp',
   'src/wayland/wayland_seat.cpp',
   'src/render/gl_shared_context.cpp',
@@ -528,6 +529,16 @@ time_format_test = executable(
 )
 
 test('time-format', time_format_test)
+
+time_locale_test = executable(
+  'time-locale-test',
+  sources: files('tests/time_locale_test.cpp', 'src/time/time_locale.cpp', 'src/time/time_format.cpp'),
+  include_directories: include_directories('src'),
+  cpp_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow'],
+  build_by_default: false,
+)
+
+test('time-locale', time_locale_test)
 
 greeter_frame_loop_test = executable(
   'greeter-frame-loop-test',
