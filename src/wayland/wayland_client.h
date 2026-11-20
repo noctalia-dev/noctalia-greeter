@@ -1,7 +1,7 @@
 #pragma once
 
 #include "greeter/greeter_preferences.h"
-#include "wayland/wayland_seat.h"
+#include "wayland/wayland_connection.h"
 
 #include <cstdint>
 #include <functional>
@@ -36,8 +36,6 @@ struct WaylandOutputInfo {
   std::string description;
   int32_t x = 0;
   int32_t y = 0;
-  int32_t physicalWidthMm = 0;
-  int32_t physicalHeightMm = 0;
   int32_t pixelWidth = 0;
   int32_t pixelHeight = 0;
   int32_t scale = 1;
@@ -51,14 +49,13 @@ struct WaylandOutputInfo {
 
 class WaylandClient {
 public:
-  WaylandClient();
-  ~WaylandClient();
+  WaylandClient() = default;
+  ~WaylandClient() = default;
 
   WaylandClient(const WaylandClient&) = delete;
   WaylandClient& operator=(const WaylandClient&) = delete;
 
   bool connect();
-  void disconnect();
 
   [[nodiscard]] int dispatch() const;
   [[nodiscard]] int dispatchPending() const;
@@ -72,15 +69,12 @@ public:
   [[nodiscard]] int repeatPollTimeoutMs() const;
   void repeatTick();
 
-  [[nodiscard]] wl_display* display() const noexcept { return m_display; }
-  [[nodiscard]] wl_compositor* compositor() const noexcept { return m_compositor; }
-  [[nodiscard]] wl_seat* seat() const noexcept { return m_seat; }
-  [[nodiscard]] xdg_wm_base* xdgWmBase() const noexcept { return m_xdgWmBase; }
-  [[nodiscard]] wp_fractional_scale_manager_v1* fractionalScaleManager() const noexcept {
-    return m_fractionalScaleManager;
-  }
-  [[nodiscard]] wp_viewporter* viewporter() const noexcept { return m_viewporter; }
-  [[nodiscard]] bool hasXdgShell() const noexcept { return m_xdgWmBase != nullptr; }
+  [[nodiscard]] WaylandConnection& connection() noexcept { return m_connection; }
+  [[nodiscard]] wl_display* display() const noexcept { return m_connection.display(); }
+  [[nodiscard]] wl_compositor* compositor() const noexcept { return m_connection.compositor(); }
+  [[nodiscard]] wl_seat* seat() const noexcept { return m_connection.seat(); }
+  [[nodiscard]] xdg_wm_base* xdgWmBase() const noexcept { return m_connection.xdgWmBase(); }
+  [[nodiscard]] bool hasXdgShell() const noexcept { return m_connection.hasXdgShell(); }
   [[nodiscard]] const std::vector<WaylandOutputInfo>& outputs() const noexcept { return m_outputs; }
 
   // Buffer scale for wl_surface_set_buffer_scale and HiDPI buffer sizing.
@@ -107,24 +101,8 @@ public:
   [[nodiscard]] std::optional<WaylandOutputLayout> logicalLayoutForOutput(const wl_output* output) const noexcept;
   void setOutputPreferredScale(wl_output* output, float scale) noexcept;
 
-  static void
-  handleGlobal(void* data, wl_registry* registry, std::uint32_t name, const char* interface, std::uint32_t version);
-  static void handleGlobalRemove(void* data, wl_registry* registry, std::uint32_t name);
-  static void handleOutputMode(
-      void* data, wl_output* output, std::uint32_t flags, std::int32_t width, std::int32_t height, std::int32_t refresh
-  );
-  static void handleOutputGeometry(
-      void* data, wl_output* output, std::int32_t x, std::int32_t y, std::int32_t physWidth, std::int32_t physHeight,
-      std::int32_t subpixel, const char* make, const char* model, std::int32_t transform
-  );
-  static void handleOutputDone(void* data, wl_output* output);
-  static void handleOutputScale(void* data, wl_output* output, std::int32_t factor);
-  static void handleOutputName(void* data, wl_output* output, const char* name);
-  static void handleOutputDescription(void* data, wl_output* output, const char* description);
-
 private:
-  void bindGlobal(wl_registry* registry, std::uint32_t name, const char* interface, std::uint32_t version);
-  void bindOutput(wl_registry* registry, std::uint32_t name, std::uint32_t version);
+  void refreshOutputs();
   [[nodiscard]] const WaylandOutputInfo* primaryOutput() const noexcept;
   [[nodiscard]] const WaylandOutputInfo* preferredOutput() const noexcept;
   [[nodiscard]] const WaylandOutputInfo* findOutputByName(std::string_view name) const noexcept;
@@ -132,14 +110,7 @@ private:
   void notifyOutputsChanged();
 
   std::optional<std::string> m_preferredOutputName;
-  wl_display* m_display = nullptr;
-  wl_registry* m_registry = nullptr;
-  wl_compositor* m_compositor = nullptr;
-  wl_seat* m_seat = nullptr;
-  xdg_wm_base* m_xdgWmBase = nullptr;
-  wp_fractional_scale_manager_v1* m_fractionalScaleManager = nullptr;
-  wp_viewporter* m_viewporter = nullptr;
-  WaylandSeat m_seatHandler;
+  WaylandConnection m_connection;
   std::vector<WaylandOutputInfo> m_outputs;
   std::vector<greeter::GreeterOutputPlacement> m_outputLayout;
   std::function<void()> m_outputsChangedCallback;

@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Used before any release-related publishing or AUR mutation.
+if [[ $# -ne 2 ]]; then
+  printf 'Usage: %s VERSION_FILE RELEASE_TAG\n' "$0" >&2
+  exit 1
+fi
+mapfile -t version_lines < "$1"
+version=${version_lines[0]:-}
+if [[ ${#version_lines[@]} -ne 1 || -z "$version" || "$version" == *[[:space:]]* ]]; then
+  printf 'VERSION must contain one non-empty version line.\n' >&2
+  exit 1
+fi
+if [[ "$2" != "v$version" ]]; then
+  printf 'Tag %q does not match VERSION %q.\n' "$2" "$version" >&2
+  exit 1
+fi
+printf '%s\n' "$version"

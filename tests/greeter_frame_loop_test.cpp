@@ -1,8 +1,12 @@
 #include "greeter/greeter_preferences.h"
 #include "greeter/greeter_surface.h"
 #include "greeter/greeter_window.h"
+#include "greeter/library_runtime.h"
+#include "greeter/resources.h"
 #include "render/gl_shared_context.h"
 #include "render/render_context.h"
+#include "render/scene/glyph_node.h"
+#include "render/scene/input_area.h"
 #include "render/text/glyph_registry.h"
 #include "ui/controls/button.h"
 #include "ui/controls/glyph.h"
@@ -50,7 +54,9 @@ namespace {
     wl_display* display = client.display();
     const auto deadline = std::chrono::steady_clock::now() + timeout;
     while (true) {
+      drainGreeterUiWork();
       require(wl_display_dispatch_pending(display) >= 0, "dispatch_pending failed");
+      drainGreeterUiWork();
       require(!swappedWithoutCallback, "a frame callback was requested after the EGL swap/commit");
       if (done()) {
         return true;
@@ -67,7 +73,10 @@ namespace {
         throw std::runtime_error("Wayland flush failed");
       }
       pollfd fd{.fd = wl_display_get_fd(display), .events = POLLIN, .revents = 0};
-      const int result = poll(&fd, 1, static_cast<int>(remaining.count()));
+      const int uiTimeout = greeterUiPollTimeoutMs();
+      const int timeoutMs = uiTimeout < 0 ? static_cast<int>(remaining.count())
+                                          : std::min(static_cast<int>(remaining.count()), uiTimeout);
+      const int result = poll(&fd, 1, timeoutMs);
       if (result > 0 && (fd.revents & POLLIN) != 0) {
         require(wl_display_read_events(display) >= 0, "Wayland read failed");
       } else {
@@ -102,7 +111,7 @@ namespace {
       if (button == nullptr || button->glyph() == nullptr || !button->visible()) {
         continue;
       }
-      const auto glyph = button->glyph()->codepoint();
+      const auto glyph = static_cast<GlyphNode*>(button->glyph()->children().front().get())->codepoint();
       if (glyph == GlyphRegistry::lookup("power")
           || glyph == GlyphRegistry::lookup("reload")
           || glyph == GlyphRegistry::lookup("cpu")) {
@@ -119,7 +128,9 @@ namespace {
     }
     for (Button* button : powerButtons) {
       clicks = 0;
-      password->inputArea()->focus();
+      surface.onPointerMotion(password->x() + 8, password->y() + 8);
+      surface.onPointerEvent(password->x() + 8, password->y() + 8, BTN_LEFT, true);
+      surface.onPointerEvent(password->x() + 8, password->y() + 8, BTN_LEFT, false);
       window.requestLayout();
       dispatchFor(client, 100ms);
       const float x = button->x() + button->width() * 0.5f;
@@ -157,18 +168,16 @@ namespace {
     InputDispatcher dispatcher;
     dispatcher.setSceneRoot(&root);
     dispatcher.pointerEnter(10.0f, 10.0f, 0);
-    dispatcher.pointerButton(10.0f, 10.0f, BTN_LEFT, true);
+    dispatcher.pointerButton(10.0f, 10.0f, BTN_LEFT, true, 0, 0, false);
 
-    Node unrelated;
-    dispatcher.invalidatePointersFor(&unrelated);
-    dispatcher.invalidatePointersFor(nullptr);
     require(area->pressed() && area->hovered(), "unrelated cleanup cleared pointer state");
-    dispatcher.invalidatePointersFor(subtree);
+    auto detached = root.removeChild(subtree);
+    dispatcher.pointerMotion(10.0f, 10.0f, 0);
     require(!area->pressed() && !area->hovered(), "removed subtree retained hover or capture");
     require(leaves == 1, "removed hovered area did not receive exactly one leave event");
-    (void)root.removeChild(subtree);
+    detached.reset();
     dispatcher.pointerMotion(10.0f, 10.0f, 0);
-    dispatcher.pointerButton(10.0f, 10.0f, BTN_LEFT, false);
+    dispatcher.pointerButton(10.0f, 10.0f, BTN_LEFT, false, 0, 0, false);
     require(clicks == 0, "release activated a removed menu row");
   }
 
@@ -223,9 +232,9 @@ namespace {
     );
     GlSharedContext gl;
     gl.initialize(client.display());
+    initializeGreeterAssets();
     RenderContext context;
     context.initialize(gl);
-    GlyphRegistry::initialize();
     greeter::setCliDefaultUser("pointer-test");
     GreeterModel model;
     model.initialize();
@@ -237,9 +246,9 @@ namespace {
     surface.setKeyboardOwner(true);
     GreeterWindow window(client, gl, context, surface);
     surface.setWindow(&window);
-    require(window.createSurface(), "could not create the test window");
     const auto outputs = client.readyOutputsSorted();
     window.bindOutput(outputs.front()->output);
+    require(window.createSurface(), "could not create the test window");
 
     auto* animations = surface.sceneRoot()->animationManager();
     require(animations != nullptr, "scene has no animation manager");
@@ -255,6 +264,13 @@ namespace {
     );
     animations->cancelForOwner(&owner);
     require(!surface.animating(), "cancelled animation is still active");
+    const auto beforeBlink = swaps;
+    require(
+        dispatchUntil(client, 5s, [&] { return swaps > beforeBlink; }), "focused input blink timer did not repaint"
+    );
+    // A focused shared Input intentionally repaints its blinking cursor. Check
+    // idle scheduling with focus removed, so the scene has no periodic work.
+    surface.setKeyboardOwner(false);
     requireIdle(client, window);
 
     auto before = swaps;
@@ -288,6 +304,7 @@ namespace {
     require(updates >= 2, "restarted animation did not advance over multiple frames");
     requireIdle(client, window);
     testPointerRemoval();
+    surface.setKeyboardOwner(true);
     testPowerButtonClicks(client, window, surface);
     testMenuScrollbar(client, surface);
     std::puts("frame loop: startup, animation, redraw/layout, idle, and restart passed");

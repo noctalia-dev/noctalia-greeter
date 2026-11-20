@@ -27,6 +27,19 @@ jobs:
           set -euo pipefail
           pacman -Syu --noconfirm git base-devel pacman-contrib openssh
 
+      - uses: actions/checkout@v4
+
+      - name: Determine version
+        id: vars
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          TAGVER=$(bash scripts/validate-release-version VERSION "$TAG_NAME")
+          PKGVER="${TAGVER//-/_}"
+          echo "tagver=$TAGVER" >> "$GITHUB_OUTPUT"
+          echo "pkgver=$PKGVER" >> "$GITHUB_OUTPUT"
+
       - name: Create build user
         run: |
           set -euo pipefail
@@ -44,17 +57,6 @@ jobs:
           chmod 600 /root/.ssh/id_aur
           ssh-keyscan aur.archlinux.org >> /root/.ssh/known_hosts
           chmod 600 /root/.ssh/known_hosts
-
-      - name: Determine version
-        id: vars
-        env:
-          TAG_NAME: ${{ github.ref_name }}
-        run: |
-          set -euo pipefail
-          TAGVER="${TAG_NAME#v}"
-          PKGVER="${TAGVER//-/_}"
-          echo "tagver=$TAGVER" >> "$GITHUB_OUTPUT"
-          echo "pkgver=$PKGVER" >> "$GITHUB_OUTPUT"
 
       - name: Clone AUR repository
         run: |

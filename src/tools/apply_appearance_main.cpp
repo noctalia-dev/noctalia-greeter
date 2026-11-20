@@ -1,7 +1,8 @@
-#include "core/log.h"
+#include "core/application_identity.h"
 #include "greeter/appearance_sync.h"
 #include "greeter/greetd_user.h"
 #include "greeter/greeter_preferences.h"
+#include "greeter/logging.h"
 #include "tools/secure_appearance_sync.h"
 
 #include <cstdlib>
@@ -53,6 +54,7 @@ namespace {
 } // namespace
 
 int main(int argc, char* argv[]) {
+  setApplicationIdentity({.name = "noctalia-greeter", .envPrefix = "NOCTALIA_GREETER"});
   if (argc == 3 && std::string_view(argv[1]) == "--supports" && std::string_view(argv[2]) == kSecureSyncCapability) {
     std::cout << kSecureSyncCapability << '\n';
     return 0;

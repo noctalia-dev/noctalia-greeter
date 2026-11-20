@@ -1,7 +1,8 @@
 project('noctalia-greeter', ['c', 'cpp'],
-  version: '1.7.1',
+  version: files('VERSION'),
+  meson_version: '>=1.1',
   default_options: [
-    'cpp_std=c++20',
+    'cpp_std=c++23',
     'cpp_extensions=false',
     'warning_level=0',
     'b_ndebug=if-release',
@@ -69,97 +70,38 @@ libwebp_dep = dependency('libwebp', required: true)
 libjxl_dep = dependency('libjxl', required: true)
 libjxl_threads_dep = dependency('libjxl_threads', required: true)
 
-# ── Wayland protocol generation ───────────────────────────────────────────────
-wayland_scanner    = find_program('wayland-scanner')
-wayland_protos_dir = wayland_protos_dep.get_variable('pkgdatadir')
+# Unmodified, pinned noctalia-ui snapshot; builds without a shell checkout or network.
+noctalia_ui_build_codecs = true
+subdir('lib')
 
-_protocol_sources = []
-
-foreach _p : [
-  ['xdg-shell', wayland_protos_dir / 'stable/xdg-shell/xdg-shell.xml'],
-  ['cursor-shape-v1', 'protocols/cursor-shape-v1.xml'],
-  ['fractional-scale-v1', wayland_protos_dir / 'staging/fractional-scale/fractional-scale-v1.xml'],
-  ['viewporter', wayland_protos_dir / 'stable/viewporter/viewporter.xml'],
-]
-  _name = _p[0]
-  _xml  = _p[1]
-
-  _h = custom_target(_name + '-client-header',
-    input:   _xml,
-    output:  _name + '-client-protocol.h',
-    command: [wayland_scanner, 'client-header', '@INPUT@', '@OUTPUT@'],
+# Optional build provenance; source archives and builders without Git remain supported.
+_git_program = find_program('git', required: false)
+_git_revision_header_name = 'greeter_git_revision.h'
+if _git_program.found()
+  _git_revision_h = vcs_tag(
+    input: 'src/greeter/git_revision.h.in',
+    output: 'greeter_git_revision.h',
+    command: [_git_program, 'describe', '--tags', '--always', '--dirty=-dirty', '--abbrev=12'],
+    fallback: 'unknown',
   )
-  _c = custom_target(_name + '-client-source',
-    input:   _xml,
-    output:  _name + '-client-protocol.c',
-    command: [wayland_scanner, 'private-code', '@INPUT@', '@OUTPUT@'],
-    depends: _h,
+else
+  # A distinct name avoids Meson cleaning the configured file as a stale vcs_tag
+  # output when Git disappears between configurations of an existing build.
+  _git_revision_header_name = 'greeter_git_revision_unknown.h'
+  _git_revision_h = configure_file(
+    input: 'src/greeter/git_revision.h.in',
+    output: _git_revision_header_name,
+    configuration: {'VCS_TAG': 'unknown'},
   )
-  _protocol_sources += _c
-endforeach
+endif
 
 _greeter_sources = files(
   'src/config/output_identity.c',
-  'src/core/log.cpp',
-  'src/core/deferred_call.cpp',
-  'src/core/resource_paths.cpp',
-  'src/core/ui_phase.cpp',
   'src/time/time_format.cpp',
   'src/time/time_locale.cpp',
   'src/wayland/wayland_client.cpp',
-  'src/wayland/wayland_seat.cpp',
-  'src/render/gl_shared_context.cpp',
-  'src/render/render_context.cpp',
-  'src/render/render_target.cpp',
-  'src/render/backend/render_backend.cpp',
-  'src/render/backend/gles_render_backend.cpp',
-  'src/render/backend/gles_framebuffer.cpp',
-  'src/render/backend/gles_texture_manager.cpp',
-  'src/render/core/color.cpp',
-  'src/render/core/shader_program.cpp',
-  'src/render/core/image_file_loader.cpp',
-  'src/render/core/image_decoder.cpp',
-  'src/render/core/async_texture_cache.cpp',
-  'src/render/core/shared_texture_cache.cpp',
-  'src/render/core/blur_cache.cpp',
-  'src/render/core/cached_layer.cpp',
-  'src/render/programs/rect_program.cpp',
-  'src/render/programs/image_program.cpp',
-  'src/render/programs/glyph_program.cpp',
-  'src/render/programs/linear_gradient_program.cpp',
-  'src/render/programs/blur_program.cpp',
-  'src/render/programs/wallpaper_program.cpp',
-  'src/render/programs/spinner_program.cpp',
-  'src/render/programs/screen_corner_program.cpp',
-  'src/render/programs/effect_program.cpp',
-  'src/render/programs/audio_spectrum_program.cpp',
-  'src/render/programs/graph_program.cpp',
-  'src/render/scene/node.cpp',
-  'src/render/scene/input_area.cpp',
-  'src/render/scene/input_dispatcher.cpp',
-  'src/render/scene/graph_node.cpp',
-  'src/render/text/cairo_text_renderer.cpp',
-  'src/render/text/cairo_glyph_renderer.cpp',
-  'src/render/text/glyph_registry.cpp',
-  'src/render/animation/animation.cpp',
-  'src/render/animation/animation_manager.cpp',
-  'src/render/animation/motion_service.cpp',
-  'src/ui/controls/box.cpp',
-  'src/ui/controls/button.cpp',
-  'src/ui/controls/input.cpp',
-  'src/ui/controls/search_field.cpp',
-  'src/ui/controls/label.cpp',
-  'src/ui/controls/flex.cpp',
-  'src/ui/controls/glyph.cpp',
-  'src/ui/controls/image.cpp',
-  'src/ui/controls/scroll_view.cpp',
-  'src/ui/controls/scrollbar.cpp',
-  'src/ui/controls/spacer.cpp',
-  'src/ui/controls/spinner.cpp',
-  'src/ui/controls/separator.cpp',
-  'src/ui/palette.cpp',
+  'src/wayland/greeter_output_metadata.cpp',
   'src/theme/builtin_palettes.cpp',
-  'src/ui/style.cpp',
   'src/accounts/accounts_icon.cpp',
   'src/greetd/greetd_client.cpp',
   'src/greeter/appearance_sync.cpp',
@@ -179,14 +121,22 @@ _greeter_sources = files(
   'src/greeter/greeter.cpp',
   'src/tools/passwordless_sync_policy.cpp',
   'src/tools/passwordless_sync_policy_xml.cpp',
-) + _protocol_sources
+  'src/greeter/logging.cpp',
+  'src/greeter/resources.cpp',
+  'src/greeter/library_runtime.cpp',
+  'src/greeter/build_info.cpp',
+  'src/greeter/greeter_style.cpp',
+  'src/greeter/ui/search_field.cpp',
+  'src/greeter/render/wallpaper_program.cpp',
+  'src/greeter/render/wallpaper_node.cpp',
+) + [_git_revision_h]
 
 _greeter_inc = [
-  include_directories('src'),
-  include_directories('third_party/wuffs', is_system: true),
+  include_directories('src', 'lib'),
 ]
 
 _greeter_dependencies = [
+  noctalia_ui_codecs_dep,
   wayland_client_dep,
   egl_dep,
   gles2_dep,
@@ -218,11 +168,18 @@ noctalia_greeter_executable = executable('noctalia-greeter',
   cpp_args: [
     '-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow',
     '-DNOCTALIA_GREETER_VERSION="' + meson.project_version() + '"',
+    '-DNOCTALIA_GREETER_REVISION_HEADER="' + _git_revision_header_name + '"',
+    '-DNOCTALIA_GREETER_LIBRARY_ASSETS_DIR="' + meson.project_source_root() / 'lib' / 'assets' + '"',
     '-DNOCTALIA_GREETER_ASSETS_DIR="' + meson.project_source_root() / 'assets' + '"',
     '-DNOCTALIA_GREETER_INSTALLED_ASSETS_DIR="' + get_option('datadir') / 'noctalia-greeter' / 'assets' + '"',
     '-DNOCTALIA_GREETER_INSTALLED_POLICY_PATH="' + get_option('prefix') / get_option('datadir') / 'polkit-1' / 'actions' / 'org.noctalia.greeter.apply-appearance.policy' + '"',
   ],
   install: true,
+)
+
+install_subdir('lib/assets',
+  install_dir: get_option('datadir') / 'noctalia-greeter' / 'assets' / 'library',
+  strip_directory: true,
 )
 
 install_subdir('assets',
@@ -259,7 +216,7 @@ install_data(
 )
 
 _apply_appearance_support_sources = files(
-  'src/core/log.cpp',
+  'src/greeter/logging.cpp',
   'src/greeter/appearance_sync.cpp',
   'src/greeter/greetd_user.cpp',
   'src/greeter/privileged_state_paths.cpp',
@@ -270,11 +227,11 @@ _apply_appearance_support_sources = files(
 
 _apply_appearance_sources = _apply_appearance_support_sources + files('src/tools/apply_appearance_main.cpp')
 
-_greeter_tools_inc = include_directories('src')
+_greeter_tools_inc = include_directories('src', 'lib')
 
 apply_appearance_executable = executable('noctalia-greeter-apply-appearance',
   sources: _apply_appearance_sources,
-  dependencies: [nlohmann_dep, tomlplusplus_dep],
+  dependencies: [nlohmann_dep, tomlplusplus_dep, noctalia_ui_dep],
   include_directories: _greeter_tools_inc,
   cpp_args: [
     '-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow',
@@ -307,7 +264,7 @@ noctalia_greeter_compositor_executable = executable('noctalia-greeter-compositor
     'src/compositor/pointer_config.c',
     'src/compositor/system_keyboard_config.c',
     'src/config/output_identity.c',
-    'src/core/log.cpp',
+    'src/greeter/logging.cpp',
     'src/greeter/greeter_config_io.cpp',
   ),
   dependencies: [
@@ -317,7 +274,7 @@ noctalia_greeter_compositor_executable = executable('noctalia-greeter-compositor
     xkbcommon_dep,
     tomlplusplus_dep,
   ],
-  include_directories: include_directories('src'),
+  include_directories: include_directories('src', 'lib'),
   c_args: [
     '-Wall', '-Wextra', '-Wpedantic', '-Wconversion',
     '-DWLR_USE_UNSTABLE',
@@ -332,10 +289,10 @@ pointer_config_test = executable(
     'tests/pointer_config_test.cpp',
     'src/compositor/pointer_config.c',
     'src/greeter/greeter_config_io.cpp',
-    'src/core/log.cpp',
+    'src/greeter/logging.cpp',
   ),
   dependencies: [libinput_dep, wlroots_dep, tomlplusplus_dep],
-  include_directories: include_directories('src'),
+  include_directories: include_directories('src', 'lib'),
   c_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-DWLR_USE_UNSTABLE'],
   cpp_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow'],
   build_by_default: false,
@@ -348,10 +305,10 @@ greetd_client_response_test = executable(
   sources: files(
     'tests/greetd_client_response_test.cpp',
     'src/greetd/greetd_client.cpp',
-    'src/core/log.cpp',
+    'src/greeter/logging.cpp',
   ),
   dependencies: [nlohmann_dep],
-  include_directories: include_directories('src'),
+  include_directories: include_directories('src', 'lib'),
   cpp_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow'],
   build_by_default: false,
 )
@@ -365,7 +322,7 @@ passwordless_sync_policy_xml_test = executable(
     'src/tools/passwordless_sync_policy_xml.cpp',
   ),
   dependencies: [libxml2_dep],
-  include_directories: include_directories('src'),
+  include_directories: include_directories('src', 'lib'),
   build_by_default: false,
 )
 
@@ -397,10 +354,9 @@ legacy_staging_compatibility_test = executable(
   'legacy-staging-compatibility-test',
   sources: _apply_appearance_support_sources + files(
     'src/greeter/appearance_config.cpp',
-    'src/render/core/color.cpp',
     'tests/legacy_staging_compatibility_test.cpp',
   ),
-  dependencies: [nlohmann_dep, tomlplusplus_dep],
+  dependencies: [nlohmann_dep, tomlplusplus_dep, noctalia_ui_dep],
   include_directories: _greeter_tools_inc,
   cpp_args: [
     '-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow',
@@ -413,11 +369,8 @@ test('legacy-staging-compatibility', legacy_staging_compatibility_test)
 
 jxl_decoder_test = executable(
   'jxl-decoder-test',
-  sources: files(
-    'tests/jxl_decoder_test.cpp',
-    'src/render/core/image_decoder.cpp',
-  ),
-  dependencies: [libwebp_dep, libjxl_dep, libjxl_threads_dep],
+  sources: files('tests/jxl_decoder_test.cpp', 'src/greeter/logging.cpp'),
+  dependencies: [noctalia_ui_codecs_dep],
   include_directories: _greeter_inc,
   cpp_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow'],
   build_by_default: false,
@@ -428,7 +381,7 @@ test('jxl-decoder', jxl_decoder_test)
 wallpaper_span_geometry_test = executable(
   'wallpaper-span-geometry-test',
   sources: files('tests/wallpaper_span_geometry_test.cpp'),
-  include_directories: include_directories('src'),
+  include_directories: include_directories('src', 'lib'),
   cpp_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow'],
   build_by_default: false,
 )
@@ -441,7 +394,7 @@ greeter_sessions_lookup_test = executable(
     'tests/greeter_sessions_lookup_test.cpp',
     'src/greeter/greeter_sessions.cpp',
   ),
-  include_directories: include_directories('src'),
+  include_directories: include_directories('src', 'lib'),
   cpp_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow'],
   build_by_default: false,
 )
@@ -454,7 +407,7 @@ system_keyboard_config_test = executable(
     'tests/system_keyboard_config_test.c',
     'src/compositor/system_keyboard_config.c',
   ),
-  include_directories: include_directories('src'),
+  include_directories: include_directories('src', 'lib'),
   c_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion'],
   build_by_default: false,
 )
@@ -468,7 +421,7 @@ output_layout_move_test = executable(
     'src/compositor/output_layout_move.c',
   ),
   dependencies: [wlroots_dep, wayland_server_dep, wayland_client_dep],
-  include_directories: include_directories('src'),
+  include_directories: include_directories('src', 'lib'),
   c_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-DWLR_USE_UNSTABLE'],
   build_by_default: false,
 )
@@ -482,7 +435,7 @@ output_render_test = executable(
     'src/compositor/output_render.c',
   ),
   dependencies: [wlroots_dep, wayland_server_dep],
-  include_directories: include_directories('src'),
+  include_directories: include_directories('src', 'lib'),
   c_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-DWLR_USE_UNSTABLE'],
   build_by_default: false,
 )
@@ -495,7 +448,7 @@ output_identity_test = executable(
     'tests/output_identity_test.cpp',
     'src/config/output_identity.c',
   ),
-  include_directories: include_directories('src'),
+  include_directories: include_directories('src', 'lib'),
   cpp_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow'],
   build_by_default: false,
 )
@@ -515,7 +468,7 @@ test(
 session_discovery_test = executable(
   'session-discovery-test',
   sources: files('tests/session_discovery_test.cpp', 'src/greeter/greeter_sessions.cpp'),
-  include_directories: include_directories('src'),
+  include_directories: include_directories('src', 'lib'),
   cpp_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow'],
   build_by_default: false,
 )
@@ -525,7 +478,7 @@ test('session-discovery', session_discovery_test)
 time_format_test = executable(
   'time-format-test',
   sources: files('tests/time_format_test.cpp', 'src/time/time_format.cpp'),
-  include_directories: include_directories('src'),
+  include_directories: include_directories('src', 'lib'),
   cpp_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow'],
   build_by_default: false,
 )
@@ -535,7 +488,7 @@ test('time-format', time_format_test)
 time_locale_test = executable(
   'time-locale-test',
   sources: files('tests/time_locale_test.cpp', 'src/time/time_locale.cpp', 'src/time/time_format.cpp'),
-  include_directories: include_directories('src'),
+  include_directories: include_directories('src', 'lib'),
   cpp_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow'],
   build_by_default: false,
 )
@@ -625,11 +578,11 @@ wallpaper_program_pixel_test = executable(
   'wallpaper-program-pixel-test',
   sources: files(
     'tests/wallpaper_program_pixel_test.cpp',
-    'src/render/programs/wallpaper_program.cpp',
-    'src/render/core/shader_program.cpp',
+    'src/greeter/render/wallpaper_program.cpp',
+    'src/greeter/render/wallpaper_node.cpp',
   ),
-  dependencies: [egl_dep, gles2_dep],
-  include_directories: include_directories('src'),
+  dependencies: [noctalia_ui_dep],
+  include_directories: include_directories('src', 'lib'),
   cpp_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow'],
   build_by_default: false,
 )
@@ -638,4 +591,17 @@ test(
   'wallpaper-program-pixels',
   wallpaper_program_pixel_test,
   env: ['LIBGL_ALWAYS_SOFTWARE=1'],
+)
+
+
+test(
+  'version-metadata',
+  find_program('python3'),
+  args: [
+    meson.project_source_root() / 'tests/version_metadata_test.py',
+    noctalia_greeter_executable,
+    meson.project_source_root() / 'VERSION',
+    _git_revision_h,
+    meson.project_source_root() / 'scripts/validate-release-version',
+  ],
 )

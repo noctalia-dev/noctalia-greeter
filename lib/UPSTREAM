@@ -1,0 +1,8 @@
+Project: noctalia-ui
+Repository: https://github.com/noctalia-dev/noctalia
+Revision: a5444b9a2c2bc7c1aed5c59298a268e45de14055
+Source directory: lib/
+License: MIT (LICENSE); Wuffs retains its own notices under third_party/wuffs/.
+
+This directory is an unmodified upstream lib/ snapshot, with LICENSE and this
+provenance file added. See PACKAGING.md for the snapshot refresh procedure.

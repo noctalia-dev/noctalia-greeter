@@ -2,62 +2,18 @@
 
 #include "config/output_identity.h"
 #include "core/log.h"
-#include "fractional-scale-v1-client-protocol.h"
-#include "greeter/greeter_preferences.h"
-#include "viewporter-client-protocol.h"
+#include "greeter/library_runtime.h"
+#include "wayland/greeter_output_metadata.h"
 #include "wayland/output_span_layout.h"
-#include "xdg-shell-client-protocol.h"
 
 #include <algorithm>
-#include <cerrno>
 #include <chrono>
 #include <cmath>
-#include <cstdlib>
-#include <cstring>
-#include <dirent.h>
 #include <limits>
-#include <stdexcept>
-#include <string>
-#include <sys/stat.h>
-#include <thread>
-#include <unistd.h>
 #include <wayland-client.h>
 
 namespace {
   constexpr Logger kLog("wayland");
-
-  static_assert(WL_OUTPUT_TRANSFORM_90 == 1);
-  static_assert(WL_OUTPUT_TRANSFORM_270 == 3);
-  static_assert(WL_OUTPUT_TRANSFORM_FLIPPED_90 == 5);
-  static_assert(WL_OUTPUT_TRANSFORM_FLIPPED_270 == 7);
-
-  void releaseOutput(wl_output* output) {
-    if (wl_output_get_version(output) >= WL_OUTPUT_RELEASE_SINCE_VERSION) {
-      wl_output_release(output);
-    } else {
-      wl_output_destroy(output);
-    }
-  }
-
-  void releaseSeat(wl_seat* seat) {
-    if (wl_seat_get_version(seat) >= WL_SEAT_RELEASE_SINCE_VERSION) {
-      wl_seat_release(seat);
-    } else {
-      wl_seat_destroy(seat);
-    }
-  }
-
-  void xdgWmBasePing(void* /*data*/, xdg_wm_base* wmBase, std::uint32_t serial) { xdg_wm_base_pong(wmBase, serial); }
-
-  const xdg_wm_base_listener kXdgWmBaseListener = {
-      .ping = xdgWmBasePing,
-  };
-
-  const wl_registry_listener kRegistryListener = {
-      .global = &WaylandClient::handleGlobal,
-      .global_remove = &WaylandClient::handleGlobalRemove,
-  };
-
   [[nodiscard]] float outputScaleFactor(const WaylandOutputInfo& out) noexcept {
     if (out.preferredScale > 0.0f) {
       return out.preferredScale;
@@ -145,63 +101,6 @@ namespace {
     return count;
   }
 
-  const wl_output_listener kOutputListener = {
-      .geometry = &WaylandClient::handleOutputGeometry,
-      .mode = &WaylandClient::handleOutputMode,
-      .done = &WaylandClient::handleOutputDone,
-      .scale = &WaylandClient::handleOutputScale,
-      .name = &WaylandClient::handleOutputName,
-      .description = &WaylandClient::handleOutputDescription,
-  };
-
-  void logWaylandConnectDiagnostics() {
-    const char* wlDisplay = std::getenv("WAYLAND_DISPLAY");
-    const char* runtimeDir = std::getenv("XDG_RUNTIME_DIR");
-    if (runtimeDir == nullptr || runtimeDir[0] == '\0') {
-      kLog.warn("XDG_RUNTIME_DIR is unset");
-      return;
-    }
-
-    struct stat runtimeStat{};
-    if (stat(runtimeDir, &runtimeStat) != 0) {
-      kLog.warn("XDG_RUNTIME_DIR missing or inaccessible: {} (errno={} '{}')", runtimeDir, errno, std::strerror(errno));
-    } else if (!S_ISDIR(runtimeStat.st_mode)) {
-      kLog.warn("XDG_RUNTIME_DIR is not a directory: {}", runtimeDir);
-    }
-
-    if (wlDisplay == nullptr || wlDisplay[0] == '\0') {
-      kLog.warn("WAYLAND_DISPLAY is unset");
-      return;
-    }
-
-    const std::string socketPath = std::string(runtimeDir) + "/" + wlDisplay;
-    struct stat socketStat{};
-    if (stat(socketPath.c_str(), &socketStat) == 0) {
-      kLog.info("Wayland socket present: {}", socketPath);
-      return;
-    }
-
-    kLog.warn("Wayland socket missing: {} (errno={} '{}')", socketPath, errno, std::strerror(errno));
-
-    DIR* dir = opendir(runtimeDir);
-    if (dir == nullptr) {
-      kLog.warn("cannot list {} (errno={} '{}')", runtimeDir, errno, std::strerror(errno));
-      return;
-    }
-
-    std::string entries;
-    while (dirent* entry = readdir(dir)) {
-      if (entry->d_name[0] == '.') {
-        continue;
-      }
-      if (!entries.empty()) {
-        entries += ", ";
-      }
-      entries += entry->d_name;
-    }
-    closedir(dir);
-    kLog.warn("XDG_RUNTIME_DIR contents: {}", entries.empty() ? "(empty)" : entries);
-  }
 } // namespace
 
 std::string WaylandOutputInfo::stableIdentifier() const {
@@ -221,140 +120,65 @@ bool WaylandOutputInfo::matchesIdentifier(const std::string_view identifier) con
   );
 }
 
-WaylandClient::WaylandClient() = default;
-
-WaylandClient::~WaylandClient() { disconnect(); }
-
 bool WaylandClient::connect() {
-  if (m_display != nullptr) {
-    return true;
-  }
-
+  initializeGreeterLibrary();
   m_outputLayout = greeter::loadGreeterOutputLayout();
-
-  constexpr int kMaxConnectAttempts = 60; // ~3s total with 50ms backoff
-  for (int attempt = 1; attempt <= kMaxConnectAttempts; ++attempt) {
-    errno = 0;
-    m_display = wl_display_connect(nullptr);
-    if (m_display != nullptr) {
-      break;
-    }
-
-    const int err = errno;
-    const bool retryable = (err == ENOENT || err == ECONNREFUSED || err == EACCES);
-    if (!retryable || attempt == kMaxConnectAttempts) {
-      const char* wlDisplay = std::getenv("WAYLAND_DISPLAY");
-      const char* runtimeDir = std::getenv("XDG_RUNTIME_DIR");
-      kLog.error(
-          "wl_display_connect failed (errno={} '{}', "
-          "WAYLAND_DISPLAY={}, XDG_RUNTIME_DIR={}, attempt={}/{})",
-          err, std::strerror(err), wlDisplay != nullptr ? wlDisplay : "unset",
-          runtimeDir != nullptr ? runtimeDir : "unset", attempt, kMaxConnectAttempts
-      );
-      logWaylandConnectDiagnostics();
-      return false;
-    }
-
-    if (attempt == 1) {
-      logWaylandConnectDiagnostics();
-    }
-
-    if (attempt == 1 || attempt % 10 == 0) {
-      kLog.warn(
-          "wl_display_connect retry {}/{} (errno={} '{}')", attempt, kMaxConnectAttempts, err, std::strerror(err)
-      );
-    }
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-  }
-
-  m_registry = wl_display_get_registry(m_display);
-  if (m_registry == nullptr) {
-    kLog.error("wl_display_get_registry failed");
-    disconnect();
+  m_connection.extension<GreeterOutputMetadata>().setOnChanged([this] { refreshOutputs(); });
+  m_connection.setOutputChangeCallback([this] { refreshOutputs(); });
+  if (!m_connection.connect()) {
+    kLog.error("Wayland connection failed");
     return false;
   }
-
-  if (wl_registry_add_listener(m_registry, &kRegistryListener, this) != 0) {
-    kLog.error("wl_registry_add_listener failed");
-    disconnect();
-    return false;
-  }
-
-  if (wl_display_roundtrip(m_display) < 0) {
-    kLog.error("Wayland registry roundtrip failed: {}", std::strerror(errno));
-    disconnect();
-    return false;
-  }
-
-  if (!m_compositor || !m_seat || !m_xdgWmBase) {
-    kLog.error("missing required Wayland globals (compositor/seat/xdg-shell)");
-    disconnect();
-    return false;
-  }
-
-  kLog.info("connected to Wayland compositor");
+  refreshOutputs();
   return true;
 }
 
-void WaylandClient::disconnect() {
-  m_seatHandler.cleanup();
-
-  for (WaylandOutputInfo& output : m_outputs) {
-    if (output.output != nullptr) {
-      releaseOutput(output.output);
+void WaylandClient::refreshOutputs() {
+  std::vector<WaylandOutputInfo> outputs;
+  for (const auto& output : m_connection.outputs()) {
+    float preferredScale = output.configuredScale();
+    if (const auto previous = std::find_if(
+            m_outputs.begin(), m_outputs.end(), [&](const auto& old) { return old.output == output.output; }
+        );
+        previous != m_outputs.end() && previous->preferredScale > 0) {
+      preferredScale = previous->preferredScale;
     }
+    const auto* metadata = m_connection.extension<GreeterOutputMetadata>().find(output.name);
+    outputs.push_back(
+        {.output = output.output,
+         .registryName = output.name,
+         .name = output.connectorName,
+         .make = metadata ? metadata->make : output.make,
+         .model = metadata ? metadata->model : output.model,
+         .description = output.description,
+         .x = m_connection.hasXdgOutputManager() || !metadata ? output.logicalX : metadata->x,
+         .y = m_connection.hasXdgOutputManager() || !metadata ? output.logicalY : metadata->y,
+         .pixelWidth = output.width,
+         .pixelHeight = output.height,
+         .scale = output.scale,
+         .transform = output.effectiveTransform(),
+         .preferredScale = preferredScale,
+         .done = output.done}
+    );
   }
-  m_outputs.clear();
-
-  if (m_fractionalScaleManager != nullptr) {
-    wp_fractional_scale_manager_v1_destroy(m_fractionalScaleManager);
-    m_fractionalScaleManager = nullptr;
-  }
-  if (m_viewporter != nullptr) {
-    wp_viewporter_destroy(m_viewporter);
-    m_viewporter = nullptr;
-  }
-  if (m_xdgWmBase != nullptr) {
-    xdg_wm_base_destroy(m_xdgWmBase);
-    m_xdgWmBase = nullptr;
-  }
-  if (m_seat != nullptr) {
-    releaseSeat(m_seat);
-    m_seat = nullptr;
-  }
-  if (m_compositor != nullptr) {
-    wl_compositor_destroy(m_compositor);
-    m_compositor = nullptr;
-  }
-  if (m_registry != nullptr) {
-    wl_registry_destroy(m_registry);
-    m_registry = nullptr;
-  }
-  if (m_display != nullptr) {
-    wl_display_disconnect(m_display);
-    m_display = nullptr;
-  }
+  m_outputs = std::move(outputs);
+  notifyOutputsChanged();
 }
 
-int WaylandClient::dispatch() const { return m_display != nullptr ? wl_display_dispatch(m_display) : -1; }
-
-int WaylandClient::dispatchPending() const {
-  return m_display != nullptr ? wl_display_dispatch_pending(m_display) : -1;
-}
-
-int WaylandClient::flush() const { return m_display != nullptr ? wl_display_flush(m_display) : -1; }
-
+int WaylandClient::dispatch() const { return wl_display_dispatch(display()); }
+int WaylandClient::dispatchPending() const { return wl_display_dispatch_pending(display()); }
+int WaylandClient::flush() const { return wl_display_flush(display()); }
 void WaylandClient::setPointerEventCallback(WaylandSeat::PointerEventCallback callback) {
-  m_seatHandler.setPointerEventCallback(std::move(callback));
+  m_connection.setPointerEventCallback(std::move(callback));
 }
-
 void WaylandClient::setKeyboardEventCallback(WaylandSeat::KeyboardEventCallback callback) {
-  m_seatHandler.setKeyboardEventCallback(std::move(callback));
+  m_connection.setKeyboardEventCallback(std::move(callback));
 }
-
 void WaylandClient::setOutputsChangedCallback(std::function<void()> callback) {
   m_outputsChangedCallback = std::move(callback);
 }
+int WaylandClient::repeatPollTimeoutMs() const { return m_connection.repeatPollTimeoutMs(); }
+void WaylandClient::repeatTick() { m_connection.repeatTick(); }
 
 void WaylandClient::setPreferredOutputName(std::optional<std::string> name) {
   if (name.has_value() && name->empty()) {
@@ -763,200 +587,5 @@ std::optional<WaylandOutputLayout> WaylandClient::logicalLayoutForOutput(const w
 void WaylandClient::notifyOutputsChanged() {
   if (m_outputsChangedCallback) {
     m_outputsChangedCallback();
-  }
-}
-
-void WaylandClient::handleOutputGeometry(
-    void* data, wl_output* wlOut, std::int32_t x, std::int32_t y, std::int32_t physWidth, std::int32_t physHeight,
-    std::int32_t /*subpixel*/, const char* make, const char* model, std::int32_t transform
-) {
-  auto* client = static_cast<WaylandClient*>(data);
-  for (auto& out : client->m_outputs) {
-    if (out.output != wlOut) {
-      continue;
-    }
-    const bool changed = out.x != x
-        || out.y != y
-        || out.physicalWidthMm != physWidth
-        || out.physicalHeightMm != physHeight
-        || out.make != (make != nullptr ? make : "")
-        || out.model != (model != nullptr ? model : "")
-        || out.transform != transform;
-    out.x = x;
-    out.y = y;
-    out.physicalWidthMm = physWidth;
-    out.physicalHeightMm = physHeight;
-    out.make = make != nullptr ? make : "";
-    out.model = model != nullptr ? model : "";
-    out.transform = transform;
-    if (changed && out.done) {
-      client->notifyOutputsChanged();
-    }
-    break;
-  }
-}
-
-void WaylandClient::handleOutputMode(
-    void* data, wl_output* wlOut, std::uint32_t flags, std::int32_t w, std::int32_t h, std::int32_t /*refresh*/
-) {
-  if ((flags & WL_OUTPUT_MODE_CURRENT) == 0) {
-    return;
-  }
-  auto* client = static_cast<WaylandClient*>(data);
-  for (auto& out : client->m_outputs) {
-    if (out.output == wlOut) {
-      out.pixelWidth = w;
-      out.pixelHeight = h;
-      if (out.done) {
-        client->notifyOutputsChanged();
-      }
-      break;
-    }
-  }
-}
-
-void WaylandClient::handleOutputDone(void* data, wl_output* wlOut) {
-  auto* client = static_cast<WaylandClient*>(data);
-  for (auto& out : client->m_outputs) {
-    if (out.output == wlOut && !out.done) {
-      out.done = true;
-      kLog.info(
-          "output '{}' ready {}x{} at ({},{}) scale={} transform={} phys={}x{}mm",
-          out.name.empty() ? "?" : out.name.c_str(), out.pixelWidth, out.pixelHeight, out.x, out.y, out.scale,
-          out.transform, out.physicalWidthMm, out.physicalHeightMm
-      );
-      client->notifyOutputsChanged();
-      break;
-    }
-  }
-}
-
-void WaylandClient::handleOutputScale(void* data, wl_output* wlOut, std::int32_t factor) {
-  auto* client = static_cast<WaylandClient*>(data);
-  for (auto& out : client->m_outputs) {
-    if (out.output == wlOut) {
-      const int32_t next = std::max(1, factor);
-      if (out.scale != next) {
-        out.scale = next;
-        if (out.done) {
-          kLog.info("output scale updated to {}", next);
-          client->notifyOutputsChanged();
-        }
-      }
-      break;
-    }
-  }
-}
-
-void WaylandClient::handleOutputName(void* data, wl_output* wlOut, const char* name) {
-  if (name == nullptr) {
-    return;
-  }
-  auto* client = static_cast<WaylandClient*>(data);
-  for (auto& out : client->m_outputs) {
-    if (out.output == wlOut) {
-      out.name = name;
-      break;
-    }
-  }
-}
-
-void WaylandClient::handleOutputDescription(void* data, wl_output* wlOut, const char* description) {
-  auto* client = static_cast<WaylandClient*>(data);
-  for (auto& out : client->m_outputs) {
-    if (out.output != wlOut) {
-      continue;
-    }
-    const std::string next = description != nullptr ? description : "";
-    if (out.description != next) {
-      out.description = next;
-      if (out.done) {
-        client->notifyOutputsChanged();
-      }
-    }
-    break;
-  }
-}
-
-void WaylandClient::bindOutput(wl_registry* registry, std::uint32_t name, std::uint32_t version) {
-  const std::uint32_t bindVersion = std::min(version, 4u);
-  auto* output = static_cast<wl_output*>(wl_registry_bind(registry, name, &wl_output_interface, bindVersion));
-  if (output == nullptr) {
-    return;
-  }
-
-  WaylandOutputInfo info;
-  info.output = output;
-  info.registryName = name;
-  m_outputs.push_back(info);
-  wl_output_add_listener(output, &kOutputListener, this);
-}
-
-int WaylandClient::repeatPollTimeoutMs() const { return m_seatHandler.repeatPollTimeoutMs(); }
-
-void WaylandClient::repeatTick() { m_seatHandler.repeatTick(); }
-
-void WaylandClient::handleGlobal(
-    void* data, wl_registry* registry, std::uint32_t name, const char* interface, std::uint32_t version
-) {
-  static_cast<WaylandClient*>(data)->bindGlobal(registry, name, interface, version);
-}
-
-void WaylandClient::handleGlobalRemove(void* data, wl_registry* /*registry*/, const std::uint32_t name) {
-  auto* client = static_cast<WaylandClient*>(data);
-  const auto output = std::find_if(client->m_outputs.begin(), client->m_outputs.end(), [name](const auto& candidate) {
-    return candidate.registryName == name;
-  });
-  if (output == client->m_outputs.end()) {
-    return;
-  }
-
-  wl_output* removed = output->output;
-  const std::string removedName = output->name;
-  client->m_outputs.erase(output);
-  if (removed != nullptr) {
-    releaseOutput(removed);
-  }
-  kLog.info("output '{}' removed", removedName.empty() ? "?" : removedName.c_str());
-  client->notifyOutputsChanged();
-}
-
-void WaylandClient::bindGlobal(
-    wl_registry* registry, std::uint32_t name, const char* interface, std::uint32_t version
-) {
-  const std::string interfaceName = interface != nullptr ? interface : "";
-  const std::uint32_t bindVersion = std::min(version, 6u);
-
-  if (interfaceName == wl_compositor_interface.name) {
-    m_compositor = static_cast<wl_compositor*>(wl_registry_bind(registry, name, &wl_compositor_interface, bindVersion));
-    return;
-  }
-
-  if (interfaceName == wl_seat_interface.name) {
-    m_seat = static_cast<wl_seat*>(wl_registry_bind(registry, name, &wl_seat_interface, bindVersion));
-    m_seatHandler.bind(m_seat);
-    return;
-  }
-
-  if (interfaceName == xdg_wm_base_interface.name) {
-    m_xdgWmBase = static_cast<xdg_wm_base*>(wl_registry_bind(registry, name, &xdg_wm_base_interface, bindVersion));
-    xdg_wm_base_add_listener(m_xdgWmBase, &kXdgWmBaseListener, this);
-    return;
-  }
-
-  if (interfaceName == wl_output_interface.name) {
-    bindOutput(registry, name, version);
-    return;
-  }
-
-  if (interfaceName == wp_fractional_scale_manager_v1_interface.name) {
-    m_fractionalScaleManager = static_cast<wp_fractional_scale_manager_v1*>(
-        wl_registry_bind(registry, name, &wp_fractional_scale_manager_v1_interface, 1)
-    );
-    return;
-  }
-
-  if (interfaceName == wp_viewporter_interface.name) {
-    m_viewporter = static_cast<wp_viewporter*>(wl_registry_bind(registry, name, &wp_viewporter_interface, 1));
   }
 }

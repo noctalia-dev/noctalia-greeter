@@ -1,9 +1,13 @@
 #include "config/config_types.h"
-#include "render/programs/wallpaper_program.h"
+#include "greeter/render/wallpaper_node.h"
+#include "greeter/render/wallpaper_program.h"
+#include "render/backend/gles_render_backend.h"
 
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <GLES2/gl2.h>
+#include <array>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
@@ -342,6 +346,62 @@ namespace {
     glDeleteTextures(1, &texture);
   }
 
+  void testWallpaperNodeEffects() {
+    // Use the production extension with a current surfaceless EGL context.
+    GlesRenderBackend backend;
+    auto output = backend.createFramebuffer(64, 64);
+    if (!output || !output->valid())
+      fail("wallpaper test framebuffer is unavailable");
+    const GLuint texture = makeRedBlueTexture(64, 64);
+    WallpaperNode node;
+    node.setTextures(TextureId(texture), TextureId(texture), 64, 64, 64, 64);
+    node.setFillMode(WallpaperFillMode::Stretch);
+    const CustomDrawContext context{
+        .surfaceWidth = 32, .surfaceHeight = 32, .pixelScaleX = 2, .pixelScaleY = 2, .width = 32, .height = 32
+    };
+    const auto paint = [&](bool clipped) {
+      backend.bindFramebuffer(*output);
+      backend.setViewport(64, 64);
+      backend.disableScissor();
+      backend.setBlendMode(RenderBlendMode::PremultipliedAlpha);
+      backend.clear(rgba(0, 0, 0, 1));
+      if (clipped)
+        backend.setScissor({8, 8, 48, 48});
+      node.draw(backend, context);
+      std::array<GLint, 4> viewport{};
+      glGetIntegerv(GL_VIEWPORT, viewport.data());
+      if (viewport != std::array<GLint, 4>{0, 0, 64, 64})
+        fail("wallpaper changed the viewport");
+      if ((glIsEnabled(GL_SCISSOR_TEST) != GL_FALSE) != clipped)
+        fail("wallpaper lost the scissor");
+      backend.disableScissor();
+      if (glIsEnabled(GL_SCISSOR_TEST))
+        fail("wallpaper desynchronized the backend scissor cache");
+      std::vector<Pixel> pixels(64 * 64);
+      glReadPixels(0, 0, 64, 64, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+      requireGl("wallpaper node effects");
+      return pixels;
+    };
+    const auto plain = paint(false);
+    if (plain[32 * 64 + 8] != kRed || plain[32 * 64 + 56] != kBlue)
+      fail("wallpaper node changed stretch sampling");
+    node.setTintColor(rgba(0, 1, 0, 0.5F));
+    const auto tinted = paint(false);
+    const auto tint = tinted[32 * 64 + 8];
+    if (std::abs(int(tint.red) - 128) > 1 || std::abs(int(tint.green) - 128) > 1 || tint.blue > 1)
+      fail("wallpaper tint did not blend over the source");
+    node.setTintColor(rgba(0, 0, 0, 0));
+    node.setBlurRadius(3);
+    const auto blurred = paint(true);
+    const auto edge = blurred[32 * 64 + 31];
+    if (edge.red == 0 || edge.blue == 0)
+      fail("wallpaper blur did not mix the image edge");
+    if (blurred[0] != Pixel{0, 0, 0, 255})
+      fail("blur escaped the wallpaper clip");
+    (void)paint(false);
+    glDeleteTextures(1, &texture);
+  }
+
 } // namespace
 
 int main() {
@@ -355,6 +415,7 @@ int main() {
     testZeroGeometryFallsBackToCrop(program);
     testRepeatStillTiles(program);
     program.destroy();
+    testWallpaperNodeEffects();
     return EXIT_SUCCESS;
   } catch (const EglUnavailable& error) {
     std::cout << "SKIP: " << error.what() << '\n';

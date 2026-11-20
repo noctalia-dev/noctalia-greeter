@@ -5,10 +5,10 @@
 #include "greeter/greeter_auth_controller.h"
 #include "greeter/greeter_model.h"
 #include "greeter/greeter_sessions.h"
+#include "greeter/render/wallpaper_types.h"
 #include "render/animation/animation_manager.h"
 #include "render/core/color.h"
 #include "render/core/texture_handle.h"
-#include "render/core/wallpaper_types.h"
 #include "render/scene/input_dispatcher.h"
 #include "render/scene/node.h"
 
@@ -32,6 +32,7 @@ class Scrollbar;
 class InputArea;
 class Label;
 class RenderContext;
+class Renderer;
 class ImageNode;
 class RectNode;
 class WallpaperNode;
@@ -155,6 +156,7 @@ private:
   Node m_root;
   GreeterWindow* m_window = nullptr;
   RenderContext* m_renderContext = nullptr;
+  Renderer* m_renderer = nullptr;
   InputDispatcher m_inputDispatcher;
   GreeterModel& m_model;
   GreeterAuthController& m_auth;
@@ -233,8 +235,6 @@ private:
   float m_clockTimeFontSize = 48.0f;
   float m_clockDateFontSize = 14.0f;
   std::optional<std::int64_t> m_lastClockSecond;
-  std::chrono::steady_clock::time_point m_lastAnimTick{};
-  bool m_animTickInitialized = false;
   bool m_inInputDispatch = false;
   bool m_inLayout = false;
   bool m_deferredLayoutRequest = false;

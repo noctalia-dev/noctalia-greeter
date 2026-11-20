@@ -18,13 +18,13 @@ AppStream, etc.):
 | Homepage | https://github.com/noctalia-dev/noctalia-greeter |
 | Docs | https://docs.noctalia.dev |
 | License | Project: MIT ([LICENSE](LICENSE)); with bundled Wuffs: `MIT AND (Apache-2.0 OR MIT)` |
-| Version | Meson `project(... version: ...)` in [`meson.build`](meson.build) |
+| Version | [`VERSION`](VERSION) (shared by Meson and Nix) |
 | Session wrapper | `noctalia-greeter-session` (what greetd should run) |
 
 ## Build
 
-- Build system: [Meson](https://mesonbuild.com/) + Ninja. The repo [`Justfile`](Justfile) is convenience only.
-- Language: C++20 (greeter client), C (wlroots compositor).
+- Build system: [Meson](https://mesonbuild.com/) >= 1.1 + Ninja. The repo [`Justfile`](Justfile) is convenience only.
+- Language: C++23 (greeter client), C (wlroots compositor).
 - Recommended for packages: `meson setup build --buildtype=plain`.
 - **wlroots 0.20** and **wayland-server** are required (the compositor is not optional).
 
@@ -35,10 +35,28 @@ meson test -C build --print-errorlogs
 ```
 
 Build environments need Meson, Ninja, a C/C++ compiler, and pkg-config.
-Building from a Git checkout also requires Git. Map these requirements to
+Git is optional; when available in a checkout it supplies build revision metadata. Map these requirements to
 the target distribution's package names and build dependency conventions.
 
 Install with the prefix you intend to ship. Greetd `command` must point at the installed `noctalia-greeter-session` path (often `/usr/bin/...`, not `/usr/local/bin/...`).
+
+### Versions and the shared library
+
+Bump the single line in [`VERSION`](VERSION) before tagging `v<VERSION>`.
+Meson, Nix, `--version`/`-v`, and startup logs read that release version.
+Git checkouts additionally report `git describe --tags --always --dirty=-dirty
+--abbrev=12`; Meson refreshes this during builds. Source archives and builds
+without Git omit the revision from the display label. The AUR workflow checks
+its tag against `VERSION` before updating a package.
+
+[`lib/UPSTREAM`](lib/UPSTREAM) pins the unmodified Noctalia `lib/` snapshot.
+It is vendored, so building does not fetch a library or require a sibling
+checkout. To refresh it, replace the snapshot with `lib/` from the chosen
+Noctalia commit, retain its third-party notices, copy the upstream project
+license to `lib/LICENSE`, and update `lib/UPSTREAM`. Adapt consumer code outside
+`lib/` and run the greeter suite before shipping. Include `lib/`, `VERSION`, and
+the library assets in source packages. The imported revision is independent of
+the greeter's own release and Git revision.
 
 ### Installed layout
 
@@ -68,6 +86,9 @@ normally `/usr/share/polkit-1/actions`. The standard distribution prefix
 normally discovered merely because the greeter was built with that prefix.
 
 Runtime override: `NOCTALIA_GREETER_ASSETS_DIR` points at an alternate assets tree.
+Shared glyph fonts come from its `library/` subtree, falling back to the shipped
+library assets when only application artwork is overridden.
+`NOCTALIA_GREETER_LIBRARY_ASSETS_DIR` can override those fonts separately.
 
 ## Dependencies
 
@@ -98,17 +119,12 @@ Notes packagers hit often:
 
 ### Vendored (no system package)
 
-Shipped under `third_party/`: **Wuffs** (image decode), under
-`Apache-2.0 OR MIT`. The vendored `third_party/wuffs/wuffs-v0.4.c` contains its
-copyright and SPDX notice, but the separate license texts are not included in
-this source tree.
-
-Packages should install Wuffs' applicable license texts and preserve its
-copyright notice alongside the project's [LICENSE](LICENSE). Obtain the
-license texts from the Wuffs revision recorded in the vendored file and
-preserve that file's copyright notice.
-The installed Tabler assets also include `fonts/tabler-icons-license.txt`;
-preserve it when packaging the required `assets/` tree.
+The shared library lives under `lib/` (MIT; see `lib/LICENSE`). Wuffs image
+decoding is bundled under `lib/third_party/wuffs/` (`Apache-2.0 OR MIT`), including
+both license texts. Packages should preserve these notices alongside the
+project's [LICENSE](LICENSE). The required assets include
+`library/fonts/tabler-icons-license.txt`; preserve it when packaging the asset
+tree.
 
 ### Runtime
 

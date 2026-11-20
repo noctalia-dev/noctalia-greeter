@@ -1,6 +1,6 @@
 #pragma once
 
-#include "render/core/wallpaper_types.h"
+#include "greeter/render/wallpaper_types.h"
 
 #include <algorithm>
 #include <cstddef>

@@ -334,7 +334,7 @@ extern "C" int __real_wl_proxy_add_listener(wl_proxy*, void (**)(void), void*);
 extern "C" int __wrap_wl_proxy_add_listener(wl_proxy* proxy, void (**implementation)(void), void* data) {
   const char* name = wl_proxy_get_class(proxy);
   if (std::strcmp(name, "xdg_surface") == 0) {
-    windows.push_back(static_cast<GreeterWindow*>(data));
+    windows.push_back(dynamic_cast<GreeterWindow*>(static_cast<ToplevelSurface*>(data)));
   } else if (std::strcmp(name, "wl_seat") == 0) {
     seat = static_cast<WaylandSeat*>(data);
   }

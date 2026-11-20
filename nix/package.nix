@@ -27,8 +27,7 @@
   stb,
   jemalloc,
 }: let
-  inherit (builtins) head match readFile;
-  version = head (match ".*version: '([^']+)'.*" (readFile ../meson.build));
+  version = lib.fileContents ../VERSION;
   # nixpkgs' stb snapshot predates stb_image_resize2.h. Keep using the system
   # package, but update its source to the revision the project previously
   # vendored until nixpkgs updates it.

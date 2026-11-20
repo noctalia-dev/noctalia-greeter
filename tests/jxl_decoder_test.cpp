@@ -1,3 +1,5 @@
+#include "core/application_identity.h"
+#include "render/codecs/codecs.h"
 #include "render/core/image_decoder.h"
 
 #include <array>
@@ -15,7 +17,9 @@ namespace {
     return condition;
   }
 
-  bool checkDecoded(const std::optional<DecodedRasterImage>& result, const std::string& error, const char* message) {
+  bool checkDecoded(
+      const std::expected<DecodedRasterImage, std::string>& result, const std::string& error, const char* message
+  ) {
     if (result) {
       return true;
     }
@@ -74,7 +78,8 @@ namespace {
 
   bool testBareCodestream() {
     std::string error;
-    auto result = decodeRasterImage(kJxl4x4Bare.data(), kJxl4x4Bare.size(), &error);
+    auto result = decodeRasterImage(kJxl4x4Bare.data(), kJxl4x4Bare.size());
+    error = result ? "" : result.error();
     if (!checkDecoded(result, error, "bare codestream decode failed"))
       return false;
     return checkPixels(*result, "bare codestream");
@@ -82,7 +87,8 @@ namespace {
 
   bool testContainer() {
     std::string error;
-    auto result = decodeRasterImage(kJxl4x4Container.data(), kJxl4x4Container.size(), &error);
+    auto result = decodeRasterImage(kJxl4x4Container.data(), kJxl4x4Container.size());
+    error = result ? "" : result.error();
     if (!checkDecoded(result, error, "container decode failed"))
       return false;
     return checkPixels(*result, "container");
@@ -90,7 +96,8 @@ namespace {
 
   bool testStraightAlphaPreserved() {
     std::string error;
-    auto result = decodeRasterImage(kJxl4x4Bare.data(), kJxl4x4Bare.size(), &error);
+    auto result = decodeRasterImage(kJxl4x4Bare.data(), kJxl4x4Bare.size());
+    error = result ? "" : result.error();
     if (!checkDecoded(result, error, "straight alpha decode failed"))
       return false;
     if (!check(result->pixels.size() == 64, "straight alpha: decoded buffer should hold 4x4 RGBA"))
@@ -122,7 +129,8 @@ namespace {
   // makes the two translucent rows decode as 128/64 instead of 255.
   bool testPremultipliedAlphaIsUnpremultiplied() {
     std::string error;
-    auto result = decodeRasterImage(kJxl4x4Premultiplied.data(), kJxl4x4Premultiplied.size(), &error);
+    auto result = decodeRasterImage(kJxl4x4Premultiplied.data(), kJxl4x4Premultiplied.size());
+    error = result ? "" : result.error();
     if (!checkDecoded(result, error, "premultiplied codestream decode failed"))
       return false;
     if (!check(result->pixels.size() == 64, "premultiplied: decoded buffer should hold 4x4 RGBA"))
@@ -148,7 +156,8 @@ namespace {
 
   bool testTruncated() {
     std::string error;
-    auto result = decodeRasterImage(kJxl4x4Bare.data(), 40, &error);
+    auto result = decodeRasterImage(kJxl4x4Bare.data(), 40);
+    error = result ? "" : result.error();
     bool ok = check(!result.has_value(), "truncated codestream should fail to decode");
     ok = check(!error.empty(), "truncated codestream should report an error") && ok;
     return ok;
@@ -157,13 +166,16 @@ namespace {
   bool testTooShortForSignature() {
     constexpr std::array<std::uint8_t, 3> kTooShort = {0x00, 0x00, 0x00};
     std::string error;
-    auto result = decodeRasterImage(kTooShort.data(), kTooShort.size(), &error);
+    auto result = decodeRasterImage(kTooShort.data(), kTooShort.size());
+    error = result ? "" : result.error();
     return check(!result.has_value(), "3-byte buffer should not decode");
   }
 
 } // namespace
 
 int main() {
+  setApplicationIdentity({.name = "noctalia-greeter", .envPrefix = "NOCTALIA_GREETER"});
+  codecs::installImageDecoder();
   bool ok = true;
   ok = testBareCodestream() && ok;
   ok = testContainer() && ok;

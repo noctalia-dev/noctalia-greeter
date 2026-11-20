@@ -1,0 +1,111 @@
+#pragma once
+
+#include "render/core/renderer.h"
+#include "render/text/cairo_glyph_renderer.h"
+#include "render/text/cairo_text_renderer.h"
+
+#include <cstdint>
+#include <functional>
+#include <memory>
+#include <string>
+#include <utility>
+
+class GlSharedContext;
+class Node;
+class RenderBackend;
+class RenderTarget;
+enum class RenderGraphicsResetStatus;
+struct Mat3;
+
+class RenderContext {
+public:
+  RenderContext();
+  ~RenderContext();
+
+  RenderContext(const RenderContext&) = delete;
+  RenderContext& operator=(const RenderContext&) = delete;
+
+  void initialize(GlSharedContext& shared);
+  void cleanup();
+  void prepareForGraphicsReset();
+  void restoreAfterGraphicsReset(GlSharedContext& shared);
+  void finishGraphicsResetRecovery() noexcept { m_graphicsResetPending = false; }
+
+  // overlay renders after sceneRoot in surface coordinates, for content that must cover the whole scene.
+  void renderScene(RenderTarget& target, Node* sceneRoot, Node* overlay = nullptr);
+  // Returns false if the surface could not be made current (e.g. teardown);
+  // best-effort callers may ignore it, render paths must skip the frame.
+  bool makeCurrent(RenderTarget& target);
+  void setTextFontFamily(std::string family);
+  // Default multiplier for every text size, for targets without their own (RenderTarget::setTextScale).
+  // Clamped by clampTextScale(). Bumps the text metrics generation.
+  void setTextScale(float scale);
+  float textScale() const noexcept { return m_textScale; }
+  // Clamps a text scale to [0.5, 3]; non-finite values become 1.
+  static float clampTextScale(float scale) noexcept;
+  void setTextBaseDirection(bool rtl);
+  void notifyFontConfigChanged();
+
+  // Request that uploaded text- and icon-glyph textures be dropped and
+  // re-rasterized. The drop is deferred to the next renderScene so it runs with
+  // the context current. Used to recover from GPU memory loss across
+  // suspend/resume.
+  void invalidateGlyphTexturesNextFrame() noexcept { m_glyphTexturesDirty = true; }
+  void invalidateGpuResourcesNextFrame() noexcept;
+
+  RenderBackend& backend() noexcept { return *m_backend; }
+  const RenderBackend& backend() const noexcept { return *m_backend; }
+
+  // Texture/text-generation access for ScaledRenderer views and graphics-lifecycle owners.
+  TextureManager& textureManager();
+  void setAsyncTextureCache(AsyncTextureCache* cache) noexcept { m_asyncTextureCache = cache; }
+  AsyncTextureCache* asyncTextureCache() const noexcept { return m_asyncTextureCache; }
+  std::uint64_t textMetricsGeneration() const noexcept { return m_textMetricsGeneration; }
+
+private:
+  friend class ScaledRenderer;
+
+  // Scale-parameterized measurement/text ops. ScaledRenderer forwards here with
+  // an explicit scale; no call mutates any shared render scale.
+  TextMetrics measureTextScaled(
+      float scale, std::string_view text, float fontSize, const TextFont& font, float maxWidth, int maxLines,
+      TextAlign align, TextEllipsize ellipsize, bool useMarkup
+  );
+  TextMetrics measureFontScaled(float scale, float fontSize, const TextFont& font);
+  void measureTextCursorStopsScaled(
+      float scale, std::string_view text, float fontSize, const std::vector<std::size_t>& byteOffsets,
+      std::vector<float>& outStops, const TextFont& font
+  );
+  void measureTextCursorStopsWrappedScaled(
+      float scale, std::string_view text, float fontSize, const std::vector<std::size_t>& byteOffsets, float maxWidth,
+      std::vector<TextCursorStop>& outStops, const TextFont& font
+  );
+  void measureTextCharSpansScaled(
+      float scale, std::string_view text, float fontSize, const std::vector<std::size_t>& byteOffsets,
+      std::vector<TextCharSpan>& outSpans, const TextFont& font
+  );
+  TextMetrics measureGlyphScaled(float scale, char32_t codepoint, float fontSize);
+
+  bool makeCurrentNoSurface();
+  void handleGraphicsReset(RenderGraphicsResetStatus status);
+  void renderNode(
+      float renderScale, const Node* node, const Mat3& parentTransform, float parentOpacity, float sw, float sh,
+      float bw, float bh, float clipLeft, float clipTop, float clipRight, float clipBottom, bool hasClip,
+      bool ignoreNodeOpacity, bool parentPaintContained
+  );
+
+  std::unique_ptr<RenderBackend> m_backend;
+  CairoTextRenderer m_textRenderer;
+  CairoGlyphRenderer m_glyphRenderer;
+  std::string m_textFontFamily = "sans-serif";
+  float m_textScale = 1.0F;
+  // Text scale of the target being drawn; valid only during renderScene.
+  float m_frameTextScale = 1.0F;
+  bool m_textBaseDirRtl = false;
+  std::uint64_t m_textMetricsGeneration = 1;
+  std::uint64_t m_gpuResourceGeneration = 0;
+  bool m_glyphTexturesDirty = false;
+  bool m_graphicsResetPending = false;
+  GlSharedContext* m_shared = nullptr;
+  AsyncTextureCache* m_asyncTextureCache = nullptr;
+};

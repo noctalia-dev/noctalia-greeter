@@ -11,6 +11,12 @@ a cloned Noctalia Greeter checkout.
 
 ## Build dependencies
 
+Use Meson >= 1.1 and a compiler/standard library with C++23 support (including
+`std::expected` and `std::format`). The compositor still builds as C against
+wlroots 0.20. The shared Noctalia UI library is included in `lib/`; no separate
+shell checkout, submodule download, or network fetch is needed to build it.
+
+
 ### Arch Linux
 
 ```sh

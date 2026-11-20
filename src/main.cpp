@@ -1,8 +1,10 @@
 #include "core/deferred_call.h"
-#include "core/log.h"
+#include "greeter/build_info.h"
 #include "greeter/greeter.h"
 #include "greeter/greeter_preferences.h"
 #include "greeter/greeter_sessions.h"
+#include "greeter/library_runtime.h"
+#include "greeter/logging.h"
 #include "time/time_locale.h"
 #include "tools/passwordless_sync_policy.h"
 #include "wayland/wayland_client.h"
@@ -23,10 +25,6 @@
 
 namespace {
   constexpr Logger kLog("main");
-
-  // Source-tree provenance fingerprint (sha256). Logged at debug level to tie a
-  // running binary back to the exact tree it was built from.
-  constexpr std::string_view kBuildFingerprint = "3c45fa89de10b4a640b48968327141503779fc57f5d42632fe31dc848329d2a0";
 
   std::atomic<bool> g_shutdownRequested{false};
 
@@ -89,6 +87,7 @@ namespace {
 } // namespace
 
 int main(int argc, char* argv[]) {
+  initializeGreeterLibrary();
   std::setlocale(LC_ALL, "");
   std::setlocale(LC_NUMERIC, "C");
   const bool timeLocaleReady = initializeTimeLocale();
@@ -158,7 +157,7 @@ int main(int argc, char* argv[]) {
       continue;
     }
     if (std::strcmp(argv[i], "--version") == 0 || std::strcmp(argv[i], "-v") == 0) {
-      std::printf("noctalia-greeter %s\n", NOCTALIA_GREETER_VERSION);
+      std::printf("noctalia-greeter %s\n", greeter::build_info::displayVersion().c_str());
       return 0;
     }
     if (std::strcmp(argv[i], "--log-test") == 0) {
@@ -220,8 +219,7 @@ int main(int argc, char* argv[]) {
   std::signal(SIGTERM, signalHandler);
   std::signal(SIGINT, signalHandler);
 
-  kLog.info("noctalia-greeter {}", NOCTALIA_GREETER_VERSION);
-  kLog.debug("build fingerprint {}", kBuildFingerprint);
+  kLog.info("noctalia-greeter {}", greeter::build_info::displayVersion());
 
   const bool greetdLaunched = std::getenv("GREETD_SOCK") != nullptr;
   if (greetdLaunched) {

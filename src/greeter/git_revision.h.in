@@ -1,0 +1,2 @@
+#pragma once
+#define NOCTALIA_GREETER_GIT_REVISION "@VCS_TAG@"

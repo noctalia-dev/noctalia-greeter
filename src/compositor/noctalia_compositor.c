@@ -48,6 +48,7 @@
 #include <wlr/types/wlr_switch.h>
 #include <wlr/types/wlr_touch.h>
 #include <wlr/types/wlr_viewporter.h>
+#include <wlr/types/wlr_xdg_output_v1.h>
 #include <wlr/types/wlr_xcursor_manager.h>
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/log.h>
@@ -2670,6 +2671,7 @@ int main(int argc, char** argv) {
   wlr_viewporter_create(server.display);
   server.fractional_scale = wlr_fractional_scale_manager_v1_create(server.display, 1);
   server.output_layout = wlr_output_layout_create(server.display);
+  wlr_xdg_output_manager_v1_create(server.display, server.output_layout);
   server.scene = wlr_scene_create();
   server.scene_output_layout = wlr_scene_attach_output_layout(server.scene, server.output_layout);
   server.xdg_shell = wlr_xdg_shell_create(server.display, 6);

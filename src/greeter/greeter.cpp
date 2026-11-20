@@ -1,12 +1,15 @@
 #include "greeter/greeter.h"
 
+#include "core/deferred_call.h"
 #include "core/log.h"
 #include "greeter/appearance_config.h"
 #include "greeter/greeter_config_store.h"
 #include "greeter/greeter_preferences.h"
 #include "greeter/greeter_surface.h"
 #include "greeter/greeter_window.h"
+#include "greeter/library_runtime.h"
 #include "greeter/logind_resume.h"
+#include "greeter/resources.h"
 #include "render/render_context.h"
 #include "render/text/glyph_registry.h"
 #include "ui/controls/input.h"
@@ -83,7 +86,7 @@ bool Greeter::initialize(WaylandClient& client) {
                                                                          : Input::PasswordMaskStyle::CircleFilled
   );
 
-  GlyphRegistry::initialize();
+  initializeGreeterAssets();
 
   m_glSharedContext.initialize(client.display());
 
@@ -156,6 +159,7 @@ int Greeter::run(WaylandClient& client, const std::atomic<bool>& shutdownRequest
   }
 
   while (!m_exitRequested && !shutdownRequested.load(std::memory_order_relaxed)) {
+    drainGreeterUiWork();
     client.repeatTick();
 
     for (auto& view : m_views) {
@@ -179,23 +183,29 @@ int Greeter::run(WaylandClient& client, const std::atomic<bool>& shutdownRequest
     const int timeoutMs = eventTimeoutMs < 0 ? clockTimeoutMs : std::min(eventTimeoutMs, clockTimeoutMs);
 
     while (wl_display_prepare_read(display) != 0) {
+      drainGreeterUiWork();
       if (wl_display_dispatch_pending(display) < 0) {
         logWaylandDispatchError(display, "dispatch_pending");
         return 1;
       }
     }
 
-    GPollFD glibPoll{};
+    GPollFD glibPoll{.fd = -1, .events = 0, .revents = 0};
     int glibPriority = 0;
-    int pollTimeout = timeoutMs;
+    const int uiTimeout = greeterUiPollTimeoutMs();
+    int pollTimeout = uiTimeout < 0 ? timeoutMs : std::min(timeoutMs, uiTimeout);
     if (resumeMonitor.active()) {
       resumeMonitor.prepareDispatch(glibPriority, glibPoll, pollTimeout);
     }
 
-    pollfd pfds[3]{};
+    pollfd pfds[4]{};
     pfds[0].fd = wl_display_get_fd(display);
     pfds[0].events = POLLIN;
     int pollCount = 1;
+
+    pfds[pollCount].fd = DeferredCall::wakeFd();
+    pfds[pollCount].events = POLLIN;
+    ++pollCount;
 
     int glibIndex = -1;
     if (glibPoll.fd >= 0) {
@@ -239,6 +249,7 @@ int Greeter::run(WaylandClient& client, const std::atomic<bool>& shutdownRequest
       m_authController.onGreetdTimeout(*timeout);
     }
 
+    drainGreeterUiWork();
     if (wl_display_dispatch_pending(display) < 0) {
       logWaylandDispatchError(display, "dispatch_pending");
       return 1;
@@ -315,6 +326,7 @@ void Greeter::syncOutputWindows() {
     view.window = std::make_unique<GreeterWindow>(*m_client, m_glSharedContext, *m_renderContext, *view.surface);
     view.surface->setWindow(view.window.get());
 
+    view.window->bindOutput(targets[index].output);
     if (!view.window->createSurface()) {
       kLog.error("failed to create greeter window");
       m_syncingOutputWindows = false;
@@ -459,7 +471,7 @@ void Greeter::setupInputCallbacks(WaylandClient& client) {
     case PointerEvent::Type::Button:
       setActiveSurface(view->surface.get());
       onPointerMotion(*view->window, event.sx, event.sy);
-      onPointerButton(*view->window, event.sx, event.sy, event.button, event.state != 0);
+      onPointerButton(*view->window, event.sx, event.sy, event.button, event.pressed);
       break;
     case PointerEvent::Type::Axis:
       setActiveSurface(view->surface.get());

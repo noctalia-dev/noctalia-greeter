@@ -3,6 +3,7 @@
 #include "core/log.h"
 #include "greeter/appearance_sync.h"
 #include "greeter/greeter_config_store.h"
+#include "greeter/palette_compat.h"
 #include "render/core/color.h"
 
 namespace {
@@ -137,9 +138,9 @@ namespace {
         || !parseTomlPaletteColor(appearance.palette, "on_error", result.palette.onError)
         || !parseTomlPaletteColor(appearance.palette, "surface", result.palette.surface)
         || !parseTomlPaletteColor(appearance.palette, "on_surface", result.palette.onSurface)
-        || !parseTomlPaletteColor(appearance.palette, "surface_variant", result.palette.surfaceVariant)
+        || !parseTomlPaletteColor(appearance.palette, "surface_variant", result.palette.surfaceContainer)
         || !parseTomlPaletteColor(appearance.palette, "on_surface_variant", result.palette.onSurfaceVariant)
-        || !parseTomlPaletteColor(appearance.palette, "outline", result.palette.outline)
+        || !parseTomlPaletteColor(appearance.palette, "outline", result.palette.outlineVariant)
         || !parseTomlPaletteColor(appearance.palette, "shadow", result.palette.shadow)
         || !parseTomlPaletteColor(appearance.palette, "hover", result.palette.hover)
         || !parseTomlPaletteColor(appearance.palette, "on_hover", result.palette.onHover)) {
@@ -147,6 +148,7 @@ namespace {
       return std::nullopt;
     }
 
+    result.palette = completeGreeterPalette(result.palette);
     return result;
   }
 
