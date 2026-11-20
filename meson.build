@@ -1,5 +1,5 @@
 project('noctalia-greeter', ['c', 'cpp'],
-  version: '1.7.0',
+  version: '1.7.1',
   default_options: [
     'cpp_std=c++20',
     'cpp_extensions=false',
