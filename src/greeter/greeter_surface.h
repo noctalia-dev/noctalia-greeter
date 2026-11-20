@@ -1,8 +1,9 @@
 #pragma once
 
 #include "config/config_types.h"
-#include "greetd/greetd_client.h"
 #include "greeter/appearance_config.h"
+#include "greeter/greeter_auth_controller.h"
+#include "greeter/greeter_model.h"
 #include "greeter/greeter_sessions.h"
 #include "render/animation/animation_manager.h"
 #include "render/core/color.h"
@@ -14,13 +15,11 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <deque>
 #include <functional>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
-#include <sys/types.h>
 #include <vector>
 
 class Box;
@@ -39,7 +38,7 @@ class WallpaperNode;
 
 class GreeterSurface {
 public:
-  GreeterSurface();
+  GreeterSurface(GreeterModel& model, GreeterAuthController& auth, GreeterViewId viewId);
   ~GreeterSurface();
 
   void initialize(RenderContext* context);
@@ -47,31 +46,9 @@ public:
   void setWindow(GreeterWindow* window);
   void setBoundOutputName(std::string outputName);
   void setWallpaperSpanParams(const WallpaperSpanParams& params);
-  void setGreetdClient(GreetdClient* client);
-  void setUsername(const std::string& username);
-  void setOnExitRequested(std::function<void()> callback);
-  void setOnStateChanged(std::function<void(GreeterSurface*)> callback);
-  void setOnUserSelectionRequested(std::function<bool()> callback);
-  void setOnAuthBeginRequested(std::function<bool(GreeterSurface*)> callback);
-  void setOnAuthEnded(std::function<void(GreeterSurface*)> callback);
-  void setOnGreetdTransportError(std::function<void(const GreetdError&)> callback);
   void setKeyboardOwner(bool owner) noexcept;
-
-  void mirrorStateFrom(const GreeterSurface& other);
-
-  // Drive the greetd auth conversation forward when its socket is readable.
-  void onGreetdReadable();
-  // Fail closed without sending another request when the shared greetd backend
-  // can no longer make progress.
-  void setGreetdUnavailable(std::string_view reason);
-  // Prevent this surface from starting a second conversation on the shared
-  // greetd connection while another output owns authentication.
-  void setSharedAuthBlocked(bool blocked);
-  // Cancel before changing the shared account selection. Keep ownership until
-  // the cancel reply; refuse changes once the session handoff has started.
-  [[nodiscard]] bool cancelAuthentication();
-  // True while this surface is mid-conversation with greetd.
-  [[nodiscard]] bool authInProgress() const noexcept { return m_authenticating; }
+  void syncModel(bool closeSelectionMenus);
+  [[nodiscard]] GreeterViewId viewId() const noexcept { return m_viewId; }
 
   void onPointerLeave();
   void onPointerEvent(float x, float y, std::uint32_t button, bool pressed);
@@ -97,22 +74,10 @@ public:
   [[nodiscard]] bool animating() const noexcept { return m_animations.hasActive(); }
 
 private:
-  void notifyStateChanged();
   [[nodiscard]] bool pointerInViewport(float x, float y) const;
   void syncScaledTypography();
   void layoutScene(std::uint32_t width, std::uint32_t height);
   void tryAuthenticate();
-  void handleGreetdResponse(const GreetdResponse& response);
-  void handleAuthMessage(const GreetdAuthMessage& message);
-  void postAuthResponse(const std::string& data);
-  // Disable the password field and login button while a request is in flight.
-  void syncAuthInteractivity();
-  void beginSessionStart();
-  void onAuthError(const GreetdError& error);
-  void reportGreetdTransportError(const GreetdError& error);
-  [[nodiscard]] bool resetAuthSession();
-  void clearPasswordInput();
-  void updateStatus(const std::string& text, bool isError);
   void toggleUserMenu();
   void openUserMenu();
   void toggleSessionMenu();
@@ -172,13 +137,10 @@ private:
   void clearSchemeMenu();
   void enterPasswordStep(std::size_t userIndex);
   [[nodiscard]] bool handleUserMenuSearchKey(std::uint32_t sym, bool preedit);
-  void applyInitialUserSelection();
   void loadPreferences();
   void reconcileKeyboardFocus();
   [[nodiscard]] bool ownsInputArea(const InputArea* area) const;
   [[nodiscard]] bool showsUserDropdown() const noexcept;
-  void savePreferences() const;
-  void buildSchemeNames();
   void applyScheme(std::size_t schemeIndex);
   void applyConfiguredWallpaper();
   void clearWallpaperDisplay();
@@ -193,9 +155,12 @@ private:
   Node m_root;
   GreeterWindow* m_window = nullptr;
   RenderContext* m_renderContext = nullptr;
-  GreetdClient* m_greetdClient = nullptr;
   InputDispatcher m_inputDispatcher;
-  std::function<void(GreeterSurface*)> m_onStateChanged;
+  GreeterModel& m_model;
+  GreeterAuthController& m_auth;
+  const GreeterViewId m_viewId;
+  std::uint64_t m_credentialGeneration = 0;
+  std::optional<std::size_t> m_appliedScheme;
 
   WallpaperNode* m_wallpaper = nullptr;
   RectNode* m_letterbox = nullptr;
@@ -243,37 +208,6 @@ private:
   Button* m_firmwareButton = nullptr;
   bool m_canRebootToFirmware = false;
 
-  bool m_allowEmptyPassword = false;
-
-  // greetd replies in request order, so m_pendingReplies (a FIFO of these) tells
-  // which request each reply answers.
-  enum class AuthRequest {
-    CreateSession,
-    PostAuthData,
-    StartSession,
-    Cancel,
-  };
-
-  [[nodiscard]] bool awaitingReply() const noexcept { return !m_pendingReplies.empty(); }
-
-  std::string m_username;
-  std::string m_password;
-  std::string m_status;
-  bool m_statusIsError = false;
-  bool m_authenticating = false;
-  bool m_greetdUnavailable = false;
-  bool m_sharedAuthBlocked = false;
-  bool m_authSessionStarted = false;
-  bool m_authCancelRequested = false;
-  bool m_secretPromptWaiting = false; // greetd wants secret input from the user
-  bool m_hasPendingResponse = false;  // user-supplied input armed for next prompt
-  std::string m_pendingResponse;
-  std::deque<AuthRequest> m_pendingReplies;
-  std::function<void()> m_onExitRequested;
-  std::function<bool()> m_onUserSelectionRequested;
-  std::function<bool(GreeterSurface*)> m_onAuthBeginRequested;
-  std::function<void(GreeterSurface*)> m_onAuthEnded;
-  std::function<void(const GreetdError&)> m_onGreetdTransportError;
   TextureHandle m_brandLogoTexture{};
   TextureHandle m_headerAvatarTexture{};
   TextureHandle m_wallpaperTexture{};
@@ -316,16 +250,9 @@ private:
   bool m_initialFocusDone = false;
   bool m_isKeyboardOwner = false;
 
-  std::vector<std::string> m_users;
-  std::vector<uid_t> m_userUids;
-  std::vector<std::string> m_userIconPaths;
-  std::vector<greeter::SessionOption> m_sessions;
-  std::size_t m_selectedUser = 0;
-  std::size_t m_selectedSession = 0;
   bool m_userMenuOpen = false;
   bool m_sessionMenuOpen = false;
   bool m_schemeMenuOpen = false;
-  bool m_passwordVisible = false;
   Box* m_userMenuPanel = nullptr;
   SearchField* m_userMenuSearchField = nullptr;
   Label* m_userMenuEmptyLabel = nullptr;
@@ -348,12 +275,8 @@ private:
   std::vector<Label*> m_schemeMenuLabels;
   std::vector<InputArea*> m_schemeMenuAreas;
   std::vector<Box*> m_schemeMenuRows;
-  std::vector<std::string> m_schemeNames;
-  std::size_t m_selectedScheme = 0;
   std::optional<GreeterSyncedAppearance> m_syncedAppearance;
   std::optional<GreeterWallpaperAppearance> m_wallpaperAppearance;
 
-  void loadUsers();
-  void loadSessions();
   void refreshSelectionLabels();
 };

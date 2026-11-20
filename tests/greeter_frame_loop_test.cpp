@@ -227,7 +227,12 @@ namespace {
     context.initialize(gl);
     GlyphRegistry::initialize();
     greeter::setCliDefaultUser("pointer-test");
-    GreeterSurface surface;
+    GreeterModel model;
+    model.initialize();
+    GreetdClient greetd;
+    GreeterAuthController auth(model, greetd);
+    GreeterSurface surface(model, auth, 1);
+    model.setOnChanged([&](GreeterViewId source, bool selection) { surface.syncModel(selection && source != 1); });
     surface.initialize(&context);
     surface.setKeyboardOwner(true);
     GreeterWindow window(client, gl, context, surface);

@@ -1,6 +1,8 @@
 #pragma once
 
 #include "greetd/greetd_client.h"
+#include "greeter/greeter_auth_controller.h"
+#include "greeter/greeter_model.h"
 #include "render/gl_shared_context.h"
 
 #include <atomic>
@@ -43,15 +45,9 @@ private:
   };
 
   void connectGreetd();
-  void onGreetdReadable();
-  void onGreetdTimeout(const GreetdRequestTimeout& timeout);
-  void onGreetdTransportError(const GreetdError& error);
-  void markGreetdUnavailable(std::string_view reason);
-  [[nodiscard]] bool claimAuthSurface(GreeterSurface* surface);
-  void releaseAuthSurface(GreeterSurface* surface);
   void setupInputCallbacks(WaylandClient& client);
   void syncOutputWindows();
-  void syncStateFrom(const GreeterSurface* source);
+  void syncModel(GreeterViewId source, bool selection);
   void setActiveSurface(GreeterSurface* surface);
   [[nodiscard]] View* viewForWindow(GreeterWindow& window) noexcept;
   [[nodiscard]] View* viewForSurface(wl_surface* surface) noexcept;
@@ -59,10 +55,12 @@ private:
   WaylandClient* m_client = nullptr;
   GlSharedContext m_glSharedContext;
   std::unique_ptr<RenderContext> m_renderContext;
-  std::vector<View> m_views;
+  GreeterModel m_model;
   GreetdClient m_greetdClient;
+  GreeterAuthController m_authController;
+  std::vector<View> m_views;
+  GreeterViewId m_nextViewId = 1;
   GreeterSurface* m_activeSurface = nullptr;
-  GreeterSurface* m_authSurface = nullptr;
 
   std::string m_defaultUsername;
   bool m_exitRequested = false;
@@ -70,5 +68,4 @@ private:
   bool m_initializing = false;
   bool m_pendingOutputSync = false;
   bool m_syncingOutputWindows = false;
-  bool m_greetdUnavailable = false;
 };

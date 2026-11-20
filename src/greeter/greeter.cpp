@@ -61,7 +61,7 @@ namespace {
   }
 } // namespace
 
-Greeter::Greeter() = default;
+Greeter::Greeter() : m_authController(m_model, m_greetdClient) {}
 
 Greeter::~Greeter() = default;
 
@@ -70,6 +70,9 @@ bool Greeter::initialize(WaylandClient& client) {
   m_initializing = true;
 
   greeter::config::clearConfigDiagnostics();
+  m_model.initialize();
+  m_model.setOnChanged([this](GreeterViewId source, bool selection) { syncModel(source, selection); });
+  m_authController.setOnExitRequested([this]() { m_exitRequested = true; });
 
   const greeter::GreeterPreferences prefs = greeter::loadGreeterPreferences();
 
@@ -224,7 +227,7 @@ int Greeter::run(WaylandClient& client, const std::atomic<bool>& shutdownRequest
         wl_display_cancel_read(display);
       }
       if (greetdIndex >= 0 && (pfds[greetdIndex].revents & (POLLIN | POLLHUP | POLLERR)) != 0) {
-        onGreetdReadable();
+        m_authController.onGreetdReadable();
       }
     } else {
       wl_display_cancel_read(display);
@@ -233,7 +236,7 @@ int Greeter::run(WaylandClient& client, const std::atomic<bool>& shutdownRequest
     // A readable reply at the deadline wins because it was drained above and
     // disarmed the watchdog before this check.
     if (const auto timeout = m_greetdClient.timedOutRequest()) {
-      onGreetdTimeout(*timeout);
+      m_authController.onGreetdTimeout(*timeout);
     }
 
     if (wl_display_dispatch_pending(display) < 0) {
@@ -287,9 +290,7 @@ void Greeter::syncOutputWindows() {
       ++it;
       continue;
     }
-    if (m_authSurface == it->surface.get()) {
-      markGreetdUnavailable("Login interrupted after the display configuration changed. Restart greetd.");
-    }
+    m_authController.onViewRemoved(it->surface->viewId());
     if (m_activeSurface == it->surface.get()) {
       m_activeSurface = nullptr;
     }
@@ -308,21 +309,8 @@ void Greeter::syncOutputWindows() {
     }
 
     View view;
-    view.surface = std::make_unique<GreeterSurface>();
-    view.surface->setGreetdClient(&m_greetdClient);
-    view.surface->setOnExitRequested([this]() { m_exitRequested = true; });
-    view.surface->setOnStateChanged([this](GreeterSurface* source) { syncStateFrom(source); });
-    view.surface->setOnUserSelectionRequested([this]() {
-      return m_authSurface == nullptr || m_authSurface->cancelAuthentication();
-    });
-    view.surface->setOnAuthBeginRequested([this](GreeterSurface* source) { return claimAuthSurface(source); });
-    view.surface->setOnAuthEnded([this](GreeterSurface* source) { releaseAuthSurface(source); });
-    view.surface->setOnGreetdTransportError([this](const GreetdError& error) { onGreetdTransportError(error); });
+    view.surface = std::make_unique<GreeterSurface>(m_model, m_authController, m_nextViewId++);
     view.surface->initialize(m_renderContext.get());
-    view.surface->setSharedAuthBlocked(m_authSurface != nullptr);
-    if (m_greetdUnavailable) {
-      view.surface->setGreetdUnavailable("Login service is unavailable. Restart greetd.");
-    }
 
     view.window = std::make_unique<GreeterWindow>(*m_client, m_glSharedContext, *m_renderContext, *view.surface);
     view.surface->setWindow(view.window.get());
@@ -337,10 +325,6 @@ void Greeter::syncOutputWindows() {
     view.surface->setBoundOutputName(targets[index].name);
     view.output = targets[index].output;
     kLog.info("greeter view for output '{}'", targets[index].name.empty() ? "?" : targets[index].name.c_str());
-
-    if (!m_views.empty()) {
-      view.surface->mirrorStateFrom(*m_views.front().surface);
-    }
 
     m_views.insert(m_views.begin() + static_cast<std::ptrdiff_t>(index), std::move(view));
     createdView = true;
@@ -416,14 +400,9 @@ void Greeter::setActiveSurface(GreeterSurface* surface) {
   }
 }
 
-void Greeter::syncStateFrom(const GreeterSurface* source) {
-  if (source == nullptr) {
-    return;
-  }
+void Greeter::syncModel(GreeterViewId source, bool selection) {
   for (auto& view : m_views) {
-    if (view.surface.get() != source) {
-      view.surface->mirrorStateFrom(*source);
-    }
+    view.surface->syncModel(selection && view.surface->viewId() != source);
   }
 }
 
@@ -454,73 +433,7 @@ void Greeter::connectGreetd() {
 
   if (!m_greetdClient.connect(path)) {
     kLog.error("failed to connect to greetd at {}", path);
-    m_greetdUnavailable = true;
-  }
-}
-
-void Greeter::onGreetdTimeout(const GreetdRequestTimeout& timeout) {
-  kLog.error(
-      "greetd request '{}' timed out after {} ms", greetdRequestTypeName(timeout.request), timeout.elapsed.count()
-  );
-
-  // The greetd auth worker may have died while its parent is still holding the
-  // session lock. Do not send cancel, reconnect, or exit: none can recover that
-  // daemon state, and exiting would leave the VT without a greeter.
-  markGreetdUnavailable("Login service stopped responding. Restart greetd.");
-}
-
-void Greeter::onGreetdTransportError(const GreetdError& error) {
-  kLog.error("greetd transport failed: {}", error.description);
-  markGreetdUnavailable("Login service connection failed. Restart greetd.");
-}
-
-void Greeter::markGreetdUnavailable(const std::string_view reason) {
-  m_greetdClient.disconnect();
-  m_greetdUnavailable = true;
-  m_authSurface = nullptr;
-  for (auto& view : m_views) {
-    if (view.surface) {
-      view.surface->setGreetdUnavailable(reason);
-    }
-  }
-}
-
-bool Greeter::claimAuthSurface(GreeterSurface* surface) {
-  if (surface == nullptr || m_greetdUnavailable) {
-    return false;
-  }
-  if (m_authSurface != nullptr && m_authSurface != surface) {
-    return false;
-  }
-  m_authSurface = surface;
-  for (auto& view : m_views) {
-    view.surface->setSharedAuthBlocked(view.surface.get() != surface);
-  }
-  return true;
-}
-
-void Greeter::releaseAuthSurface(GreeterSurface* surface) {
-  if (surface == nullptr || m_authSurface != surface) {
-    return;
-  }
-  m_authSurface = nullptr;
-  for (auto& view : m_views) {
-    view.surface->setSharedAuthBlocked(false);
-  }
-}
-
-void Greeter::onGreetdReadable() {
-  // The owner persists through cancellation, even after authInProgress() is
-  // cleared, so its final ack is still correlated with the right surface.
-  GreeterSurface* target = m_authSurface;
-  if (target == nullptr) {
-    target = m_activeSurface;
-  }
-  if (target == nullptr && !m_views.empty()) {
-    target = m_views.front().surface.get();
-  }
-  if (target != nullptr) {
-    target->onGreetdReadable();
+    m_authController.setUnavailable("Login service is unavailable. Restart greetd.");
   }
 }
 

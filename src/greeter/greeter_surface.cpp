@@ -1,6 +1,5 @@
 #include "greeter/greeter_surface.h"
 
-#include "accounts/accounts_icon.h"
 #include "core/key_modifiers.h"
 #include "core/key_symbols.h"
 #include "core/log.h"
@@ -35,23 +34,15 @@
 
 #include <algorithm>
 #include <cctype>
-#include <cerrno>
 #include <chrono>
 #include <cmath>
-#include <cstdlib>
-#include <cstring>
 #include <filesystem>
 #include <linux/input-event-codes.h>
-#include <nlohmann/json.hpp>
-#include <pwd.h>
 #include <sstream>
-#include <sys/types.h>
-#include <unordered_set>
 #include <wayland-client.h>
 
 namespace {
   constexpr Logger kLog("greeter-surface");
-  constexpr const char* kAuthCancelStatus = "Waiting for the previous login attempt to finish...";
   constexpr float kHeaderUserIconBase = 64.0f;
   constexpr float kHeaderAvatarBorderScale = 2.0f;
   // Blur taps at quarter resolution; matches the shader's 40-tap cap.
@@ -119,29 +110,6 @@ namespace {
             || sym == XKB_KEY_U);
   }
 
-  void appendDummyUsers(std::vector<std::string>& users, std::vector<uid_t>& uids) {
-    const char* dummyEnv = std::getenv("NOCTALIA_GREETER_DUMMY_USERS");
-    if (dummyEnv == nullptr) {
-      return;
-    }
-
-    std::size_t count = 15;
-    if (dummyEnv[0] != '\0') {
-      char* end = nullptr;
-      const unsigned long parsed = std::strtoul(dummyEnv, &end, 10);
-      if (end != dummyEnv && parsed > 0) {
-        count = static_cast<std::size_t>(parsed);
-      }
-    }
-
-    for (std::size_t i = 0; i < count; ++i) {
-      char name[32];
-      std::snprintf(name, sizeof(name), "dummy-user-%02zu", i + 1);
-      users.push_back(name);
-      uids.push_back(static_cast<uid_t>(60'000U + i));
-    }
-  }
-
   [[nodiscard]] bool matchesUserFilter(std::string_view user, std::string_view query) {
     if (query.empty()) {
       return true;
@@ -184,7 +152,8 @@ namespace {
 
 } // namespace
 
-GreeterSurface::GreeterSurface() = default;
+GreeterSurface::GreeterSurface(GreeterModel& model, GreeterAuthController& auth, GreeterViewId viewId)
+    : m_model(model), m_auth(auth), m_viewId(viewId) {}
 
 GreeterSurface::~GreeterSurface() {
   if (m_renderContext != nullptr) {
@@ -328,7 +297,6 @@ void GreeterSurface::initialize(RenderContext* context) {
   pwField->setPlaceholder("Type password");
   pwField->setPasswordMode(true);
   pwField->setControlHeight(Style::controlHeight());
-  pwField->setOnChange([this](const std::string& value) { m_password = value; });
   pwField->setOnSubmit([this](const std::string&) { tryAuthenticate(); });
   m_passwordField = pwField.get();
   m_passwordField->setZIndex(6);
@@ -614,21 +582,13 @@ void GreeterSurface::initialize(RenderContext* context) {
     (void)shape;
   });
 
-  loadUsers();
-  loadSessions();
-  buildSchemeNames();
+  m_syncedAppearance = m_model.syncedAppearance();
+  m_wallpaperAppearance = loadGreeterWallpaperAppearance();
   loadPreferences();
   (void)updateClock();
-  if (m_selectedScheme >= m_schemeNames.size()) {
-    if (const auto fallback = findSchemeIndex("Noctalia")) {
-      m_selectedScheme = *fallback;
-    } else {
-      m_selectedScheme = 0;
-    }
-  }
-  applyScheme(m_selectedScheme);
+  applyScheme(m_model.state().selectedScheme);
   refreshSelectionLabels();
-  applyInitialUserSelection();
+  syncModel(false);
 
   if (const auto& diagnostics = greeter::config::configDiagnostics(); !diagnostics.empty()) {
     const auto& diagnostic = diagnostics.front();
@@ -667,53 +627,7 @@ void GreeterSurface::initialize(RenderContext* context) {
   requestLayout();
 }
 
-void GreeterSurface::applyInitialUserSelection() {
-  const auto initialUser = greeter::resolveInitialUserName(greeter::loadGreeterPreferences());
-  if (initialUser.has_value()) {
-    for (std::size_t i = 0; i < m_users.size(); ++i) {
-      if (m_users[i] == *initialUser) {
-        m_selectedUser = i;
-        setUsername(m_users[i]);
-        m_passwordVisible = true;
-        m_password.clear();
-        if (m_passwordField != nullptr) {
-          m_passwordField->setValue("");
-        }
-        return;
-      }
-    }
-
-    // Domain / FreeIPA users may be absent from the picker until cached; still
-    // honor --user / [user].default so PAM can resolve them by name.
-    m_users.push_back(*initialUser);
-    m_userUids.push_back(0);
-    m_userIconPaths.push_back("");
-    m_selectedUser = m_users.size() - 1;
-    setUsername(*initialUser);
-    m_passwordVisible = true;
-    m_password.clear();
-    if (m_passwordField != nullptr) {
-      m_passwordField->setValue("");
-    }
-    kLog.info("default_user '{}' not in user list; opening password step anyway", *initialUser);
-    return;
-  }
-
-  if (m_users.size() == 1) {
-    m_selectedUser = 0;
-    setUsername(m_users.front());
-    m_passwordVisible = true;
-    m_password.clear();
-    if (m_passwordField != nullptr) {
-      m_passwordField->setValue("");
-    }
-    return;
-  }
-
-  m_passwordVisible = false;
-}
-
-bool GreeterSurface::showsUserDropdown() const noexcept { return m_users.size() > 1; }
+bool GreeterSurface::showsUserDropdown() const noexcept { return m_model.users().size() > 1; }
 
 void GreeterSurface::setKeyboardOwner(const bool owner) noexcept {
   m_isKeyboardOwner = owner;
@@ -741,7 +655,7 @@ void GreeterSurface::reconcileKeyboardFocus() {
     return;
   }
 
-  if (m_passwordVisible && m_passwordField != nullptr && m_passwordField->inputArea() != nullptr) {
+  if (m_model.state().passwordVisible && m_passwordField != nullptr && m_passwordField->inputArea() != nullptr) {
     m_inputDispatcher.setFocus(m_passwordField->inputArea());
     syncFocusIndexFromFocused();
     return;
@@ -754,64 +668,31 @@ void GreeterSurface::reconcileKeyboardFocus() {
 
 void GreeterSurface::setWindow(GreeterWindow* window) { m_window = window; }
 
-void GreeterSurface::setGreetdClient(GreetdClient* client) { m_greetdClient = client; }
-
-void GreeterSurface::setUsername(const std::string& username) { m_username = username; }
-
-void GreeterSurface::setOnExitRequested(std::function<void()> callback) { m_onExitRequested = std::move(callback); }
-
-void GreeterSurface::setOnStateChanged(std::function<void(GreeterSurface*)> callback) {
-  m_onStateChanged = std::move(callback);
-}
-
-void GreeterSurface::setOnUserSelectionRequested(std::function<bool()> callback) {
-  m_onUserSelectionRequested = std::move(callback);
-}
-
-void GreeterSurface::setOnAuthBeginRequested(std::function<bool(GreeterSurface*)> callback) {
-  m_onAuthBeginRequested = std::move(callback);
-}
-
-void GreeterSurface::setOnAuthEnded(std::function<void(GreeterSurface*)> callback) {
-  m_onAuthEnded = std::move(callback);
-}
-
-void GreeterSurface::setOnGreetdTransportError(std::function<void(const GreetdError&)> callback) {
-  m_onGreetdTransportError = std::move(callback);
-}
-
-void GreeterSurface::notifyStateChanged() {
-  if (m_onStateChanged) {
-    m_onStateChanged(this);
-  }
-}
-
-void GreeterSurface::mirrorStateFrom(const GreeterSurface& other) {
-  if (&other == this) {
+void GreeterSurface::syncModel(bool closeSelectionMenus) {
+  if (m_renderContext == nullptr) {
     return;
   }
-
-  const bool schemeChanged = m_selectedScheme != other.m_selectedScheme;
-  if (m_username != other.m_username || m_passwordVisible != other.m_passwordVisible) {
-    clearPasswordInput();
+  const auto& state = m_model.state();
+  if (m_credentialGeneration != state.credentialGeneration) {
+    m_passwordField->setValue("");
+    m_credentialGeneration = state.credentialGeneration;
   }
-
-  m_selectedUser = other.m_selectedUser;
-  m_selectedSession = other.m_selectedSession;
-  m_selectedScheme = other.m_selectedScheme;
-  m_passwordVisible = other.m_passwordVisible;
-  m_username = other.m_username;
-  m_status = other.m_status;
-  m_statusIsError = other.m_statusIsError;
-
-  if (schemeChanged && m_selectedScheme < m_schemeNames.size()) {
-    applyScheme(m_selectedScheme);
+  if (m_appliedScheme != state.selectedScheme) {
+    applyScheme(state.selectedScheme);
   }
-
-  closeMenus();
+  if (closeSelectionMenus) {
+    closeMenus();
+  }
+  m_statusLabel->setText(state.status);
+  m_statusLabel->setColor(colorForRole(state.statusIsError ? ColorRole::Error : ColorRole::OnSurfaceVariant));
+  const bool enabled = !m_auth.inputBlocked(m_viewId);
+  m_passwordField->setEnabled(enabled);
+  m_loginButton->setEnabled(enabled);
   refreshSelectionLabels();
   commitImmediateFrame(true);
 }
+
+void GreeterSurface::tryAuthenticate() { m_auth.submit(m_viewId, m_passwordField->value()); }
 
 void GreeterSurface::setOutputViewport(float x, float y, float width, float height) {
   m_viewportX = x;
@@ -1065,25 +946,15 @@ void GreeterSurface::syncScaledTypography() {
 }
 
 void GreeterSurface::enterPasswordStep(std::size_t userIndex) {
-  if (userIndex >= m_users.size()) {
+  if (!m_auth.selectUser(m_viewId, userIndex)) {
     return;
   }
-  if (m_onUserSelectionRequested && !m_onUserSelectionRequested()) {
-    return;
-  }
-  m_selectedUser = userIndex;
-  setUsername(m_users[userIndex]);
   m_userMenuOpen = false;
   m_userMenuSearchQuery.clear();
-  m_passwordVisible = true;
-  m_passwordField->setValue("");
-  m_password.clear();
   if (m_passwordField->inputArea() != nullptr) {
     m_inputDispatcher.setFocus(m_passwordField->inputArea());
   }
   refreshSelectionLabels();
-  updateStatus(m_authCancelRequested || m_sharedAuthBlocked ? kAuthCancelStatus : "", false);
-  notifyStateChanged();
   commitImmediateFrame(true);
 }
 
@@ -1154,12 +1025,14 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
   const float rowGap = Style::spaceSm();
   const float panelPadding = Style::spaceLg();
 
-  const float userCount = static_cast<float>(m_users.size());
+  const float userCount = static_cast<float>(m_model.users().size());
   const float glyphScale = std::clamp(1.0f - (userCount - 2.0f) * 0.08f, 0.75f, 1.0f);
   const float headerGlyphSize = Style::scaled(kHeaderUserIconBase) * glyphScale;
 
-  if (m_passwordVisible && !m_users.empty() && m_selectedUser < m_users.size()) {
-    m_formSubtitleLabel->setText(m_users[m_selectedUser]);
+  if (m_model.state().passwordVisible
+      && !m_model.users().empty()
+      && m_model.state().selectedUser < m_model.users().size()) {
+    m_formSubtitleLabel->setText(m_model.users()[m_model.state().selectedUser]);
     m_formSubtitleLabel->setVisible(true);
   } else {
     m_formSubtitleLabel->setVisible(false);
@@ -1181,10 +1054,10 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
   const float userBlockHeight = showsUserDropdown() ? rowHeight : 0.0f;
   const float userPickerContentHeight = userBlockHeight + sessionRowGap + sessionRowH;
   const float passwordContentHeight = Style::controlHeight() + sessionRowGap + sessionRowH;
-  const float contentBlockHeight = m_passwordVisible ? passwordContentHeight : userPickerContentHeight;
+  const float contentBlockHeight = m_model.state().passwordVisible ? passwordContentHeight : userPickerContentHeight;
 
-  const bool hasStatus = !m_status.empty();
-  const std::string actualStatus = m_status;
+  const bool hasStatus = !m_model.state().status.empty();
+  const std::string actualStatus = m_model.state().status;
   m_statusLabel->setText("Xy");
   m_statusLabel->measure(*renderer);
   const float statusLineHeight = m_statusLabel->height();
@@ -1221,7 +1094,7 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
   }
   if (m_statusLabel != nullptr) {
     m_statusLabel->setColor(
-        m_statusIsError ? colorForRole(ColorRole::Error) : colorForRole(ColorRole::OnSurfaceVariant)
+        m_model.state().statusIsError ? colorForRole(ColorRole::Error) : colorForRole(ColorRole::OnSurfaceVariant)
     );
   }
   if (m_configErrorBanner != nullptr && m_configErrorBanner->visible()) {
@@ -1328,7 +1201,7 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
   layoutPowerButtons(ox, oy, sw, sh);
   layoutClock(ox, oy, sw, sh, panelX, panelY, panelWidth, panelHeight);
 
-  if (!m_passwordVisible && showsUserDropdown()) {
+  if (!m_model.state().passwordVisible && showsUserDropdown()) {
     layoutPanelUserSelector(contentLeft, contentTop, contentWidth, rowHeight);
   } else {
     m_userSelectBox->setVisible(false);
@@ -1343,7 +1216,7 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
     }
   }
 
-  const bool showPasswordStep = m_passwordVisible;
+  const bool showPasswordStep = m_model.state().passwordVisible;
   const bool showBackButton = showPasswordStep && showsUserDropdown();
   const float buttonRadius = Style::scaledRadiusMd();
   m_loginButton->setRadius(buttonRadius);
@@ -1388,8 +1261,8 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
     m_backButton->setVisible(false);
   }
 
-  const float sessionY = m_passwordVisible ? (contentTop + Style::controlHeight() + sessionRowGap)
-                                           : (contentTop + userBlockHeight + sessionRowGap);
+  const float sessionY = m_model.state().passwordVisible ? (contentTop + Style::controlHeight() + sessionRowGap)
+                                                         : (contentTop + userBlockHeight + sessionRowGap);
   layoutPanelSessionSelector(contentLeft, sessionY, contentWidth, sessionRowH);
 
   if (hasStatus) {
@@ -1423,7 +1296,7 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
   }
 
   if (applyingInitialFocus
-      && m_passwordVisible
+      && m_model.state().passwordVisible
       && m_passwordField != nullptr
       && m_passwordField->inputArea() != nullptr) {
     m_inputDispatcher.setFocus(m_passwordField->inputArea());
@@ -1438,474 +1311,18 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
   }
 }
 
-void GreeterSurface::tryAuthenticate() {
-  // Ignore re-submits while a request is already in flight.
-  if (m_greetdClient == nullptr || m_greetdUnavailable || m_sharedAuthBlocked || awaitingReply()) {
-    return;
-  }
-  if (m_username.empty()) {
-    updateStatus("Enter a username", true);
-    commitImmediateFrame(false);
-    return;
-  }
-  if (m_password.empty() && !m_allowEmptyPassword) {
-    updateStatus("Enter a password", true);
-    commitImmediateFrame(false);
-    return;
-  }
-
-  if (!m_authSessionStarted) {
-    if (m_onAuthBeginRequested && !m_onAuthBeginRequested(this)) {
-      return;
-    }
-    // Arm the typed input (possibly empty) to answer the first secret prompt.
-    m_pendingResponse = m_password;
-    m_hasPendingResponse = true;
-    m_authenticating = true;
-    kLog.info("greetd: create_session for '{}'", m_username);
-    if (!m_greetdClient->requestCreateSession(m_username)) {
-      reportGreetdTransportError(
-          m_greetdClient->lastError().value_or(GreetdError{GreetdErrorType::Error, "failed to send request"})
-      );
-      return;
-    }
-    m_authSessionStarted = true;
-    m_pendingReplies.push_back(AuthRequest::CreateSession);
-    syncAuthInteractivity();
-    commitImmediateFrame(false);
-  } else if (m_secretPromptWaiting) {
-    postAuthResponse(m_password);
-  }
-}
-
-void GreeterSurface::onGreetdReadable() {
-  if (m_greetdClient == nullptr) {
-    return;
-  }
-  // Drain every frame currently buffered; readMessage() stops at nullopt.
-  for (;;) {
-    const std::optional<GreetdResponse> response = m_greetdClient->readMessage();
-    if (!response.has_value()) {
-      if (const auto error = m_greetdClient->lastError()) {
-        kLog.warn("greetd connection lost: {}", error->description);
-        reportGreetdTransportError(*error);
-      }
-      return;
-    }
-    handleGreetdResponse(*response);
-  }
-}
-
-void GreeterSurface::handleGreetdResponse(const GreetdResponse& response) {
-  if (m_pendingReplies.empty()) {
-    return; // unsolicited reply — nothing to correlate it with
-  }
-  const AuthRequest expected = m_pendingReplies.front();
-  m_pendingReplies.pop_front();
-
-  if (m_authCancelRequested && expected != AuthRequest::Cancel) {
-    // This reply belongs to the previous account. It must never supply a
-    // prompt or start a session for the newly displayed selection.
-    (void)resetAuthSession();
-    syncAuthInteractivity();
-    commitImmediateFrame(false);
-    return;
-  }
-
-  const char* reqName = expected == AuthRequest::CreateSession ? "create_session"
-      : expected == AuthRequest::PostAuthData                  ? "post_auth_data"
-      : expected == AuthRequest::StartSession                  ? "start_session"
-                                                               : "cancel_session";
-  const char* respName = response.type == GreetdResponseType::AuthMessage ? "auth_message"
-      : response.type == GreetdResponseType::Error                        ? "error"
-                                                                          : "success";
-  kLog.debug("greetd reply to {}: {}", reqName, respName);
-
-  // Cancel ack drained the queue; re-enable input it had locked.
-  if (expected == AuthRequest::Cancel) {
-    if (m_authCancelRequested) {
-      if (response.type != GreetdResponseType::Success) {
-        reportGreetdTransportError(
-            response.type == GreetdResponseType::Error
-                ? response.error
-                : GreetdError{GreetdErrorType::Error, "Unexpected response while cancelling authentication"}
-        );
-        return;
-      }
-      m_authCancelRequested = false;
-      updateStatus("", false);
-      notifyStateChanged();
-    }
-    if (m_onAuthEnded) {
-      m_onAuthEnded(this);
-    }
-    syncAuthInteractivity();
-    commitImmediateFrame(false);
-    return;
-  }
-
-  switch (response.type) {
-  case GreetdResponseType::Error:
-    onAuthError(response.error);
-    return;
-  case GreetdResponseType::AuthMessage:
-    handleAuthMessage(response.authMessage);
-    return;
-  case GreetdResponseType::Success:
-    if (expected == AuthRequest::StartSession) {
-      kLog.info("session start confirmed, exiting greeter");
-      if (m_onExitRequested) {
-        m_onExitRequested();
-      }
-    } else {
-      // Auth finished; launch the session.
-      beginSessionStart();
-    }
-    return;
-  }
-}
-
-void GreeterSurface::handleAuthMessage(const GreetdAuthMessage& message) {
-  const char* typeName = message.type == GreetdAuthMessageType::Secret ? "secret"
-      : message.type == GreetdAuthMessageType::Visible                 ? "visible"
-      : message.type == GreetdAuthMessageType::Error                   ? "error"
-                                                                       : "info";
-  kLog.info("PAM {} message: {}", typeName, message.message);
-
-  if (message.type == GreetdAuthMessageType::Info || message.type == GreetdAuthMessageType::Error) {
-    const bool isError = message.type == GreetdAuthMessageType::Error;
-    if (!message.message.empty()) {
-      updateStatus(message.message, isError);
-    }
-    if (isError) {
-      clearPasswordInput();
-    }
-    // Ack without a credential to resume PAM; paint now so the message shows.
-    if (!m_greetdClient->requestPostAuthData(std::nullopt)) {
-      reportGreetdTransportError(
-          m_greetdClient->lastError().value_or(GreetdError{GreetdErrorType::Error, "failed to send request"})
-      );
-      return;
-    }
-    m_pendingReplies.push_back(AuthRequest::PostAuthData);
-    syncAuthInteractivity();
-    commitImmediateFrame(false);
-    return;
-  }
-
-  // Secret / Visible prompt. Answer with already-submitted input if we have it
-  // (empty is allowed), otherwise surface the prompt and wait for the user.
-  if (m_hasPendingResponse) {
-    const std::string response = m_pendingResponse;
-    m_hasPendingResponse = false;
-    m_pendingResponse.clear();
-    postAuthResponse(response);
-    return;
-  }
-
-  m_secretPromptWaiting = true;
-  if (!message.message.empty()) {
-    updateStatus(message.message, false);
-  }
-  syncAuthInteractivity();
-  commitImmediateFrame(false);
-}
-
-void GreeterSurface::postAuthResponse(const std::string& data) {
-  kLog.debug("greetd: post_auth_data ({} bytes)", data.size());
-  if (!m_greetdClient->requestPostAuthData(data)) {
-    reportGreetdTransportError(
-        m_greetdClient->lastError().value_or(GreetdError{GreetdErrorType::Error, "failed to send request"})
-    );
-    return;
-  }
-  clearPasswordInput();
-  m_secretPromptWaiting = false;
-  m_pendingReplies.push_back(AuthRequest::PostAuthData);
-  syncAuthInteractivity();
-  commitImmediateFrame(false);
-}
-
-void GreeterSurface::syncAuthInteractivity() {
-  const bool busy = m_greetdUnavailable || m_sharedAuthBlocked || m_authCancelRequested || awaitingReply();
-  if (m_passwordField != nullptr) {
-    m_passwordField->setEnabled(!busy);
-  }
-  if (m_loginButton != nullptr) {
-    m_loginButton->setEnabled(!busy);
-  }
-}
-
-void GreeterSurface::setSharedAuthBlocked(const bool blocked) {
-  if (m_sharedAuthBlocked == blocked) {
-    return;
-  }
-  m_sharedAuthBlocked = blocked;
-  syncAuthInteractivity();
-  commitImmediateFrame(false);
-}
-
-void GreeterSurface::setGreetdUnavailable(const std::string_view reason) {
-  m_greetdUnavailable = true;
-  m_authCancelRequested = false;
-  m_authenticating = false;
-  m_authSessionStarted = false;
-  m_secretPromptWaiting = false;
-  m_hasPendingResponse = false;
-  m_pendingResponse.clear();
-  m_pendingReplies.clear();
-  clearPasswordInput();
-  syncAuthInteractivity();
-  updateStatus(std::string(reason), true);
-  commitImmediateFrame(false);
-}
-
-void GreeterSurface::beginSessionStart() {
-  kLog.info("authentication successful");
-
-  savePreferences();
-
-  if (m_greetdClient == nullptr) {
-    kLog.error("no greetd client to start session");
-    return;
-  }
-
-  GreetdSessionCommand cmd;
-  greeter::SessionOption session{
-      .name = "Shell", .desktopId = {}, .command = "/bin/sh", .desktopNames = {}, .sessionType = "tty"
-  };
-  if (!m_sessions.empty() && m_selectedSession < m_sessions.size()) {
-    session = m_sessions[m_selectedSession];
-  }
-
-  // greetd cmd is argv; Exec= may be multiple tokens (e.g. "dbus-run-session gnome-session").
-  // x11 sessions are wrapped in noctalia-greeter-xsession to bootstrap Xorg first.
-  {
-    const std::vector<std::string> argv = greeter::sessionArgv(session);
-    if (argv.empty()) {
-      kLog.error("session '{}' has empty Exec", session.name);
-      m_authenticating = false;
-      clearPasswordInput();
-      updateStatus("Failed to start session: empty command", true);
-      if (!resetAuthSession()) {
-        return;
-      }
-      syncAuthInteractivity();
-      commitImmediateFrame(false);
-      return;
-    }
-    cmd.command = argv.front();
-    cmd.arguments.assign(argv.begin() + 1, argv.end());
-  }
-  cmd.environment = greeter::sessionStartEnvironment(session);
-  {
-    std::string envSummary;
-    for (const auto& entry : cmd.environment) {
-      if (!envSummary.empty()) {
-        envSummary += ' ';
-      }
-      envSummary += entry.key + '=' + entry.value;
-    }
-    kLog.info(
-        "greetd: start_session session='{}' cmd='{}' args={} env=[{}]", session.name, cmd.command, cmd.arguments.size(),
-        envSummary
-    );
-  }
-
-  if (!m_greetdClient->requestStartSession(cmd)) {
-    reportGreetdTransportError(
-        m_greetdClient->lastError().value_or(GreetdError{GreetdErrorType::Error, "failed to send request"})
-    );
-    return;
-  }
-
-  m_pendingReplies.push_back(AuthRequest::StartSession);
-}
-
-bool GreeterSurface::cancelAuthentication() {
-  if (!m_pendingReplies.empty() && m_pendingReplies.front() == AuthRequest::StartSession) {
-    return false;
-  }
-  if (m_authCancelRequested || (!m_authSessionStarted && !awaitingReply())) {
-    return true;
-  }
-  m_authCancelRequested = true;
-  m_authenticating = false;
-  m_secretPromptWaiting = false;
-  m_hasPendingResponse = false;
-  m_pendingResponse.clear();
-  clearPasswordInput();
-  updateStatus(kAuthCancelStatus, false);
-  // IPC is lockstep. Drain the outstanding reply before sending cancel, and
-  // keep the shared owner through both that reply and the cancel ack.
-  const bool cancelled = awaitingReply() || resetAuthSession();
-  syncAuthInteractivity();
-  commitImmediateFrame(false);
-  return cancelled;
-}
-
-bool GreeterSurface::resetAuthSession() {
-  if (m_greetdClient != nullptr && m_authSessionStarted) {
-    if (!m_greetdClient->requestCancelSession()) {
-      m_authSessionStarted = false;
-      reportGreetdTransportError(
-          m_greetdClient->lastError().value_or(GreetdError{GreetdErrorType::Error, "failed to send request"})
-      );
-      return false;
-    }
-    // Track the ack so a later create_session reply is not mistaken for it.
-    m_pendingReplies.push_back(AuthRequest::Cancel);
-    m_authSessionStarted = false;
-    return true;
-  }
-  m_authSessionStarted = false;
-  if (m_onAuthEnded) {
-    m_onAuthEnded(this);
-  }
-  return true;
-}
-
-void GreeterSurface::clearPasswordInput() {
-  m_password.clear();
-  if (m_passwordField != nullptr) {
-    m_passwordField->setValue("");
-  }
-}
-
-void GreeterSurface::onAuthError(const GreetdError& error) {
-  m_authenticating = false;
-  m_secretPromptWaiting = false;
-  m_hasPendingResponse = false;
-  m_pendingResponse.clear();
-  m_pendingReplies.clear();
-  clearPasswordInput();
-  updateStatus(error.description, true);
-  kLog.warn("authentication failed: {}", error.description);
-  if (!resetAuthSession()) {
-    return;
-  }
-  syncAuthInteractivity();
-  commitImmediateFrame(false);
-}
-
-void GreeterSurface::reportGreetdTransportError(const GreetdError& error) {
-  if (m_onGreetdTransportError) {
-    m_onGreetdTransportError(error);
-    return;
-  }
-  if (m_greetdClient != nullptr) {
-    m_greetdClient->disconnect();
-  }
-  setGreetdUnavailable("Login service is unavailable. Restart greetd.");
-}
-
-void GreeterSurface::updateStatus(const std::string& text, bool isError) {
-  // Empty text clears the line; non-empty text shows as an error or, for PAM
-  // info prompts, as a neutral hint rather than being discarded.
-  m_status = text;
-  m_statusIsError = isError;
-  if (m_statusLabel != nullptr) {
-    m_statusLabel->setText(text);
-    m_statusLabel->setColor(colorForRole(isError ? ColorRole::Error : ColorRole::OnSurfaceVariant));
-  }
-  requestLayout();
-}
-
-void GreeterSurface::loadUsers() {
-  m_users.clear();
-  m_userUids.clear();
-  m_userIconPaths.clear();
-  static const std::unordered_set<std::string> kHiddenSystemUsers = {
-      "greeter", "greetd", "sddm", "lightdm", "gdm", "nobody",
-  };
-
-  std::unordered_set<std::string> seen;
-
-  // Prefer AccountsService cached users (same source as ReGreet) so FreeIPA /
-  // LDAP accounts that have logged in here appear even when NSS enumeration
-  // does not list them.
-  const auto cachedUsers = accounts::listCachedUsers();
-  for (const auto& cached : cachedUsers) {
-    if (cached.username.empty() || kHiddenSystemUsers.contains(cached.username)) {
-      continue;
-    }
-    if (!seen.insert(cached.username).second) {
-      continue;
-    }
-    m_users.push_back(cached.username);
-    m_userUids.push_back(cached.uid);
-    m_userIconPaths.push_back(cached.iconPath);
-  }
-  if (!cachedUsers.empty()) {
-    kLog.info("AccountsService: {} cached user(s), {} after filters", cachedUsers.size(), m_users.size());
-  }
-
-  int userEnumerationErrno = 0;
-  ::setpwent();
-  while (true) {
-    errno = 0;
-    struct passwd* pw = ::getpwent();
-    if (pw == nullptr) {
-      userEnumerationErrno = errno;
-      break;
-    }
-
-    if (pw->pw_name == nullptr || pw->pw_shell == nullptr) {
-      continue;
-    }
-
-    std::string user = pw->pw_name;
-    std::string shell = pw->pw_shell;
-    uid_t uid = pw->pw_uid;
-
-    if (uid < 1000 || kHiddenSystemUsers.contains(user)) {
-      continue;
-    }
-    if (shell.find("nologin") != std::string::npos || shell.find("false") != std::string::npos) {
-      continue;
-    }
-    if (!seen.insert(user).second) {
-      continue;
-    }
-    m_users.push_back(user);
-    m_userUids.push_back(uid);
-    m_userIconPaths.push_back(accounts::iconFileForUid(uid).value_or(""));
-  }
-  ::endpwent();
-
-  if (userEnumerationErrno != 0) {
-    kLog.warn("failed to enumerate NSS users: {}", std::strerror(userEnumerationErrno));
-  }
-
-  if (m_users.empty()) {
-    m_users.push_back("greeter");
-    m_userUids.push_back(0);
-    m_userIconPaths.push_back("");
-  }
-
-  appendDummyUsers(m_users, m_userUids);
-  while (m_userIconPaths.size() < m_users.size()) {
-    m_userIconPaths.push_back("");
-  }
-
-  m_selectedUser = 0;
-  setUsername(m_users[m_selectedUser]);
-}
-
-void GreeterSurface::loadSessions() {
-  m_sessions = greeter::discoverSessions();
-  m_selectedSession = 0;
-}
-
 void GreeterSurface::refreshSelectionLabels() {
   if (m_userSelectLabel != nullptr) {
-    const std::string userLabel = m_users.empty() ? "(none)" : m_users[std::min(m_selectedUser, m_users.size() - 1)];
+    const std::string userLabel = m_model.users().empty()
+        ? "(none)"
+        : m_model.users()[std::min(m_model.state().selectedUser, m_model.users().size() - 1)];
     m_userSelectLabel->setText(userLabel);
     m_userSelectLabel->setColor(colorForRole(ColorRole::OnSurface));
   }
   if (m_sessionSelectLabel != nullptr) {
-    const std::string sessionLabel =
-        m_sessions.empty() ? "/bin/sh" : m_sessions[std::min(m_selectedSession, m_sessions.size() - 1)].name;
+    const std::string sessionLabel = m_model.sessions().empty()
+        ? "/bin/sh"
+        : m_model.sessions()[std::min(m_model.state().selectedSession, m_model.sessions().size() - 1)].name;
     m_sessionSelectLabel->setText(sessionLabel);
   }
   if (m_userSelectGlyph != nullptr) {
@@ -1914,8 +1331,9 @@ void GreeterSurface::refreshSelectionLabels() {
   syncPanelUserChrome();
   syncPanelSessionChrome();
   if (m_schemeSelectLabel != nullptr) {
-    const std::string schemeLabel =
-        m_schemeNames.empty() ? "Noctalia" : m_schemeNames[std::min(m_selectedScheme, m_schemeNames.size() - 1)];
+    const std::string schemeLabel = m_model.schemeNames().empty()
+        ? "Noctalia"
+        : m_model.schemeNames()[std::min(m_model.state().selectedScheme, m_model.schemeNames().size() - 1)];
     m_schemeSelectLabel->setText(schemeLabel);
     m_schemeSelectLabel->setColor(colorForRole(ColorRole::OnSurface));
   }
@@ -1928,31 +1346,14 @@ void GreeterSurface::refreshSelectionLabels() {
   applySelectorBoxStyle(m_schemeSelectBox, m_schemeSelectArea);
 }
 
-void GreeterSurface::buildSchemeNames() {
-  m_schemeNames.clear();
-  m_syncedAppearance = loadGreeterSyncedAppearance();
-  m_wallpaperAppearance = loadGreeterWallpaperAppearance();
-  if (m_syncedAppearance.has_value()) {
-    m_schemeNames.emplace_back(greeter::appearance::kSyncedSchemeDisplayName);
-    m_selectedScheme = 0;
-  }
-
-  for (const auto& builtinPalette : noctalia::theme::builtinPalettes()) {
-    m_schemeNames.emplace_back(builtinPalette.name);
-    if (!m_syncedAppearance.has_value() && builtinPalette.name == "Noctalia") {
-      m_selectedScheme = m_schemeNames.size() - 1;
-    }
-  }
-}
-
 bool GreeterSurface::isSyncedScheme(const std::size_t schemeIndex) const {
-  return schemeIndex < m_schemeNames.size()
-      && m_schemeNames[schemeIndex] == greeter::appearance::kSyncedSchemeDisplayName;
+  return schemeIndex < m_model.schemeNames().size()
+      && m_model.schemeNames()[schemeIndex] == greeter::appearance::kSyncedSchemeDisplayName;
 }
 
 std::optional<std::size_t> GreeterSurface::findSchemeIndex(const std::string_view name) const {
-  for (std::size_t i = 0; i < m_schemeNames.size(); ++i) {
-    if (m_schemeNames[i] == name) {
+  for (std::size_t i = 0; i < m_model.schemeNames().size(); ++i) {
+    if (m_model.schemeNames()[i] == name) {
       return i;
     }
   }
@@ -2011,11 +1412,11 @@ void GreeterSurface::applyConfiguredWallpaper() {
 }
 
 void GreeterSurface::applyScheme(const std::size_t schemeIndex) {
-  if (schemeIndex >= m_schemeNames.size()) {
+  if (schemeIndex >= m_model.schemeNames().size()) {
     return;
   }
 
-  m_selectedScheme = schemeIndex;
+  m_appliedScheme = schemeIndex;
   if (isSyncedScheme(schemeIndex)) {
     if (!m_syncedAppearance.has_value()) {
       m_syncedAppearance = loadGreeterSyncedAppearance();
@@ -2036,7 +1437,7 @@ void GreeterSurface::applyScheme(const std::size_t schemeIndex) {
     return;
   }
 
-  if (const auto* builtinPalette = noctalia::theme::findBuiltinPalette(m_schemeNames[schemeIndex])) {
+  if (const auto* builtinPalette = noctalia::theme::findBuiltinPalette(m_model.schemeNames()[schemeIndex])) {
     setPalette(builtinPalette->dark.palette);
   }
   Style::setCornerRadiusScale(1.0f);
@@ -2046,12 +1447,12 @@ void GreeterSurface::applyScheme(const std::size_t schemeIndex) {
 void GreeterSurface::syncHeaderUserAvatar(
     Renderer& renderer, const float size, const float panelX, const float panelWidth, const float headerY
 ) {
-  const bool canShowAvatar = !m_users.empty()
-      && m_selectedUser < m_users.size()
-      && m_selectedUser < m_userIconPaths.size()
+  const bool canShowAvatar = !m_model.users().empty()
+      && m_model.state().selectedUser < m_model.users().size()
+      && m_model.state().selectedUser < m_model.userIconPaths().size()
       && m_headerUserAvatar != nullptr
       && m_renderContext != nullptr;
-  const std::string iconPath = canShowAvatar ? m_userIconPaths[m_selectedUser] : std::string{};
+  const std::string iconPath = canShowAvatar ? m_model.userIconPaths()[m_model.state().selectedUser] : std::string{};
   // size is logical; decode at buffer resolution so HiDPI outputs stay sharp.
   const int avatarPixelSize = canShowAvatar ? static_cast<int>(std::lround(size * m_renderContext->renderScale())) : 0;
 
@@ -2167,24 +1568,6 @@ void GreeterSurface::syncWallpaperTexture() {
 
 void GreeterSurface::loadPreferences() {
   const auto prefs = greeter::loadGreeterPreferences();
-  m_allowEmptyPassword = prefs.allowEmptyPassword;
-  const auto initialSession = greeter::resolveInitialSessionName(prefs);
-
-  if (initialSession.has_value()) {
-    if (const auto index = greeter::findSessionIndex(m_sessions, *initialSession)) {
-      m_selectedSession = *index;
-    }
-  }
-
-  if (prefs.scheme.has_value()) {
-    for (std::size_t i = 0; i < m_schemeNames.size(); ++i) {
-      if (m_schemeNames[i] == *prefs.scheme) {
-        m_selectedScheme = i;
-        break;
-      }
-    }
-  }
-
   m_hideLogo = prefs.hideLogo;
   m_powerButtonsPosition = prefs.powerButtonsPosition.value_or("bottom-right");
   m_schemeSelectorPosition = prefs.schemeSelectorPosition.value_or("top-right");
@@ -2194,20 +1577,6 @@ void GreeterSurface::loadPreferences() {
   m_clockDateFormat = prefs.clockDateFormat;
   m_clockTimeFontSize = prefs.clockTimeFontSize;
   m_clockDateFontSize = prefs.clockDateFontSize;
-}
-
-void GreeterSurface::savePreferences() const {
-  greeter::GreeterPreferences prefs;
-  if (m_selectedSession < m_sessions.size()) {
-    prefs.session = m_sessions[m_selectedSession].name;
-  }
-  if (m_selectedScheme < m_schemeNames.size()) {
-    prefs.scheme = m_schemeNames[m_selectedScheme];
-  }
-
-  if (!greeter::saveGreeterPreferences(prefs)) {
-    kLog.warn("failed to save sync.toml (check permissions on {})", greeter::greeterSyncPath().string());
-  }
 }
 
 void GreeterSurface::toggleUserMenu() {
@@ -2225,7 +1594,7 @@ void GreeterSurface::toggleUserMenu() {
 }
 
 void GreeterSurface::openUserMenu() {
-  if (m_userMenuOpen || m_passwordVisible || !showsUserDropdown()) {
+  if (m_userMenuOpen || m_model.state().passwordVisible || !showsUserDropdown()) {
     return;
   }
   m_userMenuOpen = true;
@@ -2291,7 +1660,7 @@ InputArea* GreeterSurface::menuReturnFocusTarget() const {
   // previous focus: a click focuses the selector before its handler runs, so
   // "where focus was" is already the selector itself. Naming the password field
   // outright keeps keyboard, focus-ring and pointer opens behaving alike.
-  if (!m_passwordVisible || m_passwordField == nullptr) {
+  if (!m_model.state().passwordVisible || m_passwordField == nullptr) {
     return nullptr;
   }
   return m_passwordField->inputArea();
@@ -2317,12 +1686,11 @@ void GreeterSurface::closeMenusAndRestoreFocus() {
 }
 
 void GreeterSurface::selectSession(std::size_t index) {
-  if (index >= m_sessions.size()) {
+  if (index >= m_model.sessions().size()) {
     return;
   }
-  m_selectedSession = index;
+  m_model.selectSession(m_viewId, index);
   refreshSelectionLabels();
-  savePreferences();
   m_sessionMenuOpen = false;
   m_menuHighlight = -1;
   InputArea* sessionFocus = menuReturnFocusTarget();
@@ -2332,17 +1700,15 @@ void GreeterSurface::selectSession(std::size_t index) {
   if (sessionFocus != nullptr) {
     m_inputDispatcher.setFocus(sessionFocus);
   }
-  notifyStateChanged();
   commitImmediateFrame(true);
 }
 
 void GreeterSurface::selectScheme(std::size_t index) {
-  if (index >= m_schemeNames.size()) {
+  if (index >= m_model.schemeNames().size()) {
     return;
   }
-  applyScheme(index);
+  m_model.selectScheme(m_viewId, index);
   refreshSelectionLabels();
-  savePreferences();
   m_schemeMenuOpen = false;
   m_menuHighlight = -1;
   InputArea* schemeFocus = menuReturnFocusTarget();
@@ -2352,25 +1718,16 @@ void GreeterSurface::selectScheme(std::size_t index) {
   if (schemeFocus != nullptr) {
     m_inputDispatcher.setFocus(schemeFocus);
   }
-  notifyStateChanged();
   commitImmediateFrame(true);
 }
 
 void GreeterSurface::runBackAction() {
-  if (!showsUserDropdown()) {
+  if (!m_auth.showUserPicker(m_viewId)) {
     return;
   }
-  if (m_onUserSelectionRequested && !m_onUserSelectionRequested()) {
-    return;
-  }
-  m_passwordVisible = false;
-  m_passwordField->setValue("");
-  m_password.clear();
-  updateStatus(m_authCancelRequested || m_sharedAuthBlocked ? kAuthCancelStatus : "", false);
   if (m_userSelectArea != nullptr) {
     m_inputDispatcher.setFocus(m_userSelectArea);
   }
-  notifyStateChanged();
   commitImmediateFrame(true);
 }
 
@@ -2380,7 +1737,7 @@ void GreeterSurface::rebuildFocusRing() {
   InputArea* previouslyFocused = InputArea::getFocused();
   m_focusRing.clear();
 
-  if (m_passwordVisible) {
+  if (m_model.state().passwordVisible) {
     if (m_passwordField != nullptr && m_passwordField->inputArea() != nullptr) {
       m_focusRing.push_back({m_passwordField->inputArea(), {}});
     }
@@ -2392,8 +1749,9 @@ void GreeterSurface::rebuildFocusRing() {
     }
   } else if (showsUserDropdown() && m_userSelectArea != nullptr) {
     m_focusRing.push_back({m_userSelectArea, [this]() {
-                             if (!m_passwordVisible && m_selectedUser < m_users.size()) {
-                               enterPasswordStep(m_selectedUser);
+                             if (!m_model.state().passwordVisible
+                                 && m_model.state().selectedUser < m_model.users().size()) {
+                               enterPasswordStep(m_model.state().selectedUser);
                              }
                            }});
   }
@@ -2691,7 +2049,7 @@ std::ptrdiff_t GreeterSurface::defaultFocusIndex() const {
     return 0;
   }
 
-  if (m_passwordVisible && m_passwordField != nullptr && m_passwordField->inputArea() != nullptr) {
+  if (m_model.state().passwordVisible && m_passwordField != nullptr && m_passwordField->inputArea() != nullptr) {
     for (std::size_t i = 0; i < m_focusRing.size(); ++i) {
       if (m_focusRing[i].area == m_passwordField->inputArea()) {
         return static_cast<std::ptrdiff_t>(i);
@@ -2699,7 +2057,7 @@ std::ptrdiff_t GreeterSurface::defaultFocusIndex() const {
     }
   }
 
-  if (!m_passwordVisible && showsUserDropdown() && m_userSelectArea != nullptr) {
+  if (!m_model.state().passwordVisible && showsUserDropdown() && m_userSelectArea != nullptr) {
     for (std::size_t i = 0; i < m_focusRing.size(); ++i) {
       if (m_focusRing[i].area == m_userSelectArea) {
         return static_cast<std::ptrdiff_t>(i);
@@ -2978,17 +2336,17 @@ void GreeterSurface::applyMenuHighlight() {
   if (m_sessionMenuOpen) {
     rows = &m_sessionMenuRows;
     labels = &m_sessionMenuLabels;
-    selected = m_selectedSession;
+    selected = m_model.state().selectedSession;
   } else if (m_schemeMenuOpen) {
     rows = &m_schemeMenuRows;
     labels = &m_schemeMenuLabels;
-    selected = m_selectedScheme;
+    selected = m_model.state().selectedScheme;
   } else if (m_userMenuOpen) {
     rows = &m_userMenuRows;
     labels = &m_userMenuLabels;
-    if (m_selectedUser < m_users.size()) {
+    if (m_model.state().selectedUser < m_model.users().size()) {
       for (std::size_t i = 0; i < m_userMenuFilteredIndices.size(); ++i) {
-        if (m_userMenuFilteredIndices[i] == m_selectedUser) {
+        if (m_userMenuFilteredIndices[i] == m_model.state().selectedUser) {
           selected = i;
           break;
         }
@@ -3003,8 +2361,8 @@ void GreeterSurface::applyMenuHighlight() {
 
   const std::ptrdiff_t count = static_cast<std::ptrdiff_t>(rows->size());
   const std::size_t totalCount = m_userMenuOpen ? m_userMenuFilteredIndices.size()
-      : m_sessionMenuOpen                       ? m_sessions.size()
-                                                : m_schemeNames.size();
+      : m_sessionMenuOpen                       ? m_model.sessions().size()
+                                                : m_model.schemeNames().size();
   if (m_userMenuOpen) {
     const std::size_t matchCount = m_userMenuFilteredIndices.size();
     if (matchCount == 0) {
@@ -3031,9 +2389,10 @@ void GreeterSurface::applyMenuHighlight() {
                                                                : 0)
         + index;
     const bool highlighted = filteredIndex == static_cast<std::size_t>(m_menuHighlight);
-    const bool isSelected = m_userMenuOpen ? (filteredIndex < m_userMenuFilteredIndices.size()
-                                              && m_userMenuFilteredIndices[filteredIndex] == m_selectedUser)
-                                           : (filteredIndex == selected);
+    const bool isSelected = m_userMenuOpen
+        ? (filteredIndex < m_userMenuFilteredIndices.size()
+           && m_userMenuFilteredIndices[filteredIndex] == m_model.state().selectedUser)
+        : (filteredIndex == selected);
     const float borderWidth = Style::borderWidth();
     const float panelRadius = Style::scaledRadiusLg();
     const float rowCorner = m_userMenuOpen ? Style::scaledRadiusSm() : panelRadius - borderWidth;
@@ -3119,7 +2478,7 @@ void GreeterSurface::moveMenuHighlight(int delta) {
     return;
   }
   const std::ptrdiff_t count =
-      static_cast<std::ptrdiff_t>(m_sessionMenuOpen ? m_sessions.size() : m_schemeNames.size());
+      static_cast<std::ptrdiff_t>(m_sessionMenuOpen ? m_model.sessions().size() : m_model.schemeNames().size());
   if (m_menuHighlight < 0) {
     m_menuHighlight = 0;
   }
@@ -3195,7 +2554,7 @@ void GreeterSurface::scrollSelectorMenu(int delta) {
   if (scroll == nullptr || scroll->visibleCount == 0 || delta == 0) {
     return;
   }
-  const std::size_t count = m_sessionMenuOpen ? m_sessions.size() : m_schemeNames.size();
+  const std::size_t count = m_sessionMenuOpen ? m_model.sessions().size() : m_model.schemeNames().size();
   const std::ptrdiff_t maxOffset = static_cast<std::ptrdiff_t>(count - scroll->visibleCount);
   const std::size_t offset = static_cast<std::size_t>(
       std::clamp(static_cast<std::ptrdiff_t>(scroll->offset) + delta, std::ptrdiff_t{0}, maxOffset)
@@ -3234,7 +2593,7 @@ void GreeterSurface::activateMenuHighlight() {
 }
 
 bool GreeterSurface::handleNavigationKey(std::uint32_t sym, std::uint32_t utf32, std::uint32_t modifiers) {
-  if (m_authenticating && !KeySymbol::isEscape(sym)) {
+  if (m_auth.authInProgress(m_viewId) && !KeySymbol::isEscape(sym)) {
     return false;
   }
   const bool shift = (modifiers & KeyMod::Shift) != 0;
@@ -3322,7 +2681,7 @@ bool GreeterSurface::handleNavigationKey(std::uint32_t sym, std::uint32_t utf32,
 
   // Escape leaves the password step.
   if (KeySymbol::isEscape(sym)) {
-    if (m_passwordVisible) {
+    if (m_model.state().passwordVisible) {
       runBackAction();
       return true;
     }
@@ -3336,7 +2695,7 @@ bool GreeterSurface::handleNavigationKey(std::uint32_t sym, std::uint32_t utf32,
   }
 
   if (!menuOpen()
-      && !m_passwordVisible
+      && !m_model.state().passwordVisible
       && showsUserDropdown()
       && m_userSelectArea != nullptr
       && focused == m_userSelectArea) {
@@ -3504,12 +2863,12 @@ void GreeterSurface::layoutUserMenuSearchField(float x, float y, float w, float 
 }
 
 void GreeterSurface::refreshUserMenuRows() {
-  if (!m_userMenuOpen || m_users.empty() || m_userSelectBox == nullptr || m_renderContext == nullptr) {
+  if (!m_userMenuOpen || m_model.users().empty() || m_userSelectBox == nullptr || m_renderContext == nullptr) {
     return;
   }
 
   auto* renderer = m_renderContext;
-  m_userMenuFilteredIndices = filterUserIndices(m_users, m_userMenuSearchQuery);
+  m_userMenuFilteredIndices = filterUserIndices(m_model.users(), m_userMenuSearchQuery);
 
   const float anchorX = m_userSelectBox->x();
   const float anchorW = m_userSelectBox->width();
@@ -3521,7 +2880,7 @@ void GreeterSurface::refreshUserMenuRows() {
 
   float contentW = anchorW;
   for (const std::size_t userIndex : m_userMenuFilteredIndices) {
-    const float textW = renderer->measureText(m_users[userIndex], Style::fontSizeBody()).width;
+    const float textW = renderer->measureText(m_model.users()[userIndex], Style::fontSizeBody()).width;
     contentW = std::max(contentW, rowIconReserve + textW + 2.0f * kUserMenuPadding);
   }
   const float screenW = m_root.width();
@@ -3575,9 +2934,9 @@ void GreeterSurface::refreshUserMenuRows() {
 
   if (m_menuHighlight < 0 || static_cast<std::size_t>(m_menuHighlight) >= matchCount) {
     m_menuHighlight = 0;
-    if (m_selectedUser < m_users.size()) {
+    if (m_model.state().selectedUser < m_model.users().size()) {
       for (std::size_t i = 0; i < matchCount; ++i) {
-        if (m_userMenuFilteredIndices[i] == m_selectedUser) {
+        if (m_userMenuFilteredIndices[i] == m_model.state().selectedUser) {
           m_menuHighlight = static_cast<std::ptrdiff_t>(i);
           break;
         }
@@ -3648,7 +3007,7 @@ void GreeterSurface::refreshUserMenuRows() {
 
     auto label = std::make_unique<Label>();
     auto* labelPtr = label.get();
-    labelPtr->setText(m_users[userIndex]);
+    labelPtr->setText(m_model.users()[userIndex]);
     labelPtr->setFontSize(Style::fontSizeBody());
     labelPtr->setColor(colorForRole(ColorRole::OnSurface));
     labelPtr->setZIndex(52);
@@ -3684,7 +3043,7 @@ void GreeterSurface::refreshUserMenuRows() {
 }
 
 void GreeterSurface::rebuildUserMenu() {
-  if (!m_userMenuOpen || m_users.empty()) {
+  if (!m_userMenuOpen || m_model.users().empty()) {
     clearUserMenu();
     return;
   }
@@ -3852,16 +3211,16 @@ void GreeterSurface::buildMenu(
 
 void GreeterSurface::rebuildSessionMenu() {
   clearSessionMenu();
-  if (!m_sessionMenuOpen || m_sessions.empty()) {
+  if (!m_sessionMenuOpen || m_model.sessions().empty()) {
     return;
   }
   std::vector<std::string> names;
-  names.reserve(m_sessions.size());
-  for (const auto& session : m_sessions) {
+  names.reserve(m_model.sessions().size());
+  for (const auto& session : m_model.sessions()) {
     names.push_back(session.name);
   }
   buildMenu(
-      names, m_selectedSession, m_sessionSelectBox, /*upward=*/false,
+      names, m_model.state().selectedSession, m_sessionSelectBox, /*upward=*/false,
       /*rightAlign=*/false, /*zBase=*/50, m_sessionMenuPanel, m_sessionMenuRows, m_sessionMenuLabels,
       m_sessionMenuAreas, m_sessionMenuScroll, [this](std::size_t i) { selectSession(i); }
   );
@@ -3869,13 +3228,13 @@ void GreeterSurface::rebuildSessionMenu() {
 
 void GreeterSurface::rebuildSchemeMenu() {
   clearSchemeMenu();
-  if (!m_schemeMenuOpen || m_schemeNames.empty()) {
+  if (!m_schemeMenuOpen || m_model.schemeNames().empty()) {
     return;
   }
   // Open upward when selector is at the bottom, downward otherwise
   const bool upward = m_schemeSelectorPosition == "bottom-left" || m_schemeSelectorPosition == "bottom-right";
   buildMenu(
-      m_schemeNames, m_selectedScheme, m_schemeSelectBox,
+      m_model.schemeNames(), m_model.state().selectedScheme, m_schemeSelectBox,
       /*upward=*/upward,
       /*rightAlign=*/true, /*zBase=*/60, m_schemeMenuPanel, m_schemeMenuRows, m_schemeMenuLabels, m_schemeMenuAreas,
       m_schemeMenuScroll, [this](std::size_t i) { selectScheme(i); }

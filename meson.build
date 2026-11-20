@@ -170,6 +170,8 @@ _greeter_sources = files(
   'src/greeter/greeter_config_io.cpp',
   'src/greeter/greeter_preferences.cpp',
   'src/greeter/greeter_sessions.cpp',
+  'src/greeter/greeter_model.cpp',
+  'src/greeter/greeter_auth_controller.cpp',
   'src/greeter/greeter_surface.cpp',
   'src/greeter/greeter_window.cpp',
   'src/greeter/logind_resume.cpp',
@@ -552,6 +554,18 @@ greeter_frame_loop_test = executable(
   link_args: ['-Wl,--wrap=wl_proxy_add_listener', '-Wl,--wrap=eglSwapBuffers'],
   build_by_default: false,
 )
+
+greeter_auth_controller_test = executable(
+  'greeter-auth-controller-test',
+  sources: files('tests/greeter_auth_controller_test.cpp'),
+  objects: noctalia_greeter_executable.extract_objects(_greeter_sources),
+  dependencies: _greeter_dependencies,
+  include_directories: _greeter_inc,
+  cpp_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow'],
+  build_by_default: false,
+)
+
+test('greeter-auth-controller', greeter_auth_controller_test)
 
 test(
   'greeter-frame-loop',
