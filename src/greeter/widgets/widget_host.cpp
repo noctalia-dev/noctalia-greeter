@@ -1,6 +1,7 @@
 #include "greeter/widgets/widget_host.h"
 
 #include "core/ui_phase.h"
+#include "greeter/widgets/analog_clock_widget.h"
 #include "greeter/widgets/digital_clock_widget.h"
 #include "greeter/widgets/label_widget.h"
 #include "greeter/widgets/widget_settings.h"
@@ -54,20 +55,23 @@ namespace greeter {
     const auto text = [&](const char* key) -> const std::string& { return std::get<std::string>(settings.at(key)); };
     std::unique_ptr<WidgetContent> content;
     if (instance.type == "clock") {
-      if (text("clock_style") != "digital")
-        return std::unexpected(
-            std::vector<WidgetModelIssue>{
-                {"widgets.widget." + instance.id + ".settings.clock_style", "analog presentation is not implemented"}
-            }
-        );
-      content = std::make_unique<DigitalClockWidget>(DigitalClockWidget::Options{
-          .format = text("format"),
-          .timezone = text("timezone"),
-          .fontFamily = text("font_family"),
-          .color = colorSpec(text("color")),
-          .shadow = std::get<bool>(settings.at("shadow")),
-          .centerText = std::get<bool>(settings.at("center_text")),
-      });
+      if (text("clock_style") == "analog") {
+        content = std::make_unique<AnalogClockWidget>(AnalogClockWidget::Options{
+            .timezone = text("timezone"),
+            .color = colorSpec(text("color")),
+            .showCircle = std::get<bool>(settings.at("circle")),
+            .showSeconds = std::get<bool>(settings.at("show_seconds")),
+        });
+      } else {
+        content = std::make_unique<DigitalClockWidget>(DigitalClockWidget::Options{
+            .format = text("format"),
+            .timezone = text("timezone"),
+            .fontFamily = text("font_family"),
+            .color = colorSpec(text("color")),
+            .shadow = std::get<bool>(settings.at("shadow")),
+            .centerText = std::get<bool>(settings.at("center_text")),
+        });
+      }
     } else {
       content = std::make_unique<LabelWidget>(LabelWidget::Options{
           .title = text("title"),
@@ -124,8 +128,12 @@ namespace greeter {
   }
 
   void WidgetHost::refreshTime() {
-    if (m_content->updateTime(std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now())))
-      markLayoutDirty();
+    if (m_content->updateTime(std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now()))) {
+      if (m_content->timeInvalidation() == NodeInvalidation::Layout)
+        markLayoutDirty();
+      else
+        markPaintDirty();
+    }
   }
 
   void WidgetHost::setActive(bool active) {

@@ -118,6 +118,7 @@ _greeter_sources = files(
   'src/greeter/widgets/widget_host.cpp',
   'src/greeter/widgets/label_widget.cpp',
   'src/greeter/widgets/digital_clock_widget.cpp',
+  'src/greeter/widgets/analog_clock_widget.cpp',
   'src/greeter/greeter_preferences.cpp',
   'src/greeter/greeter_sessions.cpp',
   'src/greeter/greeter_model.cpp',

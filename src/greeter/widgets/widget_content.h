@@ -13,6 +13,7 @@ namespace greeter {
     virtual void layoutAtScale(Renderer& renderer, float scale) = 0;
     virtual bool alignsToStart() const noexcept { return false; }
     virtual std::optional<std::chrono::seconds> tickInterval() const { return std::nullopt; }
+    virtual NodeInvalidation timeInvalidation() const noexcept { return NodeInvalidation::Layout; }
     virtual bool updateTime(std::chrono::sys_seconds now) {
       (void)now;
       return false;
