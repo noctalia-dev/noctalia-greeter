@@ -510,10 +510,16 @@ namespace greeter {
 
     const auto confPath = greeterConfPath();
     const bool confExisted = std::filesystem::exists(confPath, ec) && !ec;
+    // Load before unlinking a symlinked config so its content carries over into the real file.
+    config::clearConfigDiagnostics();
+    const config::GreeterConfigFile file = config::loadConfig(confPath);
+    if (!config::configDiagnostics().empty()) {
+      errorOut = "refusing to overwrite invalid greeter.toml: " + config::configDiagnostics().front().message;
+      return false;
+    }
     if (!greeter::privileged_state::removeSymlinkIfPresent(confPath, errorOut)) {
       return false;
     }
-    const config::GreeterConfigFile file = config::loadConfig(confPath);
     if (!config::writeConfig(confPath, file)) {
       errorOut = "failed to write greeter.toml";
       return false;
