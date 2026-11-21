@@ -102,6 +102,22 @@ command -v noctalia-greeter-session
 
 Update `/etc/greetd/config.toml` as shown in [Configure greetd](installation.md#3-configure-greetd).
 
+### Runtime directory is not owned by the greeter
+
+If startup reports `/tmp/noctalia-runtime-<uid> is not a directory owned by uid`,
+inspect that exact path's type and owner. The session wrapper refuses symlinks,
+plain files and directories belonging to another user. Stop the affected greeter
+before resolving a stale path, then retry; an existing real directory owned by
+the correct UID is supported and its permissions are reset to `0700`.
+
+### Compositor closes a custom greeter launch
+
+The bundled compositor closes toplevels from any process other than its launched
+greeter, even if the UID or app ID matches. If the log reports `closing toplevel
+from foreign client pid`, check custom launch scripts and instrumentation. A
+greeter launcher must use `exec /path/to/noctalia-greeter "$@"` to preserve the
+expected PID. For a nested preview, use `WLR_BACKENDS=wayland just run-local`.
+
 ### `WAYLAND_DISPLAY is not set`
 
 greetd must launch `noctalia-greeter-session`, not the `noctalia-greeter` client directly. The session wrapper starts the bundled compositor, which creates `WAYLAND_DISPLAY` before launching the client. Correct the session command in `/etc/greetd/config.toml`.

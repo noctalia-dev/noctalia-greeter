@@ -123,6 +123,9 @@ case-insensitive, but using the exact picker spelling keeps the configuration
 unambiguous. If a `wayland-sessions` and an `xsessions` entry share the same
 `Name=`, the `wayland-sessions` entry wins.
 
+Session keys are read only from the desktop file's `[Desktop Entry]` group;
+`[Desktop Action ...]` groups do not change its name, command or visibility.
+
 An `xsessions` entry's `Exec=` is run through `noctalia-greeter-xsession`,
 which bootstraps `Xorg` via `startx` before running it — `startx` handles
 `DISPLAY`/`Xauthority` setup for the client. This requires `xinit` (for

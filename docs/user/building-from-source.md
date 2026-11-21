@@ -136,6 +136,12 @@ This uses the bundled compositor inside the current session. Logs go to `~/.cach
 
 Use `just run-niri` to run the client directly in the current Wayland session. It works with other Wayland compositors too. The normal greeter deployment uses `noctalia-greeter-session` as described in the install instructions.
 
+The bundled compositor accepts login windows only from the greeter process it
+launches. A custom `NOCTALIA_GREETER_BIN`/`GREETER_BIN` script must end with
+`exec /path/to/noctalia-greeter "$@"` so the executable keeps that process ID.
+Use `just run-local` for nesting: the installed session wrapper clears inherited
+`WAYLAND_DISPLAY` when preparing a greetd session.
+
 ## Verify a build
 
 ```sh
@@ -145,5 +151,10 @@ meson test -C build-asan --print-errorlogs
 ```
 
 The graphical tests create private headless compositor sessions and fake greetd sockets. They cover login handoff, cancellation and account isolation, menu focus, resizing, and idle rendering. The suite also checks layout/configuration fallback, output handling, wallpaper rendering, sessions, and version metadata. Headless tests require permission to create Unix sockets and initialize the graphics stack.
+
+The session-wrapper test uses a private user/mount namespace with a temporary
+`/tmp` to check runtime-directory ownership without touching a live session.
+It reports a skip when those namespace operations are unavailable. The setup
+config-preservation test similarly requires an unprivileged user namespace.
 
 Before deployment, verify actual PAM authentication, monitor/input hardware, output hotplug, and suspend/resume on the target system. Use a temporary `DESTDIR` when checking package contents; the application artwork and `assets/library/` font files are required at runtime.

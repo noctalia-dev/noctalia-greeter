@@ -173,7 +173,15 @@ command = "/usr/bin/noctalia-greeter-session"
 user = "greeter"
 ```
 
-Use the real path from your package prefix. Optional pinned session:
+Use the real path from your package prefix.
+
+The compositor admits toplevels only from its launched greeter PID. Package
+launchers around the greeter binary must `exec` the final executable, preserving
+that PID. The session wrapper uses `/tmp/noctalia-runtime-<uid>`, requires a real
+directory owned by that UID, and enforces mode `0700`; it refuses a symlink or
+foreign-owned path before starting the compositor.
+
+Optional pinned session:
 
 ```toml
 command = "/usr/bin/noctalia-greeter-session -- --session niri"

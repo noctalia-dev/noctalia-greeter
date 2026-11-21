@@ -354,6 +354,16 @@ test(
   ],
 )
 
+test(
+  'session-wrapper',
+  find_program('python3'),
+  args: [
+    meson.project_source_root() / 'tests/session_wrapper_test.py',
+    meson.project_source_root() / 'scripts/noctalia-greeter-session',
+  ],
+  timeout: 60,
+)
+
 legacy_staging_compatibility_test = executable(
   'legacy-staging-compatibility-test',
   sources: _apply_appearance_support_sources + files(

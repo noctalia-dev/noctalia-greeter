@@ -191,6 +191,12 @@ commonly install it under `/usr/bin`; the path may differ for another prefix.
 Keep the existing greeter account if your configuration uses a user other than
 `greeter`.
 
+The session wrapper creates `/tmp/noctalia-runtime-<uid>` with mode `0700` for
+that account. It reuses an existing real directory owned by the same UID,
+restoring its mode to `0700`. A symlink, plain file or directory owned by another
+UID stops startup before the compositor launches. The wrapper clears inherited
+`WAYLAND_DISPLAY` and starts a private compositor session.
+
 Some packages configure greetd automatically. In that case, verify that the
 existing `command` points to `noctalia-greeter-session` and leave the rest of
 the configuration intact.
