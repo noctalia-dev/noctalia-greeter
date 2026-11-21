@@ -163,8 +163,13 @@ namespace {
       std::string desktopNames;
       bool hidden = false;
       bool noDisplay = false;
+      bool inEntry = false;
       while (std::getline(in, line)) {
-        if (line.rfind("Name=", 0) == 0) {
+        if (line.starts_with('[')) {
+          inEntry = trim(line) == "[Desktop Entry]";
+        } else if (!inEntry) {
+          continue;
+        } else if (line.rfind("Name=", 0) == 0) {
           name = trim(line.substr(5));
         } else if (line.rfind("Exec=", 0) == 0) {
           exec = sanitizeDesktopExec(line.substr(5));

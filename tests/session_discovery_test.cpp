@@ -28,6 +28,10 @@ namespace {
       writeDesktopEntry(root / "xsessions" / "bar.desktop", "Bar", "/usr/bin/bar");
       writeDesktopEntry(root / "xsessions" / "shared.desktop", "Shared", "/usr/bin/shared-x11");
       writeDesktopEntry(root / "xsessions" / "hidden.desktop", "Hidden", "/usr/bin/hidden", /*noDisplay=*/true);
+      writeDesktopEntry(
+          root / "wayland-sessions" / "actions.desktop", "Actions", "/usr/bin/actions", false,
+          "[Desktop Action Other]\nName=Other\nExec=/usr/bin/other\nNoDisplay=true\n"
+      );
 
       previousXdgDataDirs = std::getenv("XDG_DATA_DIRS") != nullptr ? std::getenv("XDG_DATA_DIRS") : "";
       hadPreviousXdgDataDirs = std::getenv("XDG_DATA_DIRS") != nullptr;
@@ -50,7 +54,7 @@ namespace {
   private:
     static void writeDesktopEntry(
         const std::filesystem::path& path, const std::string& name, const std::string& exec,
-        const bool noDisplay = false
+        const bool noDisplay = false, const std::string& trailer = {}
     ) {
       std::filesystem::create_directories(path.parent_path());
       std::ofstream out(path);
@@ -60,6 +64,7 @@ namespace {
       if (noDisplay) {
         out << "NoDisplay=true\n";
       }
+      out << trailer;
     }
 
     std::filesystem::path root;
@@ -129,6 +134,10 @@ int main() {
   expect(sessions[*bar].command == "/usr/bin/bar", "Bar command matches Exec=");
 
   expect(!greeter::findSessionIndex(sessions, "Hidden").has_value(), "NoDisplay=true entry excluded");
+
+  const auto actions = greeter::findSessionIndex(sessions, "Actions");
+  expect(actions.has_value(), "Desktop Action keys do not override [Desktop Entry]");
+  expect(sessions[*actions].command == "/usr/bin/actions", "Desktop Action Exec= ignored");
 
   const auto shared = greeter::findSessionIndex(sessions, "Shared");
   expect(shared.has_value(), "Shared session discovered");
