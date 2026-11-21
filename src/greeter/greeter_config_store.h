@@ -129,8 +129,9 @@ namespace greeter::config {
   [[nodiscard]] GreeterSyncFile loadSync(const std::filesystem::path& path);
   [[nodiscard]] bool writeSync(const std::filesystem::path& path, const GreeterSyncFile& sync);
 
-  // Parse failures are retained for the greeter UI, which can show a useful
-  // on-screen diagnostic instead of silently falling back to defaults.
+  // Diagnostics are retained for the greeter UI until the same path is loaded
+  // again. Each load refreshes only that file's diagnostics, allowing repaired
+  // or removed files to recover without hiding errors from other files.
   void clearConfigDiagnostics();
   [[nodiscard]] const std::vector<ConfigDiagnostic>& configDiagnostics();
 

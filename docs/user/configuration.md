@@ -51,6 +51,12 @@ When you change the selected session or color scheme on the login screen, the gr
 
 Appearance Sync sets the scheme to **Synced** while preserving the last session and existing session commands.
 
+If `sync.toml` contains invalid TOML, login-screen saves and legacy appearance
+migration leave the file untouched. Repair the reported error before retrying.
+The next read refreshes that file's diagnostics, so a repaired file can be saved
+without restarting the greeter; errors in other configuration files remain
+reported.
+
 ## Configuration reference
 
 Set these keys in `greeter.toml`. A command-line `--session` or `--user` value takes precedence over the corresponding default.

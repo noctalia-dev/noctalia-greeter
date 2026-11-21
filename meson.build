@@ -371,6 +371,22 @@ legacy_staging_compatibility_test = executable(
 
 test('legacy-staging-compatibility', legacy_staging_compatibility_test)
 
+config_preservation_test = executable(
+  'config-preservation-test',
+  sources: files('tests/config_preservation_test.cpp', 'src/greeter/appearance_config.cpp'),
+  objects: apply_appearance_executable.extract_objects(_apply_appearance_support_sources),
+  dependencies: [nlohmann_dep, tomlplusplus_dep, noctalia_ui_dep],
+  include_directories: _greeter_tools_inc,
+  cpp_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow'],
+  build_by_default: false,
+)
+test('config-preservation', config_preservation_test)
+test(
+  'setup-config-preservation',
+  find_program('sh'),
+  args: [meson.project_source_root() / 'tests/setup_config_preservation_test.sh', config_preservation_test],
+)
+
 jxl_decoder_test = executable(
   'jxl-decoder-test',
   sources: files('tests/jxl_decoder_test.cpp', 'src/greeter/logging.cpp'),

@@ -226,6 +226,12 @@ sudo noctalia-greeter-apply-appearance --setup-system
 
 This creates or updates `greeter.toml` and `sync.toml` without editing PAM.
 It also creates the state directory on systems without tmpfiles processing.
+If `greeter.toml` is a valid symlink, setup copies its configured settings into a
+regular file without modifying the original target. Setup refuses to rewrite a
+file with parse or layout-validation errors, preserving the file and any symlink
+for you to repair before retrying. Runtime's per-field layout fallback does not
+make such a file eligible for a setup rewrite.
+
 When changing the greeter account, apply the tmpfiles override and run the
 helper again. Existing state-directory ownership takes precedence over the
 user in greetd's configuration when the helper resolves the account. Pass

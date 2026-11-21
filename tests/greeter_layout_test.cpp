@@ -147,7 +147,8 @@ visible = true
     );
     std::filesystem::create_directories(directory / "data/wayland-sessions");
     std::ofstream(directory / "data/wayland-sessions/sample.desktop")
-        << "[Desktop Entry]\nName=Layout Test Session\nExec=/bin/true\nType=Application\n";
+        << "[Desktop Entry]\nName=Layout Test Session\nExec=/bin/true\nType=Application\n"
+           "[Desktop Action Other]\nName=Other\nExec=/bin/false\nHidden=true\nNoDisplay=true\n";
     ::setenv("XDG_DATA_DIRS", (directory / "data").c_str(), 1);
     std::ofstream(path) << "[user]\ndefault='layout-test-account'\n";
     std::ofstream(directory / "sync.toml") << "[session]\nlast='Layout Test Session'\n";
@@ -158,6 +159,20 @@ visible = true
     GreeterModel configured;
     configured.initialize();
     require(configured.hasConfiguredDefaults(), "resolved defaults did not enable minimal login");
+    require(
+        configured.sessions()[configured.state().selectedSession].command == "/bin/true",
+        "action group changed configured session command"
+    );
+    std::ofstream(path) << "[user]\ndefault='layout-test-account'\n[session]\ndefault='sample'\n";
+    GreeterModel desktopId;
+    desktopId.initialize();
+    require(desktopId.hasConfiguredDefaults(), "desktop ID default did not enable minimal login");
+    greeter::setCliDefaultSession("sample");
+    std::ofstream(path) << "[user]\ndefault='layout-test-account'\n[session]\ndefault='Missing Session'\n";
+    GreeterModel cli;
+    cli.initialize();
+    require(cli.hasConfiguredDefaults(), "CLI session default did not override missing configured session");
+    greeter::setCliDefaultSession(std::nullopt);
     std::ofstream(path) << "[user]\ndefault='layout-test-account'\n[session]\ndefault='Missing Session'\n";
     GreeterModel missing;
     missing.initialize();

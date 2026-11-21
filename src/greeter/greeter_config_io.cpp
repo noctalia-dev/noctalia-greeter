@@ -1148,6 +1148,7 @@ namespace greeter::config {
   }
 
   GreeterConfigFile loadConfig(const std::filesystem::path& path) {
+    std::erase_if(g_diagnostics, [&](const auto& diagnostic) { return diagnostic.path == path; });
     std::error_code ec;
     if (!std::filesystem::is_regular_file(path, ec) || ec) {
       return {};
@@ -1203,6 +1204,7 @@ namespace greeter::config {
   }
 
   GreeterSyncFile loadSync(const std::filesystem::path& path) {
+    std::erase_if(g_diagnostics, [&](const auto& diagnostic) { return diagnostic.path == path; });
     std::error_code ec;
     if (!std::filesystem::is_regular_file(path, ec) || ec) {
       return {};

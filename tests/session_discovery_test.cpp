@@ -30,8 +30,18 @@ namespace {
       writeDesktopEntry(root / "xsessions" / "hidden.desktop", "Hidden", "/usr/bin/hidden", /*noDisplay=*/true);
       writeDesktopEntry(
           root / "wayland-sessions" / "actions.desktop", "Actions", "/usr/bin/actions", false,
-          "[Desktop Action Other]\nName=Other\nExec=/usr/bin/other\nNoDisplay=true\n"
+          "[Desktop Action Other]\nName=Other\nExec=/usr/bin/other\nNoDisplay=true\nHidden=true\nDesktopNames=Other\n"
       );
+      std::ofstream(root / "wayland-sessions" / "prelude.desktop")
+          << "Name=Outside\nExec=/usr/bin/outside\nHidden=true\n"
+             "[Desktop Action Before]\nName=Before\nExec=/usr/bin/before\nNoDisplay=true\n"
+             "[Desktop Entry]\nName=Prelude\nExec=/usr/bin/prelude\nDesktopNames=Prelude\n"
+             "[Desktop Action After]\nDesktopNames=Other\n";
+      std::ofstream(root / "wayland-sessions" / "action-only.desktop")
+          << "[Desktop Action Only]\nName=Action Only\nExec=/usr/bin/action-only\n";
+      std::ofstream(root / "wayland-sessions" / "hidden-main.desktop")
+          << "[Desktop Entry]\nName=Hidden Main\nExec=/usr/bin/hidden-main\nHidden=true\n"
+             "[Desktop Action Other]\nHidden=false\n";
 
       previousXdgDataDirs = std::getenv("XDG_DATA_DIRS") != nullptr ? std::getenv("XDG_DATA_DIRS") : "";
       hadPreviousXdgDataDirs = std::getenv("XDG_DATA_DIRS") != nullptr;
@@ -138,6 +148,15 @@ int main() {
   const auto actions = greeter::findSessionIndex(sessions, "Actions");
   expect(actions.has_value(), "Desktop Action keys do not override [Desktop Entry]");
   expect(sessions[*actions].command == "/usr/bin/actions", "Desktop Action Exec= ignored");
+  expect(sessions[*actions].desktopNames.empty(), "Desktop Action DesktopNames= ignored");
+  const auto prelude = greeter::findSessionIndex(sessions, "Prelude");
+  expect(prelude.has_value(), "keys before [Desktop Entry] do not hide main session");
+  expect(
+      sessions[*prelude].command == "/usr/bin/prelude" && sessions[*prelude].desktopNames == "Prelude",
+      "only main group command and desktop environment used"
+  );
+  expect(!greeter::findSessionIndex(sessions, "Action Only"), "action-only file is not a session");
+  expect(!greeter::findSessionIndex(sessions, "Hidden Main"), "action group cannot unhide main session");
 
   const auto shared = greeter::findSessionIndex(sessions, "Shared");
   expect(shared.has_value(), "Shared session discovered");
