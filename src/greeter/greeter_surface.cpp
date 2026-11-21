@@ -1612,7 +1612,7 @@ void GreeterSurface::handleAuthMessage(const GreetdAuthMessage& message) {
 }
 
 void GreeterSurface::postAuthResponse(const std::string& data) {
-  kLog.debug("greetd: post_auth_data ({} bytes)", data.size());
+  kLog.debug("greetd: post_auth_data");
   if (!m_greetdClient->requestPostAuthData(data)) {
     reportGreetdTransportError(
         m_greetdClient->lastError().value_or(GreetdError{GreetdErrorType::Error, "failed to send request"})
