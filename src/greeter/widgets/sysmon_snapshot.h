@@ -41,7 +41,7 @@ namespace greeter {
   struct SysmonReading {
     // Raw value in the metric's documented unit; null is unavailable, not zero.
     std::optional<double> current;
-    // Oldest first, normalized by the future provider; at most 120 finite [0..1] samples.
+    // Oldest first, normalized by the provider; at most 120 finite [0..1] samples.
     std::vector<float> history;
     // Missing range information leaves an empty track while preserving the raw label.
     std::optional<SysmonGaugeReading> gauge = std::nullopt;
