@@ -147,14 +147,12 @@ GreeterLoginPanel::layout(Renderer& renderer, const greeter::LayoutRect& bounds,
   m_nodes.submit->setVisible(true);
   m_nodes.submit->setText(view.passwordStep ? (view.busy ? "Signing in…" : "Sign in") : "Continue");
   m_nodes.submit->setVariant(ButtonVariant::Primary);
-  m_nodes.submit->glyph()->suppress();
   m_nodes.submit->setFontSize(14);
   m_nodes.submit->setControlHeight(m_buttonH);
   m_nodes.submit->setRadius(12 * Style::cornerRadiusScale());
   m_nodes.submit->setPosition(x, y + m_buttonY);
   m_nodes.submit->setSize(cw, m_buttonH);
   m_nodes.submit->layout(renderer);
-  m_nodes.back->setVisible(false);
   const float avatarSize = view.minimal ? 40 : (m_dense ? 32 : 38);
   const float avatarX = x + (view.minimal ? 0 : 13), avatarY = y + m_identityY + (m_identityH - avatarSize) / 2;
   rect(m_avatar, avatarX, avatarY, avatarSize, avatarSize, colorForRole(ColorRole::Secondary, 0.14F), avatarSize / 2);
@@ -186,8 +184,7 @@ GreeterChrome::GreeterChrome(Node& scene) {
 }
 void GreeterChrome::layout(
     Renderer& renderer, const greeter::GreeterLayout& layout, Label& time, Label& date, ImageNode& logo, bool hasLogo,
-    float timeFontSize, float dateFontSize, std::string_view keyboardName, float ox, float oy, float width,
-    float height, bool wallpaper
+    float timeFontSize, float dateFontSize, std::string_view keyboardName, float width, float height, bool wallpaper
 ) {
   using Id = greeter::GreeterComponent;
   const auto placeGlyph = [&](Glyph* glyph, std::string_view name, float x, float y, float size) {
@@ -202,11 +199,11 @@ void GreeterChrome::layout(
     orbit->setVisible(!wallpaper && !layout.narrow);
   if (!wallpaper && !layout.narrow) {
     rect(
-        m_orbit1, ox - width * .28F, oy + height * .13F, width * .83F, width * .83F, clearColor(), width,
+        m_orbit1, -width * .28F, height * .13F, width * .83F, width * .83F, clearColor(), width,
         colorForRole(ColorRole::Secondary, .045F), 1
     );
     rect(
-        m_orbit2, ox - width * .27F, oy + height * .16F, width * .78F, width * .78F, clearColor(), width,
+        m_orbit2, -width * .27F, height * .16F, width * .78F, width * .78F, clearColor(), width,
         colorForRole(ColorRole::Secondary, .035F), 1
     );
   }
@@ -214,10 +211,10 @@ void GreeterChrome::layout(
   logo.setVisible(brand.visible && hasLogo);
   m_wordmark->setVisible(brand.visible && hasLogo);
   if (brand.visible && hasLogo) {
-    logo.setPosition(ox + brand.x, oy + brand.y);
+    logo.setPosition(brand.x, brand.y);
     logo.setSize(28, 28);
     label(
-        m_wordmark, renderer, "noctalia", ox + brand.x + 39, oy + brand.y + 2, 15, colorForRole(ColorRole::OnSurface),
+        m_wordmark, renderer, "noctalia", brand.x + 39, brand.y + 2, 15, colorForRole(ColorRole::OnSurface),
         brand.width - 39, FontWeight::Medium
     );
   }
@@ -229,21 +226,20 @@ void GreeterChrome::layout(
   if (clock.visible) {
     const float size = layout.narrow ? std::min(timeFontSize, 56.0F) : timeFontSize;
     label(
-        &time, renderer, time.text(), ox + clock.x, oy + clock.y, size, colorForRole(ColorRole::OnSurface), clock.width,
+        &time, renderer, time.text(), clock.x, clock.y, size, colorForRole(ColorRole::OnSurface), clock.width,
         FontWeight::Light
     );
     time.setVisible(!time.text().empty());
-    const float dateY = oy + clock.y + (time.text().empty() ? 0 : time.height() + 10);
+    const float dateY = clock.y + (time.text().empty() ? 0 : time.height() + 10);
     label(
-        &date, renderer, date.text(), ox + clock.x + 5, dateY,
-        layout.narrow ? std::min(dateFontSize, 14.0F) : dateFontSize, colorForRole(ColorRole::OnSurfaceVariant),
-        clock.width - 5
+        &date, renderer, date.text(), clock.x + 5, dateY, layout.narrow ? std::min(dateFontSize, 14.0F) : dateFontSize,
+        colorForRole(ColorRole::OnSurfaceVariant), clock.width - 5
     );
     date.setVisible(!date.text().empty());
     const float hostY = dateY + (date.text().empty() ? 0 : date.height() + 24);
-    placeGlyph(m_hostGlyph, "device-desktop", ox + clock.x + 5, hostY, 15);
+    placeGlyph(m_hostGlyph, "device-desktop", clock.x + 5, hostY, 15);
     label(
-        m_hostname, renderer, m_hostname->text(), ox + clock.x + 29, hostY - 1, 13,
+        m_hostname, renderer, m_hostname->text(), clock.x + 29, hostY - 1, 13,
         colorForRole(ColorRole::OnSurfaceVariant), clock.width - 29
     );
   }
@@ -251,10 +247,10 @@ void GreeterChrome::layout(
   m_keyboard->setVisible(keyboard.visible && !keyboardName.empty());
   m_keyboardGlyph->setVisible(m_keyboard->visible());
   if (m_keyboard->visible()) {
-    placeGlyph(m_keyboardGlyph, "keyboard", ox + keyboard.x + 8, oy + keyboard.y + 10, 16);
+    placeGlyph(m_keyboardGlyph, "keyboard", keyboard.x + 8, keyboard.y + 10, 16);
     label(
-        m_keyboard, renderer, keyboardName, ox + keyboard.x + 30, oy + keyboard.y + 10, 13,
-        colorForRole(ColorRole::OnSurface), keyboard.width - 30
+        m_keyboard, renderer, keyboardName, keyboard.x + 30, keyboard.y + 10, 13, colorForRole(ColorRole::OnSurface),
+        keyboard.width - 30
     );
   }
 }

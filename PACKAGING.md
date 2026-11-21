@@ -73,6 +73,8 @@ the greeter's own release and Git revision.
 <prefix>/lib/tmpfiles.d/noctalia-greeter.conf       # optional; see below
 ```
 
+The default UI supports full and configured-defaults compact cards. Administrator component settings live under `[layout]` in `greeter.toml`; existing appearance sync does not export or overwrite them. No running Noctalia shell or editor is required for the UI. See [component configuration](docs/user/configuration.md#component-layout).
+
 The shipped `assets/` tree is **required at runtime**. Copying only `noctalia-greeter` breaks fonts, icons, and UI resources.
 
 The conventional-distribution `passwordless-sync` policy manager is part of

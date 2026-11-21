@@ -1,16 +1,17 @@
 #include "greeter/ui/search_field.h"
 
-#include "greeter/greeter_style.h"
+#include "greeter/ui/greeter_metrics.h"
 #include "render/core/render_styles.h"
 #include "ui/controls/glyph.h"
 #include "ui/controls/input.h"
 #include "ui/palette.h"
+#include "ui/style.h"
 
 #include <algorithm>
 
 namespace {
 
-  const float kIconGap = GreeterStyle::spaceSm();
+  const float kIconGap = Style::spaceSm;
   constexpr float kDividerHeight = 1.0f;
 
 } // namespace
@@ -18,14 +19,14 @@ namespace {
 SearchField::SearchField() : Node(NodeType::Base) {
   auto icon = std::make_unique<Glyph>();
   icon->setGlyph("search");
-  icon->setGlyphSize(GreeterStyle::fontSizeBody());
+  icon->setGlyphSize(Style::fontSizeBody);
   icon->setColor(colorForRole(ColorRole::OnSurfaceVariant));
   icon->setHitTestVisible(false);
   m_icon = static_cast<Glyph*>(addChild(std::move(icon)));
 
   auto input = std::make_unique<Input>();
   input->setFrameVisible(false);
-  input->setFontSize(GreeterStyle::fontSizeBody());
+  input->setFontSize(Style::fontSizeBody);
   m_input = static_cast<Input*>(addChild(std::move(input)));
 
   auto divider = std::make_unique<RectNode>();
@@ -114,7 +115,7 @@ LayoutSize SearchField::doMeasure(Renderer& renderer, const LayoutConstraints& c
 }
 
 void SearchField::doLayout(Renderer& renderer) {
-  const float w = width() > 0.0f ? width() : GreeterStyle::controlHeight() * 6.0f;
+  const float w = width() > 0.0f ? width() : GreeterMetrics::accountRowHeight * 6.0f;
   const float dividerH = m_activeChrome ? 0.0f : kDividerHeight;
   const float h = m_controlHeight + dividerH;
   setSize(w, h);

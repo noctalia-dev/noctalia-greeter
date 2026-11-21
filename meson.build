@@ -126,7 +126,6 @@ _greeter_sources = files(
   'src/greeter/resources.cpp',
   'src/greeter/library_runtime.cpp',
   'src/greeter/build_info.cpp',
-  'src/greeter/greeter_style.cpp',
   'src/greeter/ui/search_field.cpp',
   'src/greeter/ui/greeter_components.cpp',
   'src/greeter/render/wallpaper_program.cpp',

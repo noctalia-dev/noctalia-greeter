@@ -17,6 +17,7 @@ and project flake modules.
 - [Match the desktop output mode](#match-the-desktop-output-mode)
 - [Rotate an output](#rotate-an-output)
 - [Scale the interface](#scale-the-interface)
+- [Place UI components on each display](#place-ui-components-on-each-display)
 - [Use automatic display settings with appearance sync](#use-automatic-display-settings-with-appearance-sync)
 - [Blank displays when idle](#blank-displays-when-idle)
 - [Apply changes](#apply-changes)
@@ -210,6 +211,24 @@ scaling.
 These settings affect only the greeter session. They do not configure scaling
 inside the desktop session, although Noctalia Sync can copy the desktop's
 effective per-output scales to keep synchronized layouts valid.
+
+## Place UI components on each display
+
+Each active output has its own login scene and native window. Account/session selection and authentication are shared; keyboard focus, menus, hit testing, and component geometry belong to each view. Changing one output's fractional scale does not change another view's UI metrics. Resizing a nested compositor window also reflows the open menus and login card.
+
+The default desktop composition places the clock on the left and the login card on the right. Narrow displays use a stacked composition and hide optional components when they cannot fit. Very small views scale a minimum 320×520 logical canvas so the required controls remain reachable.
+
+Use `[layout.<component>]` in `greeter.toml` for UI placement within an output; `[output].layout` continues to arrange the monitors themselves. An optional component can target an exact connector name or stable identifier:
+
+```toml
+[layout.clock]
+output = "DP-1"
+anchor = "top-left"
+x = 16
+y = 16
+```
+
+A missing target hides that optional component. Login remains present on every active output; it cannot be hidden or assigned to a single monitor through component settings. See [Component layout](configuration.md#component-layout) for IDs, bounds, precedence, and collision rules.
 
 ## Use automatic display settings with appearance sync
 

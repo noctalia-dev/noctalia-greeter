@@ -45,6 +45,8 @@ unrelated values in `sync.toml` are preserved. The authenticated compatibility
 path retains the older payload, including Noctalia's configured session power
 commands and actions, because older greeters expect it.
 
+Greeter UI component settings (`[layout]` and its component tables) belong to `greeter.toml`. Appearance sync leaves them intact; `[output].layout` remains the synchronized monitor arrangement. A Noctalia editor/exporter for greeter components is deferred.
+
 User avatars are also separate from appearance sync. They come from AccountsService, so enable `accountsservice` or `accounts-daemon` if you want the avatar selected in Noctalia to appear in the greeter.
 
 The synced font must be available to the greeter account through Fontconfig. System-installed fonts work; fonts installed only in your home directory often do not.

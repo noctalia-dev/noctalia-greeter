@@ -123,3 +123,27 @@ existing owner differs from the account you intend to use.
 Continue with [Configure greetd](installation.md#3-configure-greetd) to merge
 the installed session wrapper into your greetd configuration and complete the
 safe display-manager cutover.
+
+## Preview locally
+
+From a terminal in an existing Wayland session, build and run a nested greeter:
+
+```sh
+WLR_BACKENDS=wayland just run-local
+```
+
+This uses the bundled compositor inside the current session. Logs go to `~/.cache/noctalia-greeter.log` unless `NOCTALIA_GREETER_LOG` overrides the path. Stop the preview with Ctrl+C in its terminal. Authentication requires a greetd test socket.
+
+Use `just run-niri` to run the client directly in the current Wayland session. It works with other Wayland compositors too. The normal greeter deployment uses `noctalia-greeter-session` as described in the install instructions.
+
+## Verify a build
+
+```sh
+meson test -C build --print-errorlogs
+meson setup build-asan --buildtype=debug -Db_sanitize=address -Db_lundef=false -Dcpp_std=c++23
+meson test -C build-asan --print-errorlogs
+```
+
+The graphical tests create private headless compositor sessions and fake greetd sockets. They cover login handoff, cancellation and account isolation, menu focus, resizing, and idle rendering. The suite also checks layout/configuration fallback, output handling, wallpaper rendering, sessions, and version metadata. Headless tests require permission to create Unix sockets and initialize the graphics stack.
+
+Before deployment, verify actual PAM authentication, monitor/input hardware, output hotplug, and suspend/resume on the target system. Use a temporary `DESTDIR` when checking package contents; the application artwork and `assets/library/` font files are required at runtime.

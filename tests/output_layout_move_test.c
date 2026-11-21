@@ -130,9 +130,11 @@ int main(void) {
   passed = expect_int("moving an output places it at the new x", box.x, 1280) && passed;
   passed = expect_int("moving an output moves its scene output", scene_output->x, 1280) && passed;
 
+  wl_registry_destroy(registry);
   wl_display_disconnect(client);
   wl_display_destroy_clients(server);
   wlr_scene_output_destroy(scene_output);
+  wlr_scene_node_destroy(&scene->tree.node);
   wlr_output_layout_destroy(layout);
   wlr_backend_destroy(backend);
   wlr_allocator_destroy(allocator);

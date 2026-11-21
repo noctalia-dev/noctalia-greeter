@@ -19,7 +19,6 @@ struct LoginPanelNodes {
   Box* background;
   Input* input;
   Button* submit;
-  Button* back;
   Label* feedback;
   Label* name;
 };
@@ -66,8 +65,7 @@ public:
   explicit GreeterChrome(Node& scene);
   void layout(
       Renderer& renderer, const greeter::GreeterLayout& layout, Label& time, Label& date, ImageNode& logo, bool hasLogo,
-      float timeFontSize, float dateFontSize, std::string_view keyboardName, float ox, float oy, float width,
-      float height, bool wallpaper
+      float timeFontSize, float dateFontSize, std::string_view keyboardName, float width, float height, bool wallpaper
   );
 
 private:

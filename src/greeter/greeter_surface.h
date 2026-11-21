@@ -73,18 +73,12 @@ public:
   // contents changed and a new layout is needed.
   [[nodiscard]] bool updateClock();
 
-  void setOutputViewport(float x, float y, float width, float height);
-  void clearOutputViewport();
-
   [[nodiscard]] Node* sceneRoot() noexcept { return &m_root; }
   [[nodiscard]] bool animating() const noexcept { return m_animations.hasActive(); }
 
 private:
-  [[nodiscard]] bool pointerInViewport(float x, float y) const;
-  void syncScaledTypography();
   void layoutScene(std::uint32_t width, std::uint32_t height);
   void tryAuthenticate();
-  void toggleUserMenu();
   void openUserMenu();
   void toggleSessionMenu();
   void toggleSchemeMenu();
@@ -100,13 +94,8 @@ private:
   void applySelectorBoxStyle(Box* box, const InputArea* area);
   void syncPanelSessionChrome();
   void syncPanelUserChrome();
-  [[nodiscard]] float measureIconSelectorWidth(Glyph* icon, Glyph* chevron) const;
-  void layoutSelector(Box* box, Glyph* icon, Glyph* chevron, InputArea* area, float x, float y, float w, float h);
   void layoutPanelUserSelector(float x, float y, float w, float h);
   void layoutPanelSessionSelector(float x, float y, float w, float h);
-  void layoutPowerButtons(float ox, float oy, float sw, float sh);
-  void
-  layoutClock(float ox, float oy, float sw, float sh, float panelX, float panelY, float panelWidth, float panelHeight);
   void commitImmediateFrame(bool layout);
   void togglePowerMenu();
   void closePowerMenu();
@@ -158,7 +147,7 @@ private:
   [[nodiscard]] bool isSyncedScheme(std::size_t schemeIndex) const;
   [[nodiscard]] std::optional<std::size_t> findSchemeIndex(std::string_view name) const;
   void syncWallpaperTexture();
-  void syncHeaderUserAvatar(class Renderer& renderer, float size, float panelX, float panelWidth, float headerY);
+  void layoutUserAvatar(Renderer& renderer, float x, float y, float size);
 
   // Nodes unregister animations while being destroyed, so the manager must
   // outlive the entire scene tree (members are destroyed in reverse order).
@@ -193,40 +182,27 @@ private:
   bool m_powerMenuOpen = false;
   int m_pendingPowerAction = 0;
   WallpaperNode* m_wallpaper = nullptr;
-  RectNode* m_letterbox = nullptr;
-  Node* m_backdrop = nullptr;
-  float m_viewportX = 0.0f;
-  float m_viewportY = 0.0f;
-  float m_viewportWidth = 0.0f;
-  float m_viewportHeight = 0.0f;
-  bool m_outputViewportActive = false;
-  Node* m_brandPane = nullptr;
-  ImageNode* m_bottomBrandLogo = nullptr;
+  RectNode* m_backdrop = nullptr;
+  ImageNode* m_brandLogo = nullptr;
   Glyph* m_headerUserGlyph = nullptr;
   ImageNode* m_headerUserAvatar = nullptr;
-  Label* m_brandTitleLabel = nullptr;
-  Label* m_brandSubtitleLabel = nullptr;
-  Label* m_formSubtitleLabel = nullptr;
-  Node* m_panelDivider = nullptr;
+  Label* m_identityLabel = nullptr;
+  RectNode* m_panelDivider = nullptr;
   Box* m_loginPanel = nullptr;
   Box* m_userSelectBox = nullptr;
-  Glyph* m_userSelectIcon = nullptr;
   Label* m_userSelectLabel = nullptr;
   Glyph* m_userSelectGlyph = nullptr;
   InputArea* m_userSelectArea = nullptr;
   Box* m_sessionSelectBox = nullptr;
-  Glyph* m_sessionSelectIcon = nullptr;
   Label* m_sessionSelectLabel = nullptr;
   Glyph* m_sessionSelectGlyph = nullptr;
   InputArea* m_sessionSelectArea = nullptr;
   Box* m_schemeSelectBox = nullptr;
   Glyph* m_schemeSelectIcon = nullptr;
   Label* m_schemeSelectLabel = nullptr;
-  Glyph* m_schemeSelectGlyph = nullptr;
   InputArea* m_schemeSelectArea = nullptr;
   Input* m_passwordField = nullptr;
   Button* m_loginButton = nullptr;
-  Button* m_backButton = nullptr;
   Label* m_statusLabel = nullptr;
   RectNode* m_configErrorBanner = nullptr;
   Label* m_configErrorHeading = nullptr;
@@ -236,7 +212,6 @@ private:
   Button* m_shutdownButton = nullptr;
   Button* m_rebootButton = nullptr;
   Button* m_firmwareButton = nullptr;
-  bool m_canRebootToFirmware = false;
 
   TextureHandle m_brandLogoTexture{};
   TextureHandle m_headerAvatarTexture{};
@@ -252,16 +227,11 @@ private:
   WallpaperSpanParams m_wallpaperSpanParams;
   bool m_wallpaperDirty = false;
   bool m_hasWallpaper = false;
-  bool m_hideLogo = false;
-  // UI element positioning: "hidden", "bottom-left", "bottom-right", "top-left", "top-right"
-  std::string m_powerButtonsPosition;
-  std::string m_schemeSelectorPosition;
   bool m_clockEnabled = true;
-  std::string m_clockPosition = "above-panel";
   std::string m_clockTimeFormat = "{:%H:%M}";
   std::string m_clockDateFormat = "%A, %x";
-  float m_clockTimeFontSize = 48.0f;
-  float m_clockDateFontSize = 14.0f;
+  float m_clockTimeFontSize = 112.0f;
+  float m_clockDateFontSize = 19.0f;
   std::optional<std::int64_t> m_lastClockSecond;
   bool m_inInputDispatch = false;
   bool m_inLayout = false;
