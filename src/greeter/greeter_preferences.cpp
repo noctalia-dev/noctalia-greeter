@@ -5,6 +5,7 @@
 #include "greeter/greeter_config_store.h"
 #include "greeter/privileged_state_paths.h"
 
+#include <algorithm>
 #include <array>
 #include <cctype>
 #include <cerrno>
@@ -559,6 +560,10 @@ namespace greeter {
     migrateLegacyRuntimeKeysToSync();
     const auto path = greeterSyncPath();
     config::GreeterSyncFile sync = config::loadSync(path);
+    if (std::ranges::any_of(config::configDiagnostics(), [&](const auto& d) { return d.path == path; })) {
+      kLog.warn("refusing to overwrite invalid {}", path.string());
+      return false;
+    }
 
     if (prefs.session.has_value() && !prefs.session->empty()) {
       sync.sessionLast = *prefs.session;
