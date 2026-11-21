@@ -55,7 +55,6 @@ private:
   Label* m_prompt;
   Glyph* m_hostGlyph;
   std::string m_hostname;
-  RectNode* m_shadow;
   RectNode* m_avatar;
   float m_padding = 32, m_inputY = 225, m_inputH = 48, m_promptY = 200, m_identityY = 112, m_identityH = 64;
   float m_sessionY = 332, m_buttonY = 388, m_feedbackY = 285, m_buttonH = 48;

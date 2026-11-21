@@ -17,11 +17,20 @@ hide_logo = true
 enabled = false
 EOF
 
+# Direct Power entries must never reach host power-management commands.
+cat >"$test_dir/state/sync.toml" <<'EOF'
+[session.power]
+suspend = 'true'
+reboot = 'printf "reboot\n" >> "$NOCTALIA_GREETER_TEST_POWER_LOG"'
+shutdown = 'true'
+EOF
+
 # The compositor does not propagate its child's exit code, so also require the
 # client's success marker. Keep the combined log available on any failure.
 if ! env \
   XDG_RUNTIME_DIR="$test_dir/runtime" \
   NOCTALIA_GREETER_STATE_DIR="$test_dir/state" \
+  NOCTALIA_GREETER_TEST_POWER_LOG="$test_dir/power.log" \
   WLR_BACKENDS=headless \
   WLR_HEADLESS_OUTPUTS=1 \
   WLR_RENDERER=pixman \

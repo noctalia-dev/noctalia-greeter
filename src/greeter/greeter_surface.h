@@ -92,14 +92,13 @@ private:
   void selectScheme(std::size_t index);
   void runBackAction();
   void rebuildFocusRing();
-  void applySelectorBoxStyle(Box* box, const InputArea* area);
   void syncPanelSessionChrome();
   void syncPanelUserChrome();
   void layoutPanelUserSelector(float x, float y, float w, float h);
   void layoutPanelSessionSelector(float x, float y, float w, float h);
   void commitImmediateFrame(bool layout);
   void togglePowerMenu();
-  void closePowerMenu();
+  void closePowerMenu(bool restoreTriggerFocus = true);
   void requestPowerAction(int action);
   void layoutPowerMenu(float width, float height);
   bool minimalLogin() const;
@@ -123,8 +122,9 @@ private:
   void scrollSelectorMenu(int delta);
   void applyMenuHighlight();
   void buildMenu(
-      const std::vector<std::string>& names, std::size_t selected, Box* anchor, bool upward, bool rightAlign, int zBase,
-      Box*& panelOut, ContextMenuControl*& controlOut, MenuScroll& scroll, std::function<void(std::size_t)> onSelect
+      const std::vector<std::string>& names, std::size_t selected, Node* anchor, bool upward, bool rightAlign,
+      int zBase, Box*& panelOut, ContextMenuControl*& controlOut, MenuScroll& scroll,
+      std::function<void(std::size_t)> onSelect
   );
   void rebuildUserMenu();
   void refreshUserMenuRows();
@@ -175,13 +175,10 @@ private:
   Label* m_userSecondaryLabel = nullptr;
   Button* m_powerMenuButton = nullptr;
   Button* m_suspendButton = nullptr;
-  Button* m_powerCancel = nullptr;
-  Button* m_powerConfirm = nullptr;
   Box* m_powerPanel = nullptr;
   Label* m_powerTitle = nullptr;
   RectNode* m_powerShadow = nullptr;
   bool m_powerMenuOpen = false;
-  int m_pendingPowerAction = 0;
   WallpaperNode* m_wallpaper = nullptr;
   RectNode* m_backdrop = nullptr;
   ImageNode* m_brandLogo = nullptr;
@@ -198,9 +195,7 @@ private:
   Label* m_sessionSelectLabel = nullptr;
   Glyph* m_sessionSelectGlyph = nullptr;
   InputArea* m_sessionSelectArea = nullptr;
-  Box* m_schemeSelectBox = nullptr;
-  Glyph* m_schemeSelectIcon = nullptr;
-  Label* m_schemeSelectLabel = nullptr;
+  Button* m_schemeSelectButton = nullptr;
   InputArea* m_schemeSelectArea = nullptr;
   Input* m_passwordField = nullptr;
   Button* m_loginButton = nullptr;

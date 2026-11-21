@@ -38,7 +38,7 @@ The greeter works without a mouse.
 | `F7` | Open the color scheme picker |
 | `Ctrl+Alt+F1`–`F12` | Switch to a virtual terminal (TTY) |
 
-The keyboard layout indicator reflects the active compositor keymap; it is read-only. Power opens a keyboard-accessible menu and asks for confirmation before executing an action. The main menu contains only power actions; press **Esc** or click outside to dismiss it. Confirmation presents Cancel beside the action, with Cancel focused initially.
+The keyboard layout indicator reflects the active compositor keymap; it is read-only. Power opens a keyboard-accessible menu. Selecting an entry executes its action immediately, without a second confirmation. Press **Esc** or click outside to dismiss the menu without choosing an action. Clicking outside returns focus to the login controls and clears Power's highlight; **Esc** returns keyboard focus to Power.
 
 Opening the account dropdown preserves the selected account and entered password. Clicking outside or pressing `Esc` dismisses it and returns focus to the credential field. Further clicks on empty background leave keyboard focus unchanged.
 

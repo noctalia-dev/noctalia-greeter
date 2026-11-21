@@ -350,45 +350,17 @@ void GreeterSurface::initialize(RenderContext* context) {
   });
   m_root.addChild(std::move(sessionArea));
 
-  auto schemeBox = std::make_unique<Box>();
-  m_schemeSelectBox = schemeBox.get();
-  m_schemeSelectBox->setZIndex(6);
-  m_root.addChild(std::move(schemeBox));
-
-  auto schemeIcon = std::make_unique<Glyph>();
-  schemeIcon->setGlyph("palette");
-  schemeIcon->setGlyphSize(Style::fontSizeBody);
-  schemeIcon->setColor(colorForRole(ColorRole::OnSurfaceVariant));
-  schemeIcon->setHitTestVisible(false);
-  m_schemeSelectIcon = schemeIcon.get();
-  m_schemeSelectIcon->setZIndex(6);
-  m_root.addChild(std::move(schemeIcon));
-
-  auto schemeLabel = std::make_unique<Label>();
-  schemeLabel->setFontSize(Style::fontSizeBody);
-  m_schemeSelectLabel = schemeLabel.get();
-  m_schemeSelectLabel->setZIndex(6);
-  m_root.addChild(std::move(schemeLabel));
-
-  auto schemeArea = std::make_unique<InputArea>();
-  schemeArea->setFocusable(true);
-  schemeArea->setOnClick([this](const InputArea::PointerData& data) {
-    if (data.button != BTN_LEFT) {
-      return;
-    }
-    toggleSchemeMenu();
-  });
-  m_schemeSelectArea = schemeArea.get();
-  m_schemeSelectArea->setZIndex(7);
-  m_schemeSelectArea->setOnFocusGain([this]() {
-    applySelectorBoxStyle(m_schemeSelectBox, m_schemeSelectArea);
-    requestRedraw();
-  });
-  m_schemeSelectArea->setOnFocusLoss([this]() {
-    applySelectorBoxStyle(m_schemeSelectBox, m_schemeSelectArea);
-    requestRedraw();
-  });
-  m_root.addChild(std::move(schemeArea));
+  auto schemeButton = std::make_unique<Button>();
+  m_schemeSelectButton = schemeButton.get();
+  schemeButton->setText("Appearance");
+  schemeButton->setGlyph("palette");
+  schemeButton->setVariant(ButtonVariant::Ghost);
+  schemeButton->setFontSize(14);
+  schemeButton->setGlyphSize(17);
+  schemeButton->setOnClick([this] { toggleSchemeMenu(); });
+  schemeButton->setZIndex(8);
+  m_schemeSelectArea = schemeButton->inputArea();
+  m_root.addChild(std::move(schemeButton));
 
   auto loginBtn = std::make_unique<Button>();
   loginBtn->setVariant(ButtonVariant::Primary);
@@ -476,7 +448,7 @@ void GreeterSurface::initialize(RenderContext* context) {
 
   m_root.setAnimationManager(&m_animations);
   // Keep state changes immediate to avoid hover flicker.
-  for (Button* btn : {m_shutdownButton, m_rebootButton, m_firmwareButton}) {
+  for (Button* btn : {m_shutdownButton, m_rebootButton, m_firmwareButton, m_schemeSelectButton}) {
     if (btn != nullptr) {
       btn->setAnimationManager(nullptr);
     }
@@ -515,23 +487,11 @@ void GreeterSurface::initialize(RenderContext* context) {
   m_root.addChild(std::move(caption));
   m_powerMenuButton = addButton("Power", "power", [this] { togglePowerMenu(); });
   m_powerMenuButton->setZIndex(8);
+  m_powerMenuButton->setAnimationManager(nullptr);
   m_suspendButton = addButton(
       power::syncedActionLabel("suspend").value_or("Suspend"), power::syncedActionGlyph("suspend").value_or("moon"),
       [this] { requestPowerAction(1); }
   );
-  m_powerCancel = addButton("Cancel", "arrow-left", [this] { closePowerMenu(); });
-  m_powerConfirm = addButton("Confirm", "", [this] {
-    const int action = m_pendingPowerAction;
-    closePowerMenu();
-    if (action == 1)
-      power::suspend();
-    else if (action == 2)
-      power::reboot();
-    else if (action == 3)
-      power::powerOff();
-    else if (action == 4)
-      power::rebootToFirmwareSetup();
-  });
   auto powerPanel = std::make_unique<Box>();
   m_powerPanel = powerPanel.get();
   powerPanel->setZIndex(100);
@@ -543,12 +503,12 @@ void GreeterSurface::initialize(RenderContext* context) {
   m_powerTitle = powerTitle.get();
   powerTitle->setZIndex(102);
   m_root.addChild(std::move(powerTitle));
-  m_shutdownButton->setText(power::syncedActionLabel("shutdown").value_or("Shut down…"));
+  m_shutdownButton->setText(power::syncedActionLabel("shutdown").value_or("Shut down"));
   m_shutdownButton->setOnClick([this] { requestPowerAction(3); });
-  m_rebootButton->setText(power::syncedActionLabel("reboot").value_or("Restart…"));
+  m_rebootButton->setText(power::syncedActionLabel("reboot").value_or("Restart"));
   m_rebootButton->setOnClick([this] { requestPowerAction(2); });
   if (m_firmwareButton) {
-    m_firmwareButton->setText("Restart to firmware…");
+    m_firmwareButton->setText("Restart to firmware");
     m_firmwareButton->setOnClick([this] { requestPowerAction(4); });
   }
   m_loginButton->setOnClick([this] {
@@ -696,8 +656,10 @@ void GreeterSurface::onPointerEvent(float x, float y, std::uint32_t button, bool
         && sceneX <= m_powerPanel->x() + m_powerPanel->width()
         && sceneY <= m_powerPanel->y() + m_powerPanel->height();
     if (!hit) {
-      if (pressed && button == BTN_LEFT)
-        closePowerMenu();
+      if (pressed && button == BTN_LEFT) {
+        m_inputDispatcher.pointerMotion(x, y, 0);
+        closePowerMenu(false);
+      }
       return;
     }
   }
@@ -711,7 +673,7 @@ void GreeterSurface::onPointerEvent(float x, float y, std::uint32_t button, bool
 
     const bool onUserAnchor = inRect(m_userSelectBox);
     const bool onSessionAnchor = inRect(m_sessionSelectBox);
-    const bool onSchemeAnchor = inRect(m_schemeSelectBox);
+    const bool onSchemeAnchor = inRect(m_schemeSelectButton);
     const bool onUserMenu = inRect(m_userMenuPanel);
     const bool onSessionMenu = inRect(m_sessionMenuPanel);
     const bool onSchemeMenu = inRect(m_schemeMenuPanel);
@@ -1005,7 +967,8 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
   m_clockDateLabel->measure(renderer);
   const float clockH = GreeterChrome::clockHeight(renderer, *m_clockTimeLabel, *m_clockDateLabel);
   auto layout = greeter::resolveGreeterLayout(
-      settings, sw, sh - reservedTop, ph, m_minimalLogin, m_boundOutputName, m_outputIdentifier, clockH
+      settings, sw, sh - reservedTop, ph, m_minimalLogin, m_boundOutputName, m_outputIdentifier, clockH,
+      renderer.measureText(m_keyboardLayout, 13).width + 48
   );
   for (auto& rect : layout.components)
     rect.y += reservedTop;
@@ -1037,32 +1000,12 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
       m_clockTimeFontSize, m_clockDateFontSize, m_keyboardLayout, sw, sh, m_hasWallpaper
   );
   const auto& appearance = layout[Id::Appearance];
-  m_schemeSelectBox->setVisible(appearance.visible);
-  m_schemeSelectArea->setVisible(appearance.visible);
-  m_schemeSelectIcon->setVisible(appearance.visible);
-  m_schemeSelectLabel->setVisible(appearance.visible);
+  m_schemeSelectButton->setVisible(appearance.visible);
   if (appearance.visible) {
-    const float x = appearance.x, y = appearance.y;
-    m_schemeSelectBox->setPosition(x, y);
-    m_schemeSelectBox->setSize(appearance.width, appearance.height);
-    m_schemeSelectBox->setStyle(
-        {.fill = clearColor(),
-         .border = colorForRole(m_schemeSelectArea->focused() ? ColorRole::Secondary : ColorRole::OutlineVariant),
-         .radius = 12,
-         .borderWidth = m_schemeSelectArea->focused() ? 2.0F : 0.0F}
-    );
-    m_schemeSelectBox->layout(renderer);
-    m_schemeSelectArea->setPosition(x, y);
-    m_schemeSelectArea->setSize(appearance.width, appearance.height);
-    m_schemeSelectIcon->setColor(colorForRole(ColorRole::OnSurfaceVariant));
-    m_schemeSelectIcon->setPosition(x + 10, y + 10);
-    m_schemeSelectIcon->setGlyphSize(17);
-    m_schemeSelectIcon->measure(renderer);
-    m_schemeSelectLabel->setText("Appearance");
-    m_schemeSelectLabel->setFontSize(14);
-    m_schemeSelectLabel->setColor(colorForRole(ColorRole::OnSurface));
-    m_schemeSelectLabel->measure(renderer);
-    m_schemeSelectLabel->setPosition(x + 36, y + 10);
+    m_schemeSelectButton->setPosition(appearance.x, appearance.y);
+    m_schemeSelectButton->setSize(appearance.width, appearance.height);
+    m_schemeSelectButton->setControlHeight(appearance.height);
+    m_schemeSelectButton->layout(renderer);
   } else if (m_schemeMenuOpen) {
     m_schemeMenuOpen = false;
     clearSchemeMenu();
@@ -1083,14 +1026,8 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
   applyMenuHighlight();
   if (!m_isKeyboardOwner)
     return;
-  if (m_powerMenuOpen && m_focusIndex < 0) {
-    if (m_pendingPowerAction) {
-      m_inputDispatcher.setFocus(m_powerCancel->inputArea());
-      syncFocusIndexFromFocused();
-    } else {
-      setFocusIndex(0);
-    }
-  }
+  if (m_powerMenuOpen && m_focusIndex < 0)
+    setFocusIndex(0);
   if (!m_initialFocusDone && !m_focusRing.empty()) {
     setFocusIndex(defaultFocusIndex());
     m_initialFocusDone = true;
@@ -1110,49 +1047,48 @@ void GreeterSurface::togglePowerMenu() {
   }
   closeMenus();
   m_powerMenuOpen = true;
-  m_pendingPowerAction = 0;
   m_inputDispatcher.setFocus(nullptr);
   requestLayout();
 }
-void GreeterSurface::closePowerMenu() {
+void GreeterSurface::closePowerMenu(bool restoreTriggerFocus) {
   m_powerMenuOpen = false;
-  m_pendingPowerAction = 0;
+  m_inputDispatcher.setFocus(restoreTriggerFocus ? m_powerMenuButton->inputArea() : menuReturnFocusTarget());
+  syncFocusIndexFromFocused();
   requestLayout();
-  m_inputDispatcher.setFocus(m_powerMenuButton->inputArea());
 }
 void GreeterSurface::requestPowerAction(int action) {
-  m_powerMenuOpen = true;
-  m_pendingPowerAction = action;
-  requestLayout();
-  m_inputDispatcher.setFocus(m_powerCancel->inputArea());
+  closePowerMenu(false);
+  if (action == 1)
+    power::suspend();
+  else if (action == 2)
+    power::reboot();
+  else if (action == 3)
+    power::powerOff();
+  else if (action == 4)
+    power::rebootToFirmwareSetup();
 }
 void GreeterSurface::layoutPowerMenu(float sw, float sh) {
-  for (Node* node : std::array<Node*, 8>{
-           m_powerPanel, m_powerTitle, m_suspendButton, m_rebootButton, m_shutdownButton, m_firmwareButton,
-           m_powerCancel, m_powerConfirm
+  for (Node* node : std::array<Node*, 6>{
+           m_powerPanel, m_powerTitle, m_suspendButton, m_rebootButton, m_shutdownButton, m_firmwareButton
        })
     if (node)
       node->setVisible(false);
   if (!m_powerMenuOpen)
     return;
   const float w = std::min(280.0F, sw - 24);
-  const bool confirm = m_pendingPowerAction != 0;
   std::vector<Button*> actions;
-  if (confirm)
-    actions = {m_powerCancel, m_powerConfirm};
-  else {
-    if (power::hasSyncedAction("suspend"))
-      actions.push_back(m_suspendButton);
-    if (power::hasSyncedAction("reboot"))
-      actions.push_back(m_rebootButton);
-    if (power::hasSyncedAction("shutdown"))
-      actions.push_back(m_shutdownButton);
-    if (m_firmwareButton)
-      actions.push_back(m_firmwareButton);
-  }
+  if (power::hasSyncedAction("suspend"))
+    actions.push_back(m_suspendButton);
+  if (power::hasSyncedAction("reboot"))
+    actions.push_back(m_rebootButton);
+  if (power::hasSyncedAction("shutdown"))
+    actions.push_back(m_shutdownButton);
+  if (m_firmwareButton)
+    actions.push_back(m_firmwareButton);
   const float gap = 4;
-  const float rowH = std::min(38.0F, std::max(24.0F, (sh - 100) / static_cast<float>(actions.size()) - gap));
-  const float h = confirm ? 52 + rowH + 12 : 52 + (rowH + gap) * static_cast<float>(actions.size()) + 16;
+  const float rowH =
+      std::min(38.0F, std::max(24.0F, (sh - 100) / static_cast<float>(std::max(std::size_t{1}, actions.size())) - gap));
+  const float h = 52 + (rowH + gap) * static_cast<float>(actions.size()) + 12;
   const auto bounds = greeter::placeGreeterPopup(
       {m_powerMenuButton->x(), m_powerMenuButton->y(), m_powerMenuButton->width(), m_powerMenuButton->height(), true},
       w, h, sw, sh, m_powerMenuButton->y() > sh / 2
@@ -1170,35 +1106,25 @@ void GreeterSurface::layoutPowerMenu(float sw, float sh) {
           ShadowStyle{.alpha = 0.35F}, 1, surface_shadow::Shape{.radius = Radii(Style::scaledRadiusLg())}
       )
   );
-  const std::array<std::string_view, 5> labels{"Power", "Suspend?", "Restart?", "Shut down?", "Restart to firmware?"};
   m_powerTitle->setVisible(true);
-  m_powerTitle->setText(labels[m_pendingPowerAction]);
+  m_powerTitle->setText("Power");
   m_powerTitle->setFontSize(16);
   m_powerTitle->setFontWeight(FontWeight::Medium);
   m_powerTitle->setColor(colorForRole(ColorRole::OnSurface));
   m_powerTitle->setMaxWidth(w - 32);
   m_powerTitle->measure(*m_renderer);
   m_powerTitle->setPosition(x + 16, y + 16);
-  m_powerConfirm->setText(m_pendingPowerAction == 1 ? "Suspend" : m_pendingPowerAction == 3 ? "Shut down" : "Restart");
-  m_powerConfirm->setVariant(m_pendingPowerAction == 3 ? ButtonVariant::Destructive : ButtonVariant::Primary);
   for (std::size_t i = 0; i < actions.size(); i++) {
     auto* button = actions[i];
     button->setVisible(true);
     button->setZIndex(102);
-    if (button != m_powerConfirm)
-      button->setVariant(ButtonVariant::Ghost);
-    button->setContentAlign(
-        confirm || button == m_powerCancel ? ButtonContentAlign::Center : ButtonContentAlign::Start
-    );
+    button->setVariant(ButtonVariant::Ghost);
+    button->setContentAlign(ButtonContentAlign::Start);
     button->setFontSize(14);
     button->setRadius(Style::scaledRadiusSm());
     button->setControlHeight(rowH);
-    const float buttonW = confirm ? (w - 24 - gap) / 2 : w - 24;
-    button->setPosition(
-        x + 12 + (confirm ? static_cast<float>(i) * (buttonW + gap) : 0),
-        y + 52 + (confirm ? 0 : static_cast<float>(i) * (rowH + gap))
-    );
-    button->setSize(buttonW, rowH);
+    button->setPosition(x + 12, y + 52 + static_cast<float>(i) * (rowH + gap));
+    button->setSize(w - 24, rowH);
     button->layout(*m_renderer);
   }
 }
@@ -1225,17 +1151,6 @@ void GreeterSurface::refreshSelectionLabels() {
   }
   syncPanelUserChrome();
   syncPanelSessionChrome();
-  if (m_schemeSelectLabel != nullptr) {
-    const std::string schemeLabel = m_model.schemeNames().empty()
-        ? "Noctalia"
-        : m_model.schemeNames()[std::min(m_model.state().selectedScheme, m_model.schemeNames().size() - 1)];
-    m_schemeSelectLabel->setText(schemeLabel);
-    m_schemeSelectLabel->setColor(colorForRole(ColorRole::OnSurface));
-  }
-  if (m_schemeSelectIcon != nullptr) {
-    m_schemeSelectIcon->setColor(colorForRole(ColorRole::OnSurfaceVariant));
-  }
-  applySelectorBoxStyle(m_schemeSelectBox, m_schemeSelectArea);
 }
 
 bool GreeterSurface::isSyncedScheme(const std::size_t schemeIndex) const {
@@ -1608,8 +1523,7 @@ void GreeterSurface::rebuildFocusRing() {
   InputArea* previouslyFocused = m_inputDispatcher.focusedArea();
   m_focusRing.clear();
   if (m_powerMenuOpen) {
-    for (Button* b :
-         {m_suspendButton, m_rebootButton, m_shutdownButton, m_firmwareButton, m_powerCancel, m_powerConfirm})
+    for (Button* b : {m_suspendButton, m_rebootButton, m_shutdownButton, m_firmwareButton})
       if (b && b->visible())
         m_focusRing.push_back({b->inputArea(), [b] { b->inputArea()->dispatchKey(XKB_KEY_Return, 0, 0, true); }});
     m_focusIndex = -1;
@@ -1664,24 +1578,6 @@ void GreeterSurface::rebuildFocusRing() {
       break;
     }
   }
-}
-
-void GreeterSurface::applySelectorBoxStyle(Box* box, const InputArea* area) {
-  if (box == nullptr) {
-    return;
-  }
-  const bool menuOpen = (box == m_schemeSelectBox && m_schemeMenuOpen) || (box == m_userSelectBox && m_userMenuOpen);
-  const bool active = menuOpen || (area != nullptr && area->focused());
-  box->setStyle(
-      RoundedRectStyle{
-          .fill = active ? colorForRole(ColorRole::Surface) : colorForRole(ColorRole::SurfaceContainer),
-          .border = active ? colorForRole(ColorRole::Primary) : colorForRole(ColorRole::OutlineVariant),
-          .fillMode = FillMode::Solid,
-          .radius = Style::scaledRadiusLg(),
-          .softness = 1.0f,
-          .borderWidth = active ? std::max(Style::borderWidth, Style::borderWidth * 2.0f) : Style::borderWidth,
-      }
-  );
 }
 
 void GreeterSurface::syncPanelUserChrome() {
@@ -2594,13 +2490,13 @@ void GreeterSurface::rebuildUserMenu() {
 }
 
 void GreeterSurface::buildMenu(
-    const std::vector<std::string>& names, std::size_t selected, Box* anchor, bool upward, bool rightAlign, int zBase,
+    const std::vector<std::string>& names, std::size_t selected, Node* anchor, bool upward, bool rightAlign, int zBase,
     Box*& panelOut, ContextMenuControl*& controlOut, MenuScroll& scroll, std::function<void(std::size_t)> onSelect
 ) {
   const std::size_t count = names.size();
   if (anchor == nullptr || count == 0)
     return;
-  const float headerH = anchor == m_schemeSelectBox ? 38 : 0;
+  const float headerH = anchor == m_schemeSelectButton ? 38 : 0;
   const float border = Style::borderWidth;
   const float rowH = Style::controlHeightSm;
   std::vector<ContextMenuControlEntry> entries;
@@ -2609,7 +2505,7 @@ void GreeterSurface::buildMenu(
     ContextMenuControlEntry entry{.id = static_cast<std::int32_t>(i), .label = names[i]};
     entry.checkmark = true;
     entry.toggleState = i == selected ? 1 : 0;
-    if (anchor == m_schemeSelectBox) {
+    if (anchor == m_schemeSelectButton) {
       const auto* builtin = noctalia::theme::findBuiltinPalette(names[i]);
       const Palette* palette = builtin ? &(isLightPalette() ? builtin->light.palette : builtin->dark.palette) : nullptr;
       if (palette) {
@@ -2748,9 +2644,9 @@ void GreeterSurface::rebuildSchemeMenu() {
     return;
   }
   // Open upward when selector is at the bottom, downward otherwise
-  const bool upward = m_schemeSelectBox->y() > m_root.height() / 2;
+  const bool upward = m_schemeSelectButton->y() > m_root.height() / 2;
   buildMenu(
-      m_model.schemeNames(), m_model.state().selectedScheme, m_schemeSelectBox,
+      m_model.schemeNames(), m_model.state().selectedScheme, m_schemeSelectButton,
       /*upward=*/upward,
       /*rightAlign=*/true, /*zBase=*/60, m_schemeMenuPanel, m_schemeMenuControl, m_schemeMenuScroll,
       [this](std::size_t i) { selectScheme(i); }

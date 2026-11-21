@@ -44,7 +44,7 @@ namespace greeter {
   // to it and stack inward or disappear if there is no usable space.
   GreeterLayout resolveGreeterLayout(
       const GreeterLayoutConfig& config, float width, float height, float panelHeight, bool minimal,
-      std::string_view connector, std::string_view stableIdentifier, float clockHeight = 202
+      std::string_view connector, std::string_view stableIdentifier, float clockHeight = 202, float keyboardWidth = 148
   );
 
 } // namespace greeter

@@ -58,7 +58,7 @@ namespace greeter {
   }
   GreeterLayout resolveGreeterLayout(
       const GreeterLayoutConfig& config, float width, float height, float panelHeight, bool minimal,
-      std::string_view connector, std::string_view stableIdentifier, float clockHeight
+      std::string_view connector, std::string_view stableIdentifier, float clockHeight, float keyboardWidth
   ) {
     GreeterLayout result;
     width = std::max(1.0F, width);
@@ -96,7 +96,7 @@ namespace greeter {
         h = 36;
         break;
       case GreeterComponent::Keyboard:
-        w = 148;
+        w = keyboardWidth;
         h = 36;
         break;
       default:

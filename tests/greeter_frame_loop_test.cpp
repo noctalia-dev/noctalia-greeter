@@ -22,8 +22,10 @@
 #include <cerrno>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <fstream>
 #include <functional>
 #include <linux/input-event-codes.h>
 #include <poll.h>
@@ -250,7 +252,7 @@ namespace {
     dispatchFor(client, 100ms);
     Button* restart = nullptr;
     for (const auto& child : surface.sceneRoot()->children())
-      if (auto* b = dynamic_cast<Button*>(child.get()); b && b->visible() && b->label()->text() == "Restart…")
+      if (auto* b = dynamic_cast<Button*>(child.get()); b && b->visible() && b->label()->text() == "Restart")
         restart = b;
     require(restart, "first power click after password focus did not open the menu");
     surface.onKeyEvent(XKB_KEY_a, 'a', 0, true, false);
@@ -260,20 +262,19 @@ namespace {
     surface.onPointerEvent(rx, ry, BTN_LEFT, true);
     surface.onPointerEvent(rx, ry, BTN_LEFT, false);
     dispatchFor(client, 100ms);
-    Button* confirm = nullptr;
-    for (const auto& child : surface.sceneRoot()->children())
-      if (auto* b = dynamic_cast<Button*>(child.get()); b && b->visible() && b->label()->text() == "Restart")
-        confirm = b;
-    require(confirm, "restart did not require confirmation");
-    unsigned clicks = 0;
-    // Replace the command before interacting with the confirmation button.
-    confirm->setOnClick([&] { ++clicks; });
-    const float cx = confirm->x() + confirm->width() / 2, cy = confirm->y() + confirm->height() / 2;
-    surface.onPointerMotion(cx, cy);
-    surface.onPointerEvent(cx, cy, BTN_LEFT, true);
-    surface.onPointerEvent(cx, cy, BTN_LEFT, false);
-    require(clicks == 1, "power confirmation click was lost");
-    confirm->setOnClick({});
+    const char* powerLog = std::getenv("NOCTALIA_GREETER_TEST_POWER_LOG");
+    require(powerLog, "safe power-command fixture missing");
+    std::ifstream marker(powerLog);
+    std::string command;
+    std::getline(marker, command);
+    require(command == "reboot", "power selection did not execute its command directly");
+    std::getline(marker, command);
+    require(command.empty(), "power selection executed more than once");
+    require(!restart->visible(), "power popup did not close after action selection");
+    require(password->inputArea()->focused(), "power action did not restore credential focus");
+    surface.onPointerMotion(x, y);
+    surface.onPointerEvent(x, y, BTN_LEFT, true);
+    surface.onPointerEvent(x, y, BTN_LEFT, false);
     surface.onKeyEvent(XKB_KEY_Escape, 0, 0, true, false);
     // The same menu must be reachable without a pointer, with a deliberate return target.
     require(power->inputArea()->focused(), "closing power menu did not restore entry focus");
@@ -283,12 +284,25 @@ namespace {
       if (auto* b = dynamic_cast<Button*>(child.get()); b && b->label()->text() == "Cancel")
         require(!b->visible(), "main power menu still contains Cancel");
     surface.onKeyEvent(XKB_KEY_Escape, 0, 0, true, false);
-    std::puts("pointer: power opens on first click, captures typing and requires confirmation");
+    // Pointer dismissal returns to credentials and must not leave the footer active.
+    surface.onKeyEvent(XKB_KEY_Return, 0, 0, true, false);
+    surface.onPointerEvent(10, 10, BTN_LEFT, true);
+    surface.onPointerEvent(10, 10, BTN_LEFT, false);
+    require(!restart->visible(), "outside click did not dismiss power menu");
+    require(!power->inputArea()->focused() && !power->hovered(), "outside click left Power highlighted");
+    require(password->inputArea()->focused(), "outside click did not restore credential focus");
+    std::puts("pointer: power opens on first click, executes once directly and clears highlight on dismissal");
   }
 
   void testPowerMenuResize(WaylandClient& client, ConfigurableGreeterWindow& window, GreeterSurface& surface) {
-    // The prior test leaves focus on the Power entry. Open without executing any action.
-    surface.onKeyEvent(XKB_KEY_Return, 0, 0, true, false);
+    // Open with the pointer after the prior test returned to the password field.
+    for (const auto& child : surface.sceneRoot()->children())
+      if (auto* button = dynamic_cast<Button*>(child.get());
+          button && button->visible() && button->label()->text() == "Power") {
+        const float x = button->x() + button->width() / 2, y = button->y() + button->height() / 2;
+        surface.onPointerEvent(x, y, BTN_LEFT, true);
+        surface.onPointerEvent(x, y, BTN_LEFT, false);
+      }
     const auto check = [&](float width, float height) {
       Box* panel = nullptr;
       for (const auto& child : surface.sceneRoot()->children())
@@ -330,27 +344,19 @@ namespace {
       require(dispatchUntil(client, 5s, [&] { return swaps > before; }), "resize did not paint");
       check(static_cast<float>(width), static_cast<float>(height));
     }
-    const float menuHeight = check(1280, 720);
+    check(1280, 720);
     Button* restart = nullptr;
     for (const auto& child : surface.sceneRoot()->children())
       if (auto* button = dynamic_cast<Button*>(child.get());
-          button && button->visible() && button->label()->text() == "Restart…")
+          button && button->visible() && button->label()->text() == "Restart")
         restart = button;
     require(restart, "restart entry missing after resize");
     surface.onKeyEvent(XKB_KEY_Escape, 0, 0, true, false);
     surface.onKeyEvent(XKB_KEY_Return, 0, 0, true, false);
     surface.onKeyEvent(XKB_KEY_Down, 0, 0, true, false);
     require(restart->inputArea()->focused(), "power menu keyboard navigation did not focus restart");
-    surface.onKeyEvent(XKB_KEY_Return, 0, 0, true, false);
-    require(check(1280, 720) < menuHeight, "confirmation did not shrink the power menu");
-    const auto before = swaps;
-    window.onConfigure(344, 285);
-    require(dispatchUntil(client, 5s, [&] { return swaps > before; }), "confirmation resize did not paint");
-    check(344, 285);
-    window.onConfigure(1280, 720);
-    dispatchFor(client, 100ms);
     surface.onKeyEvent(XKB_KEY_Escape, 0, 0, true, false);
-    std::puts("resize: power menu and confirmation follow window configure bounds");
+    std::puts("resize: power menu follows window configure bounds");
   }
 
   void testPointerRemoval() {
@@ -386,27 +392,20 @@ namespace {
     surface.onKeyEvent(XKB_KEY_F7, 0, 0, true, false);
     dispatchFor(client, 100ms);
     Box* panel = nullptr;
-    Label* anchorLabel = nullptr;
+    Button* anchor = nullptr;
     for (const auto& child : surface.sceneRoot()->children()) {
       if (auto* box = dynamic_cast<Box*>(child.get()); box && box->visible() && box->zIndex() == 60)
         panel = box;
-      if (auto* label = dynamic_cast<Label*>(child.get()); label && label->visible() && label->text() == "Appearance")
-        anchorLabel = label;
+      if (auto* button = dynamic_cast<Button*>(child.get());
+          button && button->visible() && button->label()->text() == "Appearance")
+        anchor = button;
     }
-    require(panel && anchorLabel, "appearance popup or trigger missing");
-    bool matchedAnchor = false;
-    for (const auto& child : surface.sceneRoot()->children()) {
-      auto* anchor = dynamic_cast<Box*>(child.get());
-      if (!anchor || !anchor->visible() || anchor->height() != 36 || anchor->x() + 36 != anchorLabel->x())
-        continue;
-      matchedAnchor = true;
-      require(
-          std::abs(panel->x() + panel->width() - anchor->x() - anchor->width()) < 1
-              && std::abs(panel->y() + panel->height() - (anchor->y() - 10)) < 1,
-          "appearance popup is not attached above its trigger"
-      );
-    }
-    require(matchedAnchor, "appearance trigger geometry missing");
+    require(panel && anchor, "appearance popup or trigger missing");
+    require(
+        std::abs(panel->x() + panel->width() - anchor->x() - anchor->width()) < 1
+            && std::abs(panel->y() + panel->height() - (anchor->y() - 10)) < 1,
+        "appearance popup is not attached above its trigger"
+    );
     Scrollbar* scrollbar = nullptr;
     for (const auto& child : surface.sceneRoot()->children()) {
       if (auto* bar = dynamic_cast<Scrollbar*>(child.get()); bar != nullptr && bar->visible()) {

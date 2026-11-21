@@ -73,8 +73,6 @@ GreeterLoginPanel::GreeterLoginPanel(Node& scene, LoginPanelNodes nodes) : m_nod
   std::array<char, 256> hostname{};
   if (gethostname(hostname.data(), hostname.size() - 1) == 0)
     m_hostname = hostname.data();
-  m_shadow = create<RectNode>(scene, 3);
-  m_shadow->setHitTestVisible(false);
   m_avatar = create<RectNode>(scene, 6);
   m_avatar->setHitTestVisible(false);
   m_nodes.background->setZIndex(4);
@@ -129,7 +127,6 @@ GreeterLoginPanel::layout(Renderer& renderer, const greeter::LayoutRect& bounds,
        .radius = 24 * Style::cornerRadiusScale(),
        .borderWidth = 1}
   );
-  rect(m_shadow, bounds.x - 1, y + 12, bounds.width + 2, bounds.height + 8, colorForRole(ColorRole::Shadow, 0.24F), 26);
   if (view.minimal) {
     m_title->setVisible(false);
     m_nodes.name->setVisible(true);
@@ -271,10 +268,12 @@ void GreeterChrome::layout(
   m_keyboard->setVisible(keyboard.visible && !keyboardName.empty());
   m_keyboardGlyph->setVisible(m_keyboard->visible());
   if (m_keyboard->visible()) {
-    placeGlyph(m_keyboardGlyph, "keyboard", keyboard.x + 8, keyboard.y + 10, 16);
     label(
-        m_keyboard, renderer, keyboardName, keyboard.x + 30, keyboard.y + 10, 13, colorForRole(ColorRole::OnSurface),
-        keyboard.width - 30
+        m_keyboard, renderer, keyboardName, keyboard.x + 36, keyboard.y, 13, colorForRole(ColorRole::OnSurfaceVariant),
+        std::max(1.0F, keyboard.width - 48)
     );
+    m_keyboard->setPosition(keyboard.x + 36, keyboard.y + (keyboard.height - m_keyboard->height()) / 2);
+    placeGlyph(m_keyboardGlyph, "keyboard", keyboard.x + 12, keyboard.y, 16);
+    m_keyboardGlyph->setPosition(keyboard.x + 12, keyboard.y + (keyboard.height - m_keyboardGlyph->height()) / 2);
   }
 }
