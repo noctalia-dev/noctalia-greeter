@@ -42,7 +42,12 @@ echo "GREETD_SOCK=${GREETD_SOCK:-unset}"
 _pam_runtime="${XDG_RUNTIME_DIR:-unset}"
 XDG_RUNTIME_DIR="/tmp/noctalia-runtime-$(id -u)"
 export XDG_RUNTIME_DIR
-mkdir -p "${XDG_RUNTIME_DIR}"
+# /tmp is shared: a pre-created dir or symlink from another user must not be adopted.
+mkdir -m 700 "${XDG_RUNTIME_DIR}" 2>/dev/null || true
+if [ -L "${XDG_RUNTIME_DIR}" ] || [ ! -d "${XDG_RUNTIME_DIR}" ] || [ ! -O "${XDG_RUNTIME_DIR}" ]; then
+  echo "error: ${XDG_RUNTIME_DIR} is not a directory owned by uid $(id -u)"
+  exit 1
+fi
 chmod 700 "${XDG_RUNTIME_DIR}"
 
 echo "XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR} (pam=${_pam_runtime})"
