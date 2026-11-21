@@ -16,6 +16,12 @@ namespace greeter {
     }
 
     constexpr std::array<std::string_view, 2> kClockStyles{"digital", "analog"};
+    constexpr std::array<std::string_view, 10> kSysmonStatsWithNone{"",         "cpu_usage",     "cpu_temp",
+                                                                    "cpu_freq", "gpu_temp",      "gpu_usage",
+                                                                    "gpu_vram", "gpu_vram_used", "ram_pct",
+                                                                    "swap_pct"};
+    constexpr std::array<std::string_view, 2> kSysmonDisplays{"graph", "gauge"};
+    constexpr std::array<std::string_view, 2> kSysmonGaugeLayouts{"horizontal", "vertical"};
     const std::array<WidgetSettingDefinition, 5> kCommonSettings{{
         setting("background", WidgetSettingType::Bool, true),
         setting("background_color", WidgetSettingType::Color, std::string("surface")),
@@ -52,6 +58,32 @@ namespace greeter {
       return fields;
     }
 
+    std::span<const WidgetSettingDefinition> sysmonSettings() {
+      static const auto fields = [] {
+        std::vector<WidgetSettingDefinition> result{
+            setting(
+                "stat", WidgetSettingType::Enum, std::string("cpu_usage"), {}, {}, {},
+                std::span{kSysmonStatsWithNone}.subspan(1)
+            ),
+            setting("stat2", WidgetSettingType::Enum, std::string{}, {}, {}, {}, kSysmonStatsWithNone),
+            setting("display", WidgetSettingType::Enum, std::string("graph"), {}, {}, {}, kSysmonDisplays),
+            setting(
+                "gauge_layout", WidgetSettingType::Enum, std::string("horizontal"), {}, {}, {}, kSysmonGaugeLayouts
+            ),
+            setting("color", WidgetSettingType::Color, std::string("primary")),
+            setting("color2", WidgetSettingType::Color, std::string("secondary")),
+            setting("highlight_color", WidgetSettingType::Color, std::string("error")),
+            setting("font_family", WidgetSettingType::String, std::string{}),
+            setting("show_label", WidgetSettingType::Bool, true),
+            setting("label_min_width", WidgetSettingType::Int, std::int64_t{0}, 0, 200, 1),
+            setting("shadow", WidgetSettingType::Bool, true),
+        };
+        result.insert(result.end(), kCommonSettings.begin(), kCommonSettings.end());
+        return result;
+      }();
+      return fields;
+    }
+
     std::span<const WidgetSettingDefinition> clockSettings() {
       static const auto fields = [] {
         std::vector<WidgetSettingDefinition> result{
@@ -81,6 +113,8 @@ namespace greeter {
       return clockSettings();
     if (type == "sticker")
       return stickerSettings();
+    if (type == "sysmon")
+      return sysmonSettings();
     return std::nullopt;
   }
 
