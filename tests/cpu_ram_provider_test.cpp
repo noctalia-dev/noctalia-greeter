@@ -48,6 +48,22 @@ namespace {
       write((base / "scaling_cur_freq").string(), current);
       write((base / "scaling_max_freq").string(), maximum);
     }
+    void sensor(
+        std::string_view directory, std::string_view driver, std::string_view label, std::string_view raw,
+        unsigned index = 1
+    ) const {
+      const auto base = std::filesystem::path("hwmon") / directory;
+      std::filesystem::create_directories(root / base);
+      write((base / "name").string(), driver);
+      write((base / std::format("temp{}_label", index)).string(), label);
+      write((base / std::format("temp{}_input", index)).string(), raw);
+    }
+    void zone(std::string_view directory, std::string_view type, std::string_view raw) const {
+      const auto base = std::filesystem::path("thermal") / directory;
+      std::filesystem::create_directories(root / base);
+      write((base / "type").string(), type);
+      write((base / "temp").string(), raw);
+    }
   };
 
   void near(double value, double expected, const char* message) {
@@ -267,6 +283,145 @@ namespace {
         provider.snapshot().reading(SysmonMetric::CpuFreq).history.size() == 1, "resuming frequency retained history"
     );
   }
+
+  void checkTemperature(const Fixture& fixture) {
+    using namespace greeter;
+    const auto hwmon = fixture.root / "hwmon";
+    const auto thermal = fixture.root / "thermal";
+    CpuRamProvider provider(fixture.root, fixture.root / "cpus", hwmon, thermal);
+    provider.setDemand({.temperature = true});
+    provider.sample();
+    unavailable(provider.snapshot().reading(SysmonMetric::CpuTemp));
+    fixture.sensor("hwmon0", "nvme", "CPU", "99000");
+    fixture.sensor("hwmon1", "amdgpu", "CPU", "98000");
+    fixture.zone("thermal_zone9", "gpu-thermal", "97000");
+    provider.sample();
+    unavailable(provider.snapshot().reading(SysmonMetric::CpuTemp));
+    fixture.sensor("hwmon5", "k10temp", "Tccd1", "45000", 3);
+    fixture.sensor("hwmon5", "k10temp", "Tctl", "55000", 1);
+    fixture.sensor("hwmon2", "coretemp", "Package id 0", "65000");
+    provider.sample();
+    const auto retained = provider.snapshot();
+    near(*retained.reading(SysmonMetric::CpuTemp).current, 55, "CPU driver/package selection incorrect");
+    near(retained.reading(SysmonMetric::CpuTemp).gauge->normalized, 0.5, "initial temperature range incorrect");
+    near(retained.reading(SysmonMetric::CpuTemp).gauge->highlight, 0, "cool temperature highlighted");
+    unavailable(retained.reading(SysmonMetric::CpuUsage));
+    provider.setDemand({.temperature = true});
+    fixture.sensor("hwmon5", "k10temp", "Tctl", "100000");
+    provider.sample();
+    const auto& expanded = provider.snapshot().reading(SysmonMetric::CpuTemp);
+    require(expanded.history.size() == 2, "same temperature demand reset history");
+    near(expanded.history.front(), 25.0 / 70.0, "range expansion did not renormalize existing history");
+    near(expanded.gauge->normalized, 1, "temperature upper range did not expand");
+    near(expanded.gauge->highlight, 1, "critical temperature not highlighted");
+    fixture.sensor("hwmon5", "k10temp", "Tctl", "0");
+    provider.sample();
+    near(
+        *provider.snapshot().reading(SysmonMetric::CpuTemp).current, 45, "zero CPU candidate hid valid nonzero sensor"
+    );
+    require(
+        provider.snapshot().reading(SysmonMetric::CpuTemp).history.size() == 1, "sensor change retained old history"
+    );
+    std::filesystem::remove_all(hwmon);
+    fixture.sensor("hwmon0", "coretemp", "Core 0", "40000", 2);
+    fixture.sensor("hwmon0", "coretemp", "Package id 0", "60000", 3);
+    provider.sample();
+    near(*provider.snapshot().reading(SysmonMetric::CpuTemp).current, 60, "Intel package not preferred");
+    std::filesystem::remove_all(hwmon);
+    fixture.sensor("hwmon0", "zenpower", "Tdie", "50000");
+    provider.sample();
+    near(*provider.snapshot().reading(SysmonMetric::CpuTemp).current, 50, "zenpower sensor unsupported");
+    fixture.sensor("hwmon0", "ibmpowernv", "CORE temperature", "62000");
+    provider.sample();
+    near(*provider.snapshot().reading(SysmonMetric::CpuTemp).current, 62, "Power CPU sensor unsupported");
+    require(
+        provider.snapshot().reading(SysmonMetric::CpuTemp).history.size() == 1,
+        "reused sensor path ignored identity change"
+    );
+    std::filesystem::remove_all(hwmon);
+    fixture.zone("thermal_zone0", "acpitz", "64000");
+    fixture.zone("thermal_zone1", "x86_pkg_temp", "63000");
+    fixture.zone("thermal_zone2", "cpu-thermal", "61000");
+    provider.sample();
+    near(*provider.snapshot().reading(SysmonMetric::CpuTemp).current, 61, "known thermal zone priority incorrect");
+    std::filesystem::remove_all(thermal);
+    fixture.sensor("hwmon0", "k10temp", "Tctl", "500");
+    provider.sample();
+    near(*provider.snapshot().reading(SysmonMetric::CpuTemp).current, 0.5, "millidegrees guessed to be Celsius");
+    fixture.sensor("hwmon0", "k10temp", "Tctl", "-500");
+    provider.sample();
+    near(*provider.snapshot().reading(SysmonMetric::CpuTemp).current, -0.5, "signed millidegrees rejected");
+    for (const auto* text :
+         {"", "broken", "50000x", "50000 60000", "NaN", "+50000", "9223372036854775808", "-273151"}) {
+      fixture.sensor("hwmon0", "k10temp", "Tctl", text);
+      provider.sample();
+      unavailable(provider.snapshot().reading(SysmonMetric::CpuTemp));
+    }
+    fixture.sensor("hwmon0", "k10temp", "Tctl", std::string(257, '1'));
+    provider.sample();
+    unavailable(provider.snapshot().reading(SysmonMetric::CpuTemp));
+    fixture.sensor("hwmon0", "k10temp", "Tctl", "50000");
+    fixture.write("hwmon/hwmon0/temp1_fault", "1");
+    provider.sample();
+    unavailable(provider.snapshot().reading(SysmonMetric::CpuTemp));
+    fixture.write("hwmon/hwmon0/temp1_fault", "broken");
+    provider.sample();
+    unavailable(provider.snapshot().reading(SysmonMetric::CpuTemp));
+    fixture.write("hwmon/hwmon0/temp1_fault", "0");
+    fixture.write("hwmon/hwmon0/temp1_enable", "0");
+    provider.sample();
+    unavailable(provider.snapshot().reading(SysmonMetric::CpuTemp));
+    fixture.write("hwmon/hwmon0/temp1_enable", "1");
+    for (const auto raw : {0, 60000, 72500, 85000}) {
+      fixture.sensor("hwmon0", "k10temp", "Tctl", std::to_string(raw));
+      provider.sample();
+      near(
+          *provider.snapshot().reading(SysmonMetric::CpuTemp).current, static_cast<double>(raw) / 1000,
+          "temperature zero/boundary value incorrect"
+      );
+      near(
+          provider.snapshot().reading(SysmonMetric::CpuTemp).gauge->highlight,
+          raw <= 60000       ? 0
+              : raw == 72500 ? 0.625
+                             : 1,
+          "temperature highlight boundary incorrect"
+      );
+    }
+    near(*retained.reading(SysmonMetric::CpuTemp).current, 55, "retained temperature snapshot mutated");
+    provider.setDemand({});
+    unavailable(provider.snapshot().reading(SysmonMetric::CpuTemp));
+    provider.setDemand({.temperature = true});
+    for (int i = 0; i <= 125; ++i) {
+      fixture.sensor("hwmon0", "k10temp", "Tctl", std::to_string(40000 + i * 100));
+      provider.sample();
+    }
+    const auto& history = provider.snapshot().reading(SysmonMetric::CpuTemp).history;
+    require(history.size() == 120, "temperature history exceeded bound");
+    near(history.front(), 0.212, "oldest temperature sample incorrect");
+    near(history.back(), 0.45, "latest temperature sample incorrect");
+    provider.setDemand({true, true, true, true, true});
+    fixture.cpu(0, 0);
+    fixture.write("meminfo", "MemTotal: 1000 kB\nMemAvailable: 500 kB\nSwapTotal: 1000 kB\nSwapFree: 800 kB\n");
+    provider.sample();
+    provider.setDemand({true, true, true, true, false});
+    unavailable(provider.snapshot().reading(SysmonMetric::CpuTemp));
+    fixture.cpu(1, 1);
+    provider.sample();
+    near(*provider.snapshot().reading(SysmonMetric::CpuUsage).current, 50, "dropping temperature reset CPU baseline");
+    require(
+        provider.snapshot().reading(SysmonMetric::CpuFreq).current.has_value(), "dropping temperature cleared frequency"
+    );
+    provider.setDemand({.temperature = true});
+    fixture.sensor("hwmon0", "k10temp", "Tctl", "55000");
+    provider.sample();
+    require(
+        provider.snapshot().reading(SysmonMetric::CpuTemp).history.size() == 1, "resumed temperature retained history"
+    );
+    near(
+        provider.snapshot().reading(SysmonMetric::CpuTemp).gauge->normalized, 0.5,
+        "resumed temperature retained old range"
+    );
+  }
 } // namespace
 
 int main() {
@@ -400,6 +555,7 @@ int main() {
     unavailable(provider.snapshot().reading(SysmonMetric::RamPct));
     checkSwap(fixture);
     checkFrequency(fixture);
+    checkTemperature(fixture);
     return 0;
   } catch (const std::exception& error) {
     std::println(stderr, "cpu-ram-provider-test: {}", error.what());

@@ -178,8 +178,45 @@ namespace greeter {
     }
   } // namespace
 
-  CpuRamProvider::CpuRamProvider(std::filesystem::path procRoot, std::filesystem::path cpuRoot)
-      : m_procRoot(std::move(procRoot)), m_cpuRoot(std::move(cpuRoot)) {}
+  CpuRamProvider::CpuRamProvider(
+      std::filesystem::path procRoot, std::filesystem::path cpuRoot, std::filesystem::path hwmonRoot,
+      std::filesystem::path thermalRoot
+  )
+      : m_procRoot(std::move(procRoot)), m_cpuRoot(std::move(cpuRoot)), m_hwmonRoot(std::move(hwmonRoot)),
+        m_thermalRoot(std::move(thermalRoot)) {}
+
+  void CpuRamProvider::resetTemperature() {
+    m_temperature = {};
+    m_temperatureSensor.reset();
+    m_temperatureHistory.clear();
+    m_temperatureMin = 30;
+    m_temperatureMax = 80;
+  }
+
+  void CpuRamProvider::sampleTemperature() {
+    const auto sample = readCpuTemperature(m_hwmonRoot, m_thermalRoot);
+    if (!sample) {
+      resetTemperature();
+      return;
+    }
+    if (m_temperatureSensor != sample->sensor) {
+      resetTemperature();
+      m_temperatureSensor = sample->sensor;
+    }
+    m_temperature.current = sample->celsius;
+    m_temperatureMin = std::min(m_temperatureMin, sample->celsius);
+    m_temperatureMax = std::max(m_temperatureMax, sample->celsius);
+    if (m_temperatureHistory.size() == 120)
+      m_temperatureHistory.erase(m_temperatureHistory.begin());
+    m_temperatureHistory.push_back(sample->celsius);
+    const auto normalize = [this](double value) {
+      return static_cast<float>((value - m_temperatureMin) / (m_temperatureMax - m_temperatureMin));
+    };
+    m_temperature.history.clear();
+    for (const auto value : m_temperatureHistory)
+      m_temperature.history.push_back(normalize(value));
+    m_temperature.gauge = SysmonGaugeReading{normalize(sample->celsius), highlightFactor(sample->celsius, 60, 85)};
+  }
 
   void CpuRamProvider::setDemand(CpuRamDemand demand) {
     if (!demand.cpu) {
@@ -192,6 +229,8 @@ namespace greeter {
       m_swap = {};
     if (!demand.frequency)
       m_frequency = {};
+    if (!demand.temperature)
+      resetTemperature();
     m_demand = demand;
     publish();
   }
@@ -214,6 +253,8 @@ namespace greeter {
     }
     if (m_demand.frequency)
       recordFrequency(m_frequency, readCpuFrequency(m_cpuRoot));
+    if (m_demand.temperature)
+      sampleTemperature();
     publish();
     return m_snapshot;
   }
@@ -222,7 +263,8 @@ namespace greeter {
     auto snapshot = SysmonSnapshot::create(
         std::array{
             SysmonMetricReading{SysmonMetric::CpuUsage, m_cpu}, SysmonMetricReading{SysmonMetric::RamPct, m_ram},
-            SysmonMetricReading{SysmonMetric::SwapPct, m_swap}, SysmonMetricReading{SysmonMetric::CpuFreq, m_frequency}
+            SysmonMetricReading{SysmonMetric::SwapPct, m_swap}, SysmonMetricReading{SysmonMetric::CpuFreq, m_frequency},
+            SysmonMetricReading{SysmonMetric::CpuTemp, m_temperature}
         }
     );
     if (!snapshot)
