@@ -72,7 +72,6 @@ public:
   );
 
 private:
-  Label* m_wordmark;
   Label* m_keyboard;
   Glyph* m_keyboardGlyph;
   RectNode* m_orbit1;

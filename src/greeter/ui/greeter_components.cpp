@@ -198,7 +198,6 @@ GreeterLoginPanel::layout(Renderer& renderer, const greeter::LayoutRect& bounds,
 }
 
 GreeterChrome::GreeterChrome(Node& scene) {
-  m_wordmark = create<Label>(scene, 6);
   m_keyboard = create<Label>(scene);
   m_keyboardGlyph = create<Glyph>(scene);
   m_keyboardGlyph->setHitTestVisible(false);
@@ -239,14 +238,9 @@ void GreeterChrome::layout(
   }
   const auto& brand = layout[Id::Branding];
   logo.setVisible(brand.visible && hasLogo);
-  m_wordmark->setVisible(brand.visible && hasLogo);
   if (brand.visible && hasLogo) {
     logo.setPosition(brand.x, brand.y);
     logo.setSize(28, 28);
-    label(
-        m_wordmark, renderer, "noctalia", brand.x + 39, brand.y + 2, 15, colorForRole(ColorRole::OnSurface),
-        brand.width - 39, FontWeight::Medium
-    );
   }
   const auto& clock = layout[Id::Clock];
   time.setVisible(clock.visible && !time.text().empty());

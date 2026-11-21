@@ -83,8 +83,8 @@ namespace greeter {
         anchor = result.narrow ? "top-center" : "center-left";
         break;
       case GreeterComponent::Branding:
-        w = 140;
-        h = 30;
+        w = 28;
+        h = 28;
         anchor = "top-left";
         break;
       case GreeterComponent::Power:
