@@ -97,6 +97,12 @@ sudo meson install -C build-release
 
 The `just` configure recipes explicitly select C++23, including for existing build directories that cached C++20. For a manually managed build directory, run `meson configure build -Dcpp_std=c++23` before rebuilding.
 
+The debug and ASan recipes use `-Og` (`-Doptimization=g`) so toolchain-provided
+`_FORTIFY_SOURCE` checks work while retaining debugging information. For a
+manually managed debug build, use `meson configure build -Doptimization=g` if
+your toolchain warns that fortify requires optimization. Release builds keep
+their existing optimization settings.
+
 After configuring greetd's session user, initialize greeter state with the
 installed helper:
 
@@ -146,7 +152,7 @@ Use `just run-local` for nesting: the installed session wrapper clears inherited
 
 ```sh
 meson test -C build --print-errorlogs
-meson setup build-asan --buildtype=debug -Db_sanitize=address -Db_lundef=false -Dcpp_std=c++23
+meson setup build-asan --buildtype=debug -Db_sanitize=address -Db_lundef=false -Dcpp_std=c++23 -Doptimization=g
 meson test -C build-asan --print-errorlogs
 ```
 

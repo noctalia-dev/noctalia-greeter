@@ -1,8 +1,8 @@
 # noctalia-greeter, Justfile
 
-# Configure debug build dir
+# Configure debug build dir (-Og keeps toolchain fortify checks effective)
 configure:
-  meson setup build --reconfigure -Dcpp_std=c++23
+  meson setup build --reconfigure -Dcpp_std=c++23 -Doptimization=g
 
 # Default target: build debug
 build: configure
@@ -93,7 +93,7 @@ run-local: build
 
 # Configure AddressSanitizer build dir
 configure-asan:
-  meson setup build-asan --buildtype=debug -Db_sanitize=address -Db_lundef=false --reconfigure -Dcpp_std=c++23
+  meson setup build-asan --buildtype=debug -Db_sanitize=address -Db_lundef=false --reconfigure -Dcpp_std=c++23 -Doptimization=g
 
 # Build AddressSanitizer variant
 build-asan: configure-asan

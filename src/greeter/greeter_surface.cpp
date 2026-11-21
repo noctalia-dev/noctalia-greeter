@@ -167,6 +167,8 @@ void GreeterSurface::initialize(RenderContext* context) {
       RoundedRectStyle{
           .fill = colorForRole(ColorRole::Surface),
           .fillMode = FillMode::Solid,
+          .radius = {},
+          .shadowExclusionRadius = {}
       }
   );
   m_backdrop = backdrop.get();
@@ -228,6 +230,7 @@ void GreeterSurface::initialize(RenderContext* context) {
           .fill = colorForRole(ColorRole::OutlineVariant, 0.90f),
           .fillMode = FillMode::Solid,
           .radius = 1.0f,
+          .shadowExclusionRadius = {}
       }
   );
   m_panelDivider = divider.get();
@@ -903,7 +906,7 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
   m_backdrop->setPosition(0, 0);
   m_backdrop->setSize(sw, sh);
   m_backdrop->setVisible(!m_hasWallpaper);
-  m_backdrop->setStyle({.fill = colorForRole(ColorRole::Surface)});
+  m_backdrop->setStyle({.fill = colorForRole(ColorRole::Surface), .radius = {}, .shadowExclusionRadius = {}});
   m_panelDivider->setVisible(false);
   float reservedTop = 0;
   if (m_configErrorBanner->visible()) {
@@ -913,7 +916,8 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
         {.fill = colorForRole(ColorRole::SurfaceContainer),
          .border = colorForRole(ColorRole::Error),
          .radius = 12,
-         .borderWidth = 1}
+         .borderWidth = 1,
+         .shadowExclusionRadius = {}}
     );
     const float bw = std::max(1.0F, std::min(sw - 24, 960.0F));
     m_configErrorHeading->setMaxWidth(bw - 28);
@@ -1588,7 +1592,8 @@ void GreeterSurface::syncPanelUserChrome() {
       {.fill = colorForRole(ColorRole::Surface),
        .border = colorForRole(active ? ColorRole::Primary : ColorRole::OutlineVariant),
        .radius = 12 * Style::cornerRadiusScale(),
-       .borderWidth = active ? 2.0F : 1.0F}
+       .borderWidth = active ? 2.0F : 1.0F,
+       .shadowExclusionRadius = {}}
   );
   m_userSelectLabel->setColor(colorForRole(ColorRole::OnSurface));
   m_userSelectGlyph->setColor(colorForRole(ColorRole::OnSurfaceVariant));
@@ -1640,7 +1645,8 @@ void GreeterSurface::syncPanelSessionChrome() {
       {.fill = clearColor(),
        .border = colorForRole(ColorRole::Primary),
        .radius = 10 * Style::cornerRadiusScale(),
-       .borderWidth = active ? 2.0F : 0.0F}
+       .borderWidth = active ? 2.0F : 0.0F,
+       .shadowExclusionRadius = {}}
   );
   m_sessionSelectLabel->setColor(colorForRole(ColorRole::OnSurface));
   m_sessionSelectGlyph->setColor(colorForRole(ColorRole::OnSurfaceVariant));
@@ -1657,7 +1663,9 @@ void GreeterSurface::layoutPanelSessionSelector(float x, float y, float w, float
   m_panelDivider->setVisible(true);
   m_panelDivider->setPosition(x, y - 8);
   m_panelDivider->setSize(w, 1);
-  m_panelDivider->setStyle({.fill = colorForRole(ColorRole::OutlineVariant, .6F)});
+  m_panelDivider->setStyle(
+      {.fill = colorForRole(ColorRole::OutlineVariant, .6F), .radius = {}, .shadowExclusionRadius = {}}
+  );
   m_sessionCaptionLabel->setVisible(true);
   m_sessionCaptionLabel->setText("Session");
   m_sessionCaptionLabel->setFontSize(13);
@@ -1858,11 +1866,7 @@ void GreeterSurface::applyMenuHighlight() {
     }
 
     row->setStyle(
-        RoundedRectStyle{
-            .fill = rowFill,
-            .fillMode = FillMode::Solid,
-            .radius = rowRadius,
-        }
+        RoundedRectStyle{.fill = rowFill, .fillMode = FillMode::Solid, .radius = rowRadius, .shadowExclusionRadius = {}}
     );
 
     if (labels != nullptr && index < labels->size()) {
@@ -2353,6 +2357,7 @@ void GreeterSurface::refreshUserMenuRows() {
             .radius = panelRadius,
             .softness = 1.0f,
             .borderWidth = borderWidth,
+            .shadowExclusionRadius = {}
         }
     );
 
@@ -2404,6 +2409,7 @@ void GreeterSurface::refreshUserMenuRows() {
           .radius = panelRadius,
           .softness = 1.0f,
           .borderWidth = borderWidth,
+          .shadowExclusionRadius = {}
       }
   );
 
@@ -2424,6 +2430,7 @@ void GreeterSurface::refreshUserMenuRows() {
             .fill = colorForRole(ColorRole::SurfaceContainer, 0.01f),
             .fillMode = FillMode::Solid,
             .radius = rowRadius,
+            .shadowExclusionRadius = {}
         }
     );
     m_root.addChild(std::move(row));
@@ -2507,11 +2514,13 @@ void GreeterSurface::buildMenu(
     entry.toggleState = i == selected ? 1 : 0;
     if (anchor == m_schemeSelectButton) {
       const auto* builtin = noctalia::theme::findBuiltinPalette(names[i]);
-      const Palette* palette = builtin ? &(isLightPalette() ? builtin->light.palette : builtin->dark.palette) : nullptr;
-      if (palette) {
-        entry.swatchPreview.surface = fixedColorSpec(palette->surface);
+      const Palette* builtinPalette =
+          builtin ? &(isLightPalette() ? builtin->light.palette : builtin->dark.palette) : nullptr;
+      if (builtinPalette) {
+        entry.swatchPreview.surface = fixedColorSpec(builtinPalette->surface);
         entry.swatchPreview.swatches = {
-            fixedColorSpec(palette->primary), fixedColorSpec(palette->secondary), fixedColorSpec(palette->tertiary)
+            fixedColorSpec(builtinPalette->primary), fixedColorSpec(builtinPalette->secondary),
+            fixedColorSpec(builtinPalette->tertiary)
         };
       }
     }

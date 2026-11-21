@@ -60,7 +60,11 @@ namespace {
     node->setPosition(x, y);
     node->setSize(w, h);
     node->setStyle(
-        {.fill = fill, .border = border, .radius = radius * Style::cornerRadiusScale(), .borderWidth = borderWidth}
+        {.fill = fill,
+         .border = border,
+         .radius = radius * Style::cornerRadiusScale(),
+         .borderWidth = borderWidth,
+         .shadowExclusionRadius = {}}
     );
   }
 } // namespace
@@ -125,7 +129,8 @@ GreeterLoginPanel::layout(Renderer& renderer, const greeter::LayoutRect& bounds,
       {.fill = colorForRole(ColorRole::SurfaceContainer),
        .border = colorForRole(ColorRole::OutlineVariant),
        .radius = 24 * Style::cornerRadiusScale(),
-       .borderWidth = 1}
+       .borderWidth = 1,
+       .shadowExclusionRadius = {}}
   );
   if (view.minimal) {
     m_title->setVisible(false);

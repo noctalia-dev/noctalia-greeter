@@ -486,6 +486,16 @@ extern "C" int __wrap_poll(pollfd* descriptors, nfds_t count, int timeout) {
   return __real_poll(descriptors, count, timeout);
 }
 
+#if defined(__GLIBC__) && __USE_FORTIFY_LEVEL > 0
+// Optimized glibc builds can redirect poll through its checked entry point.
+// Observe that path too so pump's wake thread can see the production poll.
+extern "C" int __real___poll_chk(pollfd*, nfds_t, int, std::size_t);
+extern "C" int __wrap___poll_chk(pollfd* descriptors, nfds_t count, int timeout, std::size_t bytes) {
+  ++pollCount;
+  return __real___poll_chk(descriptors, count, timeout, bytes);
+}
+#endif
+
 int main(int argc, char** argv) {
   try {
     require(argc == 2, "test stage is required");

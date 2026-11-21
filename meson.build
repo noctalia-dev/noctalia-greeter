@@ -598,7 +598,7 @@ greeter_user_switch_test = executable(
   dependencies: _greeter_dependencies + [dependency('threads')],
   include_directories: _greeter_inc,
   cpp_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow'],
-  link_args: ['-Wl,--wrap=wl_proxy_add_listener', '-Wl,--wrap=poll'],
+  link_args: ['-Wl,--wrap=wl_proxy_add_listener', '-Wl,--wrap=poll', '-Wl,--wrap=__poll_chk'],
   build_by_default: false,
 )
 

@@ -36,6 +36,7 @@ SearchField::SearchField() : Node(NodeType::Base) {
           .fill = colorForRole(ColorRole::OutlineVariant, 0.55f),
           .fillMode = FillMode::Solid,
           .radius = 0.0f,
+          .shadowExclusionRadius = {},
       }
   );
   m_divider = static_cast<RectNode*>(addChild(std::move(divider)));
