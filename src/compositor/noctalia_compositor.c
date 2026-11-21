@@ -1794,6 +1794,9 @@ static void handle_output_destroy(struct wl_listener* listener, void* data) {
   wl_list_remove(&output->request_state.link);
   wl_list_remove(&output->destroy.link);
   wl_list_remove(&output->link);
+  if (output->view != NULL) {
+    output->view->output = NULL;
+  }
   free(output);
   if (!server->shutting_down) {
     choose_outputs(server);
