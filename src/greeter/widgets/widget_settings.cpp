@@ -1,5 +1,7 @@
 #include "greeter/widgets/widget_settings.h"
 
+#include "greeter/widgets/widget_catalog.h"
+
 #include <array>
 #include <string>
 #include <utility>
@@ -16,6 +18,8 @@ namespace greeter {
     }
 
     constexpr std::array<std::string_view, 2> kClockStyles{"digital", "analog"};
+    constexpr std::array<std::string_view, 6> kButtonVariants{"default", "primary", "secondary",
+                                                              "outline", "ghost",   "destructive"};
     constexpr std::array<std::string_view, 10> kSysmonStatsWithNone{"",         "cpu_usage",     "cpu_temp",
                                                                     "cpu_freq", "gpu_temp",      "gpu_usage",
                                                                     "gpu_vram", "gpu_vram_used", "ram_pct",
@@ -29,6 +33,26 @@ namespace greeter {
         setting("background_radius", WidgetSettingType::Int, std::int64_t{12}, 0, 32, 1),
         setting("background_padding", WidgetSettingType::Int, std::int64_t{10}, 0, 32, 1),
     }};
+
+    std::span<const WidgetSettingDefinition> buttonSettings() {
+      static const auto actions = [] {
+        std::vector<std::string_view> result;
+        for (const auto& action : widgetActionDefinitions())
+          result.push_back(action.name);
+        return result;
+      }();
+      static const std::array<WidgetSettingDefinition, 8> fields{{
+          setting("background", WidgetSettingType::Bool, true),
+          setting("glyph", WidgetSettingType::String, std::string("heart")),
+          setting("label", WidgetSettingType::String, std::string{}),
+          setting("variant", WidgetSettingType::Enum, std::string("default"), {}, {}, {}, kButtonVariants),
+          setting("color", WidgetSettingType::Color, std::string{}),
+          setting("hover_background", WidgetSettingType::Color, std::string("hover")),
+          setting("font_family", WidgetSettingType::String, std::string{}),
+          setting("action", WidgetSettingType::Enum, std::string("none"), {}, {}, {}, actions),
+      }};
+      return fields;
+    }
 
     std::span<const WidgetSettingDefinition> labelSettings() {
       static const auto fields = [] {
@@ -115,6 +139,8 @@ namespace greeter {
       return stickerSettings();
     if (type == "sysmon")
       return sysmonSettings();
+    if (type == "button")
+      return buttonSettings();
     return std::nullopt;
   }
 

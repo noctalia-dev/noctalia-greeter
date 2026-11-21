@@ -185,24 +185,16 @@ int main() {
     widget.settings = {{"background", false}, {"background_color", std::string("invalid-color")}};
     require(!greeter::validateWidgetSettings(widget).empty(), "hidden background options bypassed validation");
     checkStickerSettings();
-    for (const auto type : std::array<std::string_view, 1>{"button"}) {
+    for (const auto type : std::array<std::string_view, 4>{"calendar", "weather", "author/plugin:entry", "unknown"}) {
       widget = label();
       widget.type = type;
-      require(!greeter::widgetSettingDefinitions(type), "unfinished schema advertised as complete");
+      require(!greeter::widgetSettingDefinitions(type), "unavailable widget has a settings schema");
       const auto issues = greeter::validateWidgetSettings(widget);
       require(
-          std::ranges::any_of(
-              issues, [](const auto& issue) { return issue.path == "widgets.widget.caption.settings"; }
-          ),
-          "unfinished widget settings admitted"
+          std::ranges::any_of(issues, [](const auto& issue) { return issue.path == "widgets.widget.caption.type"; }),
+          "unavailable widget settings admitted"
       );
     }
-    widget.type = "calendar";
-    const auto issues = greeter::validateWidgetSettings(widget);
-    require(
-        std::ranges::any_of(issues, [](const auto& issue) { return issue.path == "widgets.widget.caption.type"; }),
-        "Calendar bypassed admission during setting validation"
-    );
     return 0;
   } catch (const std::exception& error) {
     std::println(stderr, "widget-settings-test: {}", error.what());
