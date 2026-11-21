@@ -79,6 +79,22 @@ namespace {
     require(result == 0, "greeter event loop failed");
   }
 
+  template <typename Ready> void pumpUntil(Greeter& greeter, WaylandClient& client, Ready ready, const char* message) {
+    // Output discovery, geometry and rendering cross independent event queues.
+    // One short pump is not a completion barrier, especially under ASan/load.
+    const auto deadline = std::chrono::steady_clock::now() + 5s;
+    do {
+      pump(greeter, client);
+      if (ready()) {
+        // Flush and acknowledge the view's commits/destroy requests before the
+        // separate fixture socket checks compositor-side mapping and focus.
+        require(wl_display_roundtrip(client.display()) >= 0, "hotplug synchronization failed");
+        return;
+      }
+    } while (std::chrono::steady_clock::now() < deadline);
+    require(false, message);
+  }
+
   class FakeGreetd {
   public:
     FakeGreetd() {
@@ -276,8 +292,7 @@ allow_empty_password = true
     require(client.connect(), "Wayland connection failed");
     Greeter greeter;
     require(greeter.initialize(client), "greeter initialization failed");
-    pump(greeter, client);
-    require(windows.size() == 2, "hotplug test requires two real greeter views");
+    pumpUntil(greeter, client, []() { return windows.size() == 2; }, "hotplug test requires two real greeter views");
     control('M');
     server.acceptPeer();
     control('B');
@@ -296,9 +311,10 @@ allow_empty_password = true
       );
       server.prompt(greeter, client, "secret");
     }
-    control('D');          // Destroy the backend output while its mapped view is alive.
-    pump(greeter, client); // Dispatch wl_output removal and the real view teardown.
-    require(client.readyOutputsSorted().size() == 1, "destroyed output still advertised");
+    control('D'); // Destroy the backend output while its mapped view is alive.
+    pumpUntil(
+        greeter, client, [&]() { return client.readyOutputsSorted().size() == 1; }, "destroyed output still advertised"
+    );
     control('S');
     focusOutput(1); // This view survives; windows[0] was destroyed and is not accessed.
     if (ownerRemoved) {
@@ -314,9 +330,8 @@ allow_empty_password = true
     }
 
     control('R');
-    pump(greeter, client);
-    require(
-        client.readyOutputsSorted().size() == 2 && windows.size() == 3,
+    pumpUntil(
+        greeter, client, [&]() { return client.readyOutputsSorted().size() == 2 && windows.size() == 3; },
         "replacement output did not create a new greeter view"
     );
     control('V');

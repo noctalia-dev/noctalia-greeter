@@ -177,9 +177,8 @@ std::optional<GreeterSyncedAppearance> loadGreeterSyncedAppearance() {
   // One-shot migration: legacy Sync-owned appearance.json -> sync.toml [appearance].
   if (const auto legacy = greeter::appearance::parseManifestForSync(greeter::appearance::manifestPath())) {
     sync.appearance = legacy->appearance;
-    const bool syncInvalid = std::ranges::any_of(greeter::config::configDiagnostics(), [&](const auto& d) {
-      return d.path == syncPath;
-    });
+    const bool syncInvalid =
+        std::ranges::any_of(greeter::config::configDiagnostics(), [&](const auto& d) { return d.path == syncPath; });
     if (syncInvalid || !greeter::config::writeSync(syncPath, sync)) {
       kLog.warn("failed to migrate legacy appearance.json into {}", syncPath.string());
     } else {
