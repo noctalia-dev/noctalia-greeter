@@ -115,6 +115,8 @@ _greeter_sources = files(
   'src/greeter/widgets/widget_catalog.cpp',
   'src/greeter/widgets/widget_settings.cpp',
   'src/greeter/widgets/widget_settings_validation.cpp',
+  'src/greeter/widgets/widget_host.cpp',
+  'src/greeter/widgets/label_widget.cpp',
   'src/greeter/greeter_preferences.cpp',
   'src/greeter/greeter_sessions.cpp',
   'src/greeter/greeter_model.cpp',
