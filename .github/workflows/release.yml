@@ -1,0 +1,82 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # release notes need full history and tags
+
+      - name: Validate release tag
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          bash scripts/validate-release-version VERSION "$RELEASE_TAG"
+
+      - name: Create release archive
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p ../noctalia-greeter-release
+          rsync -a \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='result*' \
+            ./ ../noctalia-greeter-release/
+          tar -C .. -czf "noctalia-greeter-${RELEASE_TAG}.tar.gz" noctalia-greeter-release/
+          cp "noctalia-greeter-${RELEASE_TAG}.tar.gz" noctalia-greeter-latest.tar.gz
+
+      - name: Generate release notes
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # Prefer the previous tag on the same history; otherwise the most recent other tag.
+          prev_tag=$(git describe --tags --abbrev=0 "${RELEASE_TAG}^" 2>/dev/null || true)
+          if [[ -z "$prev_tag" ]]; then
+            prev_tag=$(git tag --sort=-version:refname | grep -vxF "$RELEASE_TAG" | head -n1 || true)
+          fi
+          if [[ -z "$prev_tag" ]]; then
+            range="$RELEASE_TAG"
+            since_label="project start"
+          else
+            range="${prev_tag}..${RELEASE_TAG}"
+            since_label="$prev_tag"
+          fi
+          {
+            printf '# Release %s\n\n' "$RELEASE_TAG"
+            printf '## Changes since %s\n\n' "$since_label"
+            git log "$range" --pretty=format:"- %s ([%h](https://github.com/${GITHUB_REPOSITORY}/commit/%H)) by %an"
+            printf '\n'
+          } > release_notes.md
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          assets=("noctalia-greeter-${RELEASE_TAG}.tar.gz" noctalia-greeter-latest.tar.gz)
+          if gh release view "$RELEASE_TAG" > /dev/null 2>&1; then
+            printf 'GitHub release %s already exists; refreshing assets only.\n' "$RELEASE_TAG"
+            gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
+            exit 0
+          fi
+          gh release create "$RELEASE_TAG" --verify-tag --notes-file release_notes.md "${assets[@]}"

@@ -46,8 +46,20 @@ Bump the single line in [`VERSION`](VERSION) before tagging `v<VERSION>`.
 Meson, Nix, `--version`/`-v`, and startup logs read that release version.
 Git checkouts additionally report `git describe --tags --always --dirty=-dirty
 --abbrev=12`; Meson refreshes this during builds. Source archives and builds
-without Git omit the revision from the display label. The AUR workflow checks
-its tag against `VERSION` before updating a package.
+without Git omit the revision from the display label. The release and AUR
+workflows check their tag against `VERSION` before publishing or updating a
+package.
+
+Pushing a matching `v<VERSION>` tag runs the GitHub Release workflow, following
+Noctalia's release process. It generates commit-based release notes and attaches
+two source archives: `noctalia-greeter-v<VERSION>.tar.gz` and
+`noctalia-greeter-latest.tar.gz`. Both contain the same source tree under
+`noctalia-greeter-release/`, including `VERSION`, the vendored `lib/`, assets,
+licenses and Nix definitions. Git metadata, GitHub workflow files and Nix build
+result links are excluded. These are source archives, not prebuilt binaries.
+Rerunning the workflow for an existing release refreshes its assets and preserves
+its release notes. The existing AUR update workflow continues to run separately
+on version tags. Existing tags are not automatically backfilled with releases.
 
 [`lib/UPSTREAM`](lib/UPSTREAM) pins the unmodified Noctalia `lib/` snapshot.
 It is vendored, so building does not fetch a library or require a sibling
