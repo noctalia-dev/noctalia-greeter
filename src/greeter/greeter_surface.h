@@ -59,6 +59,7 @@ public:
   void setOnGreetdTransportError(std::function<void(const GreetdError&)> callback);
   void setKeyboardOwner(bool owner) noexcept;
 
+  void mirrorAuthStatusFrom(const GreeterSurface& other);
   void mirrorStateFrom(const GreeterSurface& other);
 
   // Drive the greetd auth conversation forward when its socket is readable.
@@ -74,6 +75,8 @@ public:
   [[nodiscard]] bool cancelAuthentication();
   // True while this surface is mid-conversation with greetd.
   [[nodiscard]] bool authInProgress() const noexcept { return m_authenticating; }
+  // Text currently shown on this surface's status line.
+  [[nodiscard]] const std::string& statusText() const noexcept { return m_status; }
 
   void onPointerLeave();
   void onPointerEvent(float x, float y, std::uint32_t button, bool pressed);

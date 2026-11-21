@@ -24,6 +24,9 @@ that control is removed or its menu is closed.
 
 The greeter works without a mouse.
 
+Fingerprint prompts appear on each greeter display. If a scan fails while you
+are typing a password, you can finish typing and press Enter.
+
 | Key | Action |
 |-----|--------|
 | `Tab` / `Shift+Tab` | Move focus |

@@ -290,7 +290,9 @@ password is queued and an empty submit restarts it. When PAM asks for a
 credential, the submission goes to PAM as typed; `[auth].allow_empty_password`
 permits it to be empty (passwordless, smartcard). Neither key makes the two
 checks run in parallel. Keep `[auth].request_timeout` above the `pam_fprintd`
-timeout (or `0`) so the watchdog does not expire first.
+timeout (or `0`) so the watchdog does not expire first. Scan-failure messages
+during the wait do not erase a password you started typing; finish it and
+press Enter when PAM asks.
 
 Cancelling a running attempt (Back, Esc, or switching users) while the reader
 is active can leave the reader busy until the PAM scan timeout, because greetd

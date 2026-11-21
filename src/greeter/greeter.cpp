@@ -532,6 +532,11 @@ void Greeter::onGreetdReadable() {
   }
   if (target != nullptr) {
     target->onGreetdReadable();
+    for (const auto& view : m_views) {
+      if (view.surface.get() != target) {
+        view.surface->mirrorAuthStatusFrom(*target);
+      }
+    }
   }
 }
 

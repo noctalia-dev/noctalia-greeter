@@ -1,4 +1,5 @@
 #include "greeter/greeter.h"
+#include "greeter/greeter_surface.h"
 #include "greeter/greeter_window.h"
 #include "wayland/wayland_client.h"
 #include "wayland/wayland_seat.h"
@@ -70,12 +71,13 @@ namespace {
 
   class FakeGreetd {
   public:
-    FakeGreetd() {
+    explicit FakeGreetd(bool autoStartPam) {
       char pattern[] = "/tmp/noctalia-user-switch-XXXXXX";
       const char* created = ::mkdtemp(pattern);
       require(created != nullptr, "mkdtemp failed");
       directory = created;
-      std::ofstream(directory / "greeter.toml") << R"toml(
+      std::ofstream(directory / "greeter.toml")
+          << R"toml(
 [appearance]
 hide_logo = true
 [clock]
@@ -84,7 +86,10 @@ enabled = false
 default = "user-switch-test"
 [auth]
 allow_empty_password = true
-)toml";
+)toml"
+        << "auto_start_pam = "
+        << (autoStartPam ? "true" : "false")
+        << '\n';
       require(::setenv("NOCTALIA_GREETER_STATE_DIR", directory.c_str(), 1) == 0, "setenv failed");
       require(::setenv("NOCTALIA_GREETER_DUMMY_USERS", "2", 1) == 0, "setenv failed");
       const std::string path = (directory / "greetd.sock").string();
@@ -217,7 +222,7 @@ allow_empty_password = true
   }
 
   void testSwitch(std::string_view stage) {
-    FakeGreetd server;
+    FakeGreetd server(stage == "scan-retry" || stage == "mirror-prompt");
     WaylandClient client;
     require(client.connect(), "Wayland connection failed");
     Greeter greeter;
@@ -228,6 +233,31 @@ allow_empty_password = true
     require(windows.size() == 2, "test requires two rendered outputs");
     server.acceptPeer();
     focusOutput(0);
+    if (stage == "scan-retry") {
+      server.request("create_session");
+      server.prompt(greeter, client, "info");
+      server.request("post_auth_message_response");
+      type(greeter, "first");
+      server.prompt(greeter, client, "error");
+      server.request("post_auth_message_response");
+      server.prompt(greeter, client, "secret");
+      submit(greeter, "-second");
+      require(server.request("post_auth_message_response").at("response") == "first-second",
+          "fingerprint retry erased the unfinished password");
+      finish(server, greeter, client);
+      return;
+    }
+    if (stage == "mirror-prompt") {
+      // Auto-start owns the conversation on one output; every PAM prompt must
+      // also surface on the other output's status line.
+      server.request("create_session");
+      server.prompt(greeter, client, "info");
+      require(windows[0]->greeterSurface().statusText() == "Test prompt", "prompt did not reach the first display");
+      require(windows[1]->greeterSurface().statusText() == "Test prompt", "prompt did not reach the second display");
+      server.request("post_auth_message_response");
+      finish(server, greeter, client);
+      return;
+    }
     if (stage == "idle-switch") {
       type(greeter, "must-not-leak");
       selectUser(greeter, 1, "dummy-user-01");

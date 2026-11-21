@@ -815,6 +815,12 @@ void GreeterSurface::notifyStateChanged() {
   }
 }
 
+void GreeterSurface::mirrorAuthStatusFrom(const GreeterSurface& other) {
+  if (m_username == other.m_username && (m_status != other.m_status || m_statusIsError != other.m_statusIsError)) {
+    updateStatus(other.m_status, other.m_statusIsError);
+  }
+}
+
 void GreeterSurface::mirrorStateFrom(const GreeterSurface& other) {
   if (&other == this) {
     return;
@@ -1681,7 +1687,7 @@ void GreeterSurface::handleAuthMessage(const GreetdAuthMessage& message) {
     if (!message.message.empty()) {
       updateStatus(message.message, isError);
     }
-    if (isError) {
+    if (isError && !m_fingerprintAuth) { // Scan failures arrive as PAM errors while the user may be mid-password.
       clearPasswordInput();
     }
     // Ack without a credential to resume PAM; paint now so the message shows.
