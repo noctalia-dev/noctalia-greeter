@@ -38,6 +38,71 @@ namespace {
         "missing Label setting diagnostic"
     );
   }
+
+  void checkStickerSettings() {
+    auto widget = label();
+    widget.id = "sticker1";
+    widget.type = "sticker";
+    const auto definitions = greeter::widgetSettingDefinitions(widget.type);
+    require(definitions && definitions->size() == 7, "Sticker schema is incomplete");
+    std::set<std::string_view> keys;
+    for (const auto& definition : *definitions) {
+      require(keys.insert(definition.key).second, "duplicate Sticker setting");
+      widget.settings.emplace(definition.key, definition.defaultValue);
+    }
+    require(greeter::validateWidgetSettings(widget).empty(), "declared Sticker defaults rejected");
+    require(
+        std::get<std::string>(widget.settings.at("image_path")).empty()
+            && std::get<double>(widget.settings.at("opacity")) == 1.0,
+        "Sticker defaults diverged from the Noctalia contract"
+    );
+    widget.settings.clear();
+    require(
+        greeter::validateWidgetSettings(widget).empty() && widget.settings.empty(),
+        "omitted Sticker settings rejected or materialized"
+    );
+    // Source and staged references are strings here; no file access or asset authorization is implied.
+    for (const auto path :
+         std::array<std::string_view, 3>{"", "/missing/source image.png", "widget-assets/image.png"}) {
+      widget.settings = {{"image_path", std::string(path)}};
+      require(greeter::validateWidgetSettings(widget).empty(), "Sticker image reference rejected by string schema");
+    }
+    for (const auto& value : std::vector<greeter::WidgetSettingValue>{
+             false, std::int64_t{1}, 1.0, std::vector<std::string>{"image.png"},
+             greeter::WidgetStringMap{{"path", "image.png"}}
+         }) {
+      widget.settings = {{"image_path", value}};
+      const auto issues = greeter::validateWidgetSettings(widget);
+      require(
+          std::ranges::any_of(
+              issues, [](const auto& issue) { return issue.path == "widgets.widget.sticker1.settings.image_path"; }
+          ),
+          "missing Sticker image type diagnostic"
+      );
+    }
+    for (const auto& value :
+         std::vector<greeter::WidgetSettingValue>{0.0, 1.0, 0.333, std::int64_t{0}, std::int64_t{1}}) {
+      widget.settings = {{"opacity", value}};
+      require(greeter::validateWidgetSettings(widget).empty(), "valid Sticker opacity rejected");
+    }
+    for (const auto& value : std::vector<greeter::WidgetSettingValue>{
+             -0.001, 1.001, std::numeric_limits<double>::infinity(), std::numeric_limits<double>::quiet_NaN(), true,
+             std::string("0.5")
+         }) {
+      widget.settings = {{"opacity", value}};
+      require(!greeter::validateWidgetSettings(widget).empty(), "invalid Sticker opacity admitted");
+    }
+    widget.settings = {{"background", false}, {"background_padding", 12.0}};
+    require(!greeter::validateWidgetSettings(widget).empty(), "hidden Sticker background bypassed validation");
+    for (const auto key :
+         std::array<std::string_view, 7>{"path", "image", "font_family", "title", "shadow", "action", "command"}) {
+      widget.settings = {{std::string(key), std::string("unsupported")}};
+      require(!greeter::validateWidgetSettings(widget).empty(), "unsupported Sticker setting admitted");
+    }
+    widget = label();
+    widget.settings = {{"image_path", std::string("image.png")}};
+    require(!greeter::validateWidgetSettings(widget).empty(), "Sticker image setting leaked into Label schema");
+  }
 } // namespace
 
 int main() {
@@ -119,7 +184,8 @@ int main() {
 
     widget.settings = {{"background", false}, {"background_color", std::string("invalid-color")}};
     require(!greeter::validateWidgetSettings(widget).empty(), "hidden background options bypassed validation");
-    for (const auto type : std::array<std::string_view, 3>{"sticker", "sysmon", "button"}) {
+    checkStickerSettings();
+    for (const auto type : std::array<std::string_view, 2>{"sysmon", "button"}) {
       widget = label();
       widget.type = type;
       require(!greeter::widgetSettingDefinitions(type), "unfinished schema advertised as complete");

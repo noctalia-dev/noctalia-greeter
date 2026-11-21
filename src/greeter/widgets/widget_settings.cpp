@@ -40,6 +40,18 @@ namespace greeter {
       return fields;
     }
 
+    std::span<const WidgetSettingDefinition> stickerSettings() {
+      static const auto fields = [] {
+        std::vector<WidgetSettingDefinition> result{
+            setting("image_path", WidgetSettingType::String, std::string{}),
+            setting("opacity", WidgetSettingType::Double, 1.0, 0, 1, 0.01),
+        };
+        result.insert(result.end(), kCommonSettings.begin(), kCommonSettings.end());
+        return result;
+      }();
+      return fields;
+    }
+
     std::span<const WidgetSettingDefinition> clockSettings() {
       static const auto fields = [] {
         std::vector<WidgetSettingDefinition> result{
@@ -67,6 +79,8 @@ namespace greeter {
       return labelSettings();
     if (type == "clock")
       return clockSettings();
+    if (type == "sticker")
+      return stickerSettings();
     return std::nullopt;
   }
 

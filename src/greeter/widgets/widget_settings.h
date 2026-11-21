@@ -29,6 +29,7 @@ namespace greeter {
 
   // Admission and complete per-type settings checks; does not mutate values or fill defaults.
   // Structural geometry/identity checks remain in validateWidgetStructure().
+  // Image references receive string checks only; asset provenance and contents require separate validation.
   std::vector<WidgetModelIssue> validateWidgetSettings(const WidgetInstance& widget);
 
 } // namespace greeter
