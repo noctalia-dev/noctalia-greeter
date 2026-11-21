@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/timer_manager.h"
+#include "greeter/widgets/widget_image_source.h"
 #include "greeter/widgets/widget_model.h"
 #include "ui/controls/box.h"
 
@@ -18,7 +19,7 @@ namespace greeter {
   public:
     // Validates before constructing controls. Only implemented presentations can be created.
     static std::expected<std::unique_ptr<WidgetHost>, std::vector<WidgetModelIssue>>
-    create(const WidgetInstance& instance);
+    create(const WidgetInstance& instance, const WidgetImageContext& images = {});
 
     // The view owner activates mounted, effectively visible instances and deactivates
     // them before hiding/detaching. Destruction cancels pending ticks automatically.

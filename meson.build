@@ -119,6 +119,8 @@ _greeter_sources = files(
   'src/greeter/widgets/label_widget.cpp',
   'src/greeter/widgets/digital_clock_widget.cpp',
   'src/greeter/widgets/analog_clock_widget.cpp',
+  'src/greeter/widgets/widget_image_source.cpp',
+  'src/greeter/widgets/sticker_widget.cpp',
   'src/greeter/greeter_preferences.cpp',
   'src/greeter/greeter_sessions.cpp',
   'src/greeter/greeter_model.cpp',
@@ -657,6 +659,15 @@ widget_button_settings_test = executable(
   build_by_default: false,
 )
 test('widget-button-settings', widget_button_settings_test)
+
+widget_image_source_test = executable(
+  'widget-image-source-test',
+  sources: files('tests/widget_image_source_test.cpp', 'src/greeter/widgets/widget_image_source.cpp'),
+  include_directories: include_directories('src', 'lib'),
+  cpp_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow'],
+  build_by_default: false,
+)
+test('widget-image-source', widget_image_source_test)
 
 greeter_auth_controller_test = executable(
   'greeter-auth-controller-test',

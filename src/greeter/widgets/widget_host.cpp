@@ -4,6 +4,7 @@
 #include "greeter/widgets/analog_clock_widget.h"
 #include "greeter/widgets/digital_clock_widget.h"
 #include "greeter/widgets/label_widget.h"
+#include "greeter/widgets/sticker_widget.h"
 #include "greeter/widgets/widget_settings.h"
 
 #include <algorithm>
@@ -36,13 +37,13 @@ namespace greeter {
   } // namespace
 
   std::expected<std::unique_ptr<WidgetHost>, std::vector<WidgetModelIssue>>
-  WidgetHost::create(const WidgetInstance& instance) {
+  WidgetHost::create(const WidgetInstance& instance, const WidgetImageContext& images) {
     auto issues = validateWidgetStructure({std::vector{instance}});
     const auto settingIssues = validateWidgetSettings(instance);
     issues.insert(issues.end(), settingIssues.begin(), settingIssues.end());
     if (!issues.empty())
       return std::unexpected(std::move(issues));
-    if (instance.type != "label" && instance.type != "clock")
+    if (instance.type != "label" && instance.type != "clock" && instance.type != "sticker")
       return std::unexpected(
           std::vector<WidgetModelIssue>{
               {"widgets.widget." + instance.id + ".type", "presentation is not implemented for this widget type"}
@@ -54,7 +55,22 @@ namespace greeter {
       settings.try_emplace(std::string(field.key), field.defaultValue);
     const auto text = [&](const char* key) -> const std::string& { return std::get<std::string>(settings.at(key)); };
     std::unique_ptr<WidgetContent> content;
-    if (instance.type == "clock") {
+    if (instance.type == "sticker") {
+      const WidgetImageAsset* asset = nullptr;
+      const auto imageIssue = [&](std::string message) {
+        return std::vector<WidgetModelIssue>{
+            {"widgets.widget." + instance.id + ".settings.image_path", std::move(message)}
+        };
+      };
+      if (!text("image_path").empty()) {
+        if (images.source == nullptr || (asset = images.source->find(text("image_path"))) == nullptr)
+          return std::unexpected(imageIssue("image reference is unavailable in the managed source"));
+      }
+      auto sticker = StickerWidget::create(asset, images.cache, images.backend, number(settings.at("opacity")));
+      if (!sticker)
+        return std::unexpected(imageIssue(std::move(sticker.error())));
+      content = std::move(*sticker);
+    } else if (instance.type == "clock") {
       if (text("clock_style") == "analog") {
         content = std::make_unique<AnalogClockWidget>(AnalogClockWidget::Options{
             .timezone = text("timezone"),
