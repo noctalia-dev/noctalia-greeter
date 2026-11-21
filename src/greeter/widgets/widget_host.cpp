@@ -2,6 +2,7 @@
 
 #include "core/ui_phase.h"
 #include "greeter/widgets/analog_clock_widget.h"
+#include "greeter/widgets/button_widget.h"
 #include "greeter/widgets/digital_clock_widget.h"
 #include "greeter/widgets/label_widget.h"
 #include "greeter/widgets/sticker_widget.h"
@@ -10,6 +11,7 @@
 #include "greeter/widgets/widget_settings.h"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -36,6 +38,18 @@ namespace greeter {
         return static_cast<float>(*floating);
       return static_cast<float>(std::get<std::int64_t>(value));
     }
+
+    ButtonVariant buttonVariant(std::string_view token) {
+      constexpr std::array variants{
+          std::pair{"default", ButtonVariant::Default},     std::pair{"primary", ButtonVariant::Primary},
+          std::pair{"secondary", ButtonVariant::Secondary}, std::pair{"outline", ButtonVariant::Outline},
+          std::pair{"ghost", ButtonVariant::Ghost},         std::pair{"destructive", ButtonVariant::Destructive},
+      };
+      for (const auto& [name, variant] : variants)
+        if (token == name)
+          return variant;
+      throw std::logic_error("unvalidated widget button variant");
+    }
   } // namespace
 
   std::expected<std::unique_ptr<WidgetHost>, std::vector<WidgetModelIssue>>
@@ -45,7 +59,11 @@ namespace greeter {
     issues.insert(issues.end(), settingIssues.begin(), settingIssues.end());
     if (!issues.empty())
       return std::unexpected(std::move(issues));
-    if (instance.type != "label" && instance.type != "clock" && instance.type != "sticker" && instance.type != "sysmon")
+    if (instance.type != "label"
+        && instance.type != "clock"
+        && instance.type != "sticker"
+        && instance.type != "sysmon"
+        && instance.type != "button")
       return std::unexpected(
           std::vector<WidgetModelIssue>{
               {"widgets.widget." + instance.id + ".type", "presentation is not implemented for this widget type"}
@@ -57,6 +75,19 @@ namespace greeter {
       settings.try_emplace(std::string(field.key), field.defaultValue);
     const auto text = [&](const char* key) -> const std::string& { return std::get<std::string>(settings.at(key)); };
     std::unique_ptr<WidgetContent> content;
+    if (instance.type == "button") {
+      content = std::make_unique<ButtonWidget>(ButtonWidget::Options{
+          .glyph = text("glyph"),
+          .label = text("label"),
+          .fontFamily = text("font_family"),
+          .variant = buttonVariant(text("variant")),
+          .background = std::get<bool>(settings.at("background")),
+          .color = text("color").empty() ? std::nullopt : std::make_optional(colorSpec(text("color"))),
+          .hoverBackground = colorSpec(text("hover_background")),
+      });
+      // Button owns its chrome; its schema deliberately has no common host background fields.
+      return std::unique_ptr<WidgetHost>(new WidgetHost(instance, std::move(content), false, clearColorSpec(), 0, 0));
+    }
     if (instance.type == "sysmon") {
       const auto primary = findSysmonMetric(text("stat"))->metric;
       if (text("display") == "gauge") {
@@ -154,8 +185,14 @@ namespace greeter {
 
   void WidgetHost::doLayout(Renderer& renderer) {
     UiPhaseScope phase(UiPhase::Layout);
-    m_content->layoutAtScale(renderer, 1.0F);
-    if (m_boxWidth > 0.0F || m_boxHeight > 0.0F) {
+    const bool filled = m_boxWidth > 0.0F
+        && m_boxHeight > 0.0F
+        && m_content->layoutInBox(
+            renderer, std::max(1.0F, m_boxWidth - 2.0F * m_padding), std::max(1.0F, m_boxHeight - 2.0F * m_padding)
+        );
+    if (!filled)
+      m_content->layoutAtScale(renderer, 1.0F);
+    if (!filled && (m_boxWidth > 0.0F || m_boxHeight > 0.0F)) {
       float fit = kMaxContentFit;
       if (m_boxWidth > 0.0F)
         fit = std::min(fit, std::max(1.0F, m_boxWidth - 2.0F * m_padding) / std::max(1.0F, m_content->width()));

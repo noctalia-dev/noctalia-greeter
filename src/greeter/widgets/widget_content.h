@@ -13,6 +13,9 @@ namespace greeter {
   class WidgetContent : public Node {
   public:
     virtual void layoutAtScale(Renderer& renderer, float scale) = 0;
+    // Presentations with two-axis box filling can handle the inner box directly.
+    // Returning false retains the host's ordinary aspect-preserving fit.
+    virtual bool layoutInBox(Renderer&, float, float) { return false; }
     virtual bool alignsToStart() const noexcept { return false; }
     virtual std::optional<std::chrono::seconds> tickInterval() const { return std::nullopt; }
     virtual NodeInvalidation timeInvalidation() const noexcept { return NodeInvalidation::Layout; }
