@@ -38,6 +38,15 @@ namespace greeter {
         return std::unexpected("unknown or duplicate local metric");
       seen[index] = true;
       const auto& data = entry.reading;
+      if (data.gauge
+          && (!data.current
+              || !std::isfinite(data.gauge->normalized)
+              || data.gauge->normalized < 0.0F
+              || data.gauge->normalized > 1.0F
+              || !std::isfinite(data.gauge->highlight)
+              || data.gauge->highlight < 0.0F
+              || data.gauge->highlight > 1.0F))
+        return std::unexpected("gauge requires a current value and finite normalized fill/highlight in [0..1]");
       if (data.history.size() > 120 || std::ranges::any_of(data.history, [](float sample) {
             return !std::isfinite(sample) || sample < 0.0F || sample > 1.0F;
           }))

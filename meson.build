@@ -123,6 +123,7 @@ _greeter_sources = files(
   'src/greeter/widgets/sticker_widget.cpp',
   'src/greeter/widgets/sysmon_snapshot.cpp',
   'src/greeter/widgets/sysmon_graph_widget.cpp',
+  'src/greeter/widgets/sysmon_gauge_widget.cpp',
   'src/greeter/render/sysmon_graph_plot.cpp',
   'src/greeter/render/sysmon_graph_program.cpp',
   'src/greeter/greeter_preferences.cpp',

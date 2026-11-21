@@ -65,6 +65,21 @@ int main() {
         ).has_value(),
         "bounded history rejected"
     );
+    for (const float value :
+         {-0.1F, 1.1F, std::numeric_limits<float>::infinity(), std::numeric_limits<float>::quiet_NaN()}) {
+      rejects(SysmonMetric::CpuUsage, {50, {}, SysmonGaugeReading{value, 0}});
+      rejects(SysmonMetric::CpuUsage, {50, {}, SysmonGaugeReading{0.5F, value}});
+    }
+    rejects(SysmonMetric::CpuUsage, {std::nullopt, {}, SysmonGaugeReading{0.5F}});
+    for (const float value : {0.0F, 1.0F}) {
+      const auto gauge = SysmonSnapshot::create(
+          std::array{SysmonMetricReading{SysmonMetric::CpuUsage, {50, {}, SysmonGaugeReading{value, value}}}}
+      );
+      require(
+          gauge.has_value() && gauge->reading(SysmonMetric::CpuUsage).gauge->normalized == value,
+          "gauge boundary not preserved"
+      );
+    }
     for (const auto& metric : sysmonMetricDefinitions())
       require(formatSysmonValue(metric, std::nullopt) == "--", "unavailable value formatting changed");
     require(formatSysmonValue(*findSysmonMetric("cpu_usage"), 42) == "42%", "percent unit incorrect");

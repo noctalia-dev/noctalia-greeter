@@ -5,6 +5,7 @@
 #include "greeter/widgets/digital_clock_widget.h"
 #include "greeter/widgets/label_widget.h"
 #include "greeter/widgets/sticker_widget.h"
+#include "greeter/widgets/sysmon_gauge_widget.h"
 #include "greeter/widgets/sysmon_graph_widget.h"
 #include "greeter/widgets/widget_settings.h"
 
@@ -57,22 +58,30 @@ namespace greeter {
     const auto text = [&](const char* key) -> const std::string& { return std::get<std::string>(settings.at(key)); };
     std::unique_ptr<WidgetContent> content;
     if (instance.type == "sysmon") {
-      if (text("display") != "graph")
-        return std::unexpected(
-            std::vector<WidgetModelIssue>{
-                {"widgets.widget." + instance.id + ".settings.display", "gauge presentation is not implemented"}
-            }
-        );
-      content = std::make_unique<SysmonGraphWidget>(SysmonGraphWidget::Options{
-          .primary = findSysmonMetric(text("stat"))->metric,
-          .secondary =
-              text("stat2").empty() ? std::nullopt : std::make_optional(findSysmonMetric(text("stat2"))->metric),
-          .color = colorSpec(text("color")),
-          .color2 = colorSpec(text("color2")),
-          .fontFamily = text("font_family"),
-          .showLabel = std::get<bool>(settings.at("show_label")),
-          .shadow = std::get<bool>(settings.at("shadow")),
-      });
+      const auto primary = findSysmonMetric(text("stat"))->metric;
+      if (text("display") == "gauge") {
+        content = std::make_unique<SysmonGaugeWidget>(SysmonGaugeWidget::Options{
+            .metric = primary,
+            .color = colorSpec(text("color")),
+            .highlightColor = colorSpec(text("highlight_color")),
+            .fontFamily = text("font_family"),
+            .stacked = text("gauge_layout") == "vertical",
+            .showLabel = std::get<bool>(settings.at("show_label")),
+            .labelMinWidth = number(settings.at("label_min_width")),
+            .shadow = std::get<bool>(settings.at("shadow")),
+        });
+      } else {
+        content = std::make_unique<SysmonGraphWidget>(SysmonGraphWidget::Options{
+            .primary = primary,
+            .secondary =
+                text("stat2").empty() ? std::nullopt : std::make_optional(findSysmonMetric(text("stat2"))->metric),
+            .color = colorSpec(text("color")),
+            .color2 = colorSpec(text("color2")),
+            .fontFamily = text("font_family"),
+            .showLabel = std::get<bool>(settings.at("show_label")),
+            .shadow = std::get<bool>(settings.at("shadow")),
+        });
+      }
       if (metrics != nullptr)
         content->updateMetrics(*metrics);
     } else if (instance.type == "sticker") {

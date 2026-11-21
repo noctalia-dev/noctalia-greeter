@@ -32,11 +32,19 @@ namespace greeter {
   std::span<const SysmonMetricDefinition> sysmonMetricDefinitions();
   const SysmonMetricDefinition* findSysmonMetric(std::string_view name);
 
+  struct SysmonGaugeReading {
+    // Provider-owned normalization and threshold interpolation; both finite [0..1].
+    float normalized;
+    float highlight = 0.0F;
+    bool operator==(const SysmonGaugeReading&) const = default;
+  };
   struct SysmonReading {
     // Raw value in the metric's documented unit; null is unavailable, not zero.
     std::optional<double> current;
     // Oldest first, normalized by the future provider; at most 120 finite [0..1] samples.
     std::vector<float> history;
+    // Missing range information leaves an empty track while preserving the raw label.
+    std::optional<SysmonGaugeReading> gauge = std::nullopt;
     bool operator==(const SysmonReading&) const = default;
   };
   struct SysmonMetricReading {
