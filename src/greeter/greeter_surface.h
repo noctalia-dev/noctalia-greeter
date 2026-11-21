@@ -70,6 +70,7 @@ public:
   // Cancel before changing the shared account selection. Keep ownership until
   // the cancel reply; refuse changes once the session handoff has started.
   [[nodiscard]] bool cancelAuthentication();
+  void setCapsLockActive(bool active);
   // True while this surface is mid-conversation with greetd.
   [[nodiscard]] bool authInProgress() const noexcept { return m_authenticating; }
 
@@ -233,6 +234,8 @@ private:
   Button* m_loginButton = nullptr;
   Button* m_backButton = nullptr;
   Label* m_statusLabel = nullptr;
+  Glyph* m_capsLockGlyph = nullptr;
+  Label* m_capsLockLabel = nullptr;
   RectNode* m_configErrorBanner = nullptr;
   Label* m_configErrorHeading = nullptr;
   Label* m_configErrorLabel = nullptr;
@@ -263,6 +266,7 @@ private:
   bool m_authenticating = false;
   bool m_greetdUnavailable = false;
   bool m_sharedAuthBlocked = false;
+  bool m_capsLockActive = false;
   bool m_authSessionStarted = false;
   bool m_authCancelRequested = false;
   bool m_secretPromptWaiting = false; // greetd wants secret input from the user

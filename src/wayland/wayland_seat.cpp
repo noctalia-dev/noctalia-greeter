@@ -110,6 +110,13 @@ void WaylandSeat::setKeyboardEventCallback(KeyboardEventCallback callback) {
   m_keyboardEventCallback = std::move(callback);
 }
 
+void WaylandSeat::setLockKeysChangedCallback(LockKeysChangedCallback callback) {
+  m_lockKeysChangedCallback = std::move(callback);
+  // Report a state that changed before a listener was registered.
+  m_lockKeysState = {};
+  refreshLockKeysState();
+}
+
 void WaylandSeat::setCursorShape(std::uint32_t serial, std::uint32_t shape) {
   if (m_cursorShapeDevice == nullptr || serial == 0) {
     return;
@@ -609,6 +616,8 @@ void WaylandSeat::handleKeyboardKeymap(
   }
 
   kLog.info("keyboard: keymap loaded");
+  // A fresh xkb state has no locked modifiers until the next modifiers event.
+  self->refreshLockKeysState();
 }
 
 void WaylandSeat::handleKeyboardEnter(
@@ -729,6 +738,7 @@ void WaylandSeat::handleKeyboardModifiers(
   if (self->m_xkbState != nullptr) {
     xkb_state_update_mask(self->m_xkbState, modsDepressed, modsLatched, modsLocked, 0, 0, group);
   }
+  self->refreshLockKeysState();
 }
 
 void WaylandSeat::handleKeyboardRepeatInfo(
@@ -815,8 +825,21 @@ WaylandSeat::LockKeysState WaylandSeat::lockKeysState() const {
     return state;
   }
 
-  state.capsLock = xkb_state_led_name_is_active(m_xkbState, XKB_LED_NAME_CAPS) != 0;
-  state.numLock = xkb_state_led_name_is_active(m_xkbState, XKB_LED_NAME_NUM) != 0;
-  state.scrollLock = xkb_state_led_name_is_active(m_xkbState, XKB_LED_NAME_SCROLL) != 0;
+  // Read Caps Lock from the locked modifier so keymaps without a Caps Lock LED still report it.
+  // LED queries return -1 when the keymap does not define that LED.
+  state.capsLock = xkb_state_mod_name_is_active(m_xkbState, XKB_MOD_NAME_CAPS, XKB_STATE_MODS_LOCKED) > 0;
+  state.numLock = xkb_state_led_name_is_active(m_xkbState, XKB_LED_NAME_NUM) > 0;
+  state.scrollLock = xkb_state_led_name_is_active(m_xkbState, XKB_LED_NAME_SCROLL) > 0;
   return state;
+}
+
+void WaylandSeat::refreshLockKeysState() {
+  const LockKeysState state = lockKeysState();
+  if (state == m_lockKeysState) {
+    return;
+  }
+  m_lockKeysState = state;
+  if (m_lockKeysChangedCallback) {
+    m_lockKeysChangedCallback(state);
+  }
 }
