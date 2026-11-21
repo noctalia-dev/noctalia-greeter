@@ -53,6 +53,8 @@ private:
   Label* m_title;
   Label* m_subtitle;
   Label* m_prompt;
+  Glyph* m_hostGlyph;
+  std::string m_hostname;
   RectNode* m_shadow;
   RectNode* m_avatar;
   float m_padding = 32, m_inputY = 225, m_inputH = 48, m_promptY = 200, m_identityY = 112, m_identityH = 64;
@@ -63,6 +65,7 @@ private:
 class GreeterChrome {
 public:
   explicit GreeterChrome(Node& scene);
+  static float clockHeight(Renderer& renderer, const Label& time, const Label& date);
   void layout(
       Renderer& renderer, const greeter::GreeterLayout& layout, Label& time, Label& date, ImageNode& logo, bool hasLogo,
       float timeFontSize, float dateFontSize, std::string_view keyboardName, float width, float height, bool wallpaper
@@ -70,9 +73,7 @@ public:
 
 private:
   Label* m_wordmark;
-  Label* m_hostname;
   Label* m_keyboard;
-  Glyph* m_hostGlyph;
   Glyph* m_keyboardGlyph;
   RectNode* m_orbit1;
   RectNode* m_orbit2;

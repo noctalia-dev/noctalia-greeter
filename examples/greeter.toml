@@ -76,7 +76,8 @@ fill_mode = "crop"
 # fill_mode = "crop"
 
 [clock]
-# Show the clock and host name (default true), to the left of the login card.
+# Show the clock and date (default true), to the left of the login card.
+# The host name is shown in the login card.
 enabled = true
 # center-left (default), above-panel, top-left, top-center, top-right, bottom-left, bottom-center, bottom-right.
 # Optional components move inward or hide when they cannot fit around login.

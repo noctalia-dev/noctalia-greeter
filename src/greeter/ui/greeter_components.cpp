@@ -19,6 +19,18 @@
 #include <unistd.h>
 
 namespace {
+  constexpr float kClockDateGap = 12;
+  struct LabelInk {
+    float top = 0;
+    float height = 0;
+  };
+  LabelInk labelInk(Renderer& renderer, const Label& node) {
+    if (node.text().empty())
+      return {};
+    const auto metrics = renderer.measureText(node.text(), node.fontSize(), node.font(), node.maxWidth(), 1);
+    return {node.baselineOffset() + metrics.inkTop, std::max(0.0F, metrics.inkBottom - metrics.inkTop)};
+  }
+
   template <class T> T* create(Node& scene, int z = 6) {
     auto node = std::make_unique<T>();
     auto* ptr = node.get();
@@ -56,6 +68,11 @@ GreeterLoginPanel::GreeterLoginPanel(Node& scene, LoginPanelNodes nodes) : m_nod
   m_title = create<Label>(scene);
   m_subtitle = create<Label>(scene);
   m_prompt = create<Label>(scene);
+  m_hostGlyph = create<Glyph>(scene);
+  m_hostGlyph->setHitTestVisible(false);
+  std::array<char, 256> hostname{};
+  if (gethostname(hostname.data(), hostname.size() - 1) == 0)
+    m_hostname = hostname.data();
   m_shadow = create<RectNode>(scene, 3);
   m_shadow->setHitTestVisible(false);
   m_avatar = create<RectNode>(scene, 6);
@@ -120,16 +137,30 @@ GreeterLoginPanel::layout(Renderer& renderer, const greeter::LayoutRect& bounds,
         m_nodes.name, renderer, view.name, x + 54, y + 25, 18, colorForRole(ColorRole::OnSurface), cw - 54,
         FontWeight::Medium
     );
-    label(m_subtitle, renderer, "Welcome back", x + 54, y + 54, 12, colorForRole(ColorRole::OnSurfaceVariant), cw - 54);
+    const bool hasHostname = !m_hostname.empty();
+    m_hostGlyph->setVisible(hasHostname);
+    if (hasHostname) {
+      m_hostGlyph->setGlyph("device-desktop");
+      m_hostGlyph->setGlyphSize(12);
+      m_hostGlyph->setColor(colorForRole(ColorRole::OnSurfaceVariant));
+      m_hostGlyph->measure(renderer);
+      m_hostGlyph->setPosition(x + 54, y + 56);
+    }
+    const float subtitleX = x + 54 + (hasHostname ? 18 : 0);
+    label(
+        m_subtitle, renderer, hasHostname ? m_hostname : "Welcome back", subtitleX, y + 54, 12,
+        colorForRole(ColorRole::OnSurfaceVariant), x + cw - subtitleX
+    );
   } else {
+    m_hostGlyph->setVisible(false);
     label(
         m_title, renderer, "Welcome back", x, y + (m_dense ? 20 : 31), m_dense ? 24 : 28,
         colorForRole(ColorRole::OnSurface), cw, FontWeight::Medium
     );
     label(
-        m_subtitle, renderer, "Sign in to your desktop", x, y + 76, 14, colorForRole(ColorRole::OnSurfaceVariant), cw
+        m_subtitle, renderer, m_hostname.empty() ? "Sign in to your desktop" : "Sign in to " + m_hostname, x,
+        y + (m_dense ? 46 : 76), m_dense ? 11 : 14, colorForRole(ColorRole::OnSurfaceVariant), cw
     );
-    m_subtitle->setVisible(!m_dense);
     m_nodes.name->setVisible(false);
   }
   m_prompt->setVisible(view.passwordStep || !view.minimal);
@@ -168,19 +199,18 @@ GreeterLoginPanel::layout(Renderer& renderer, const greeter::LayoutRect& bounds,
 
 GreeterChrome::GreeterChrome(Node& scene) {
   m_wordmark = create<Label>(scene, 6);
-  m_hostname = create<Label>(scene);
   m_keyboard = create<Label>(scene);
-  m_hostGlyph = create<Glyph>(scene);
   m_keyboardGlyph = create<Glyph>(scene);
-  for (auto* glyph : {m_hostGlyph, m_keyboardGlyph})
-    glyph->setHitTestVisible(false);
+  m_keyboardGlyph->setHitTestVisible(false);
   m_orbit1 = create<RectNode>(scene, 2);
   m_orbit2 = create<RectNode>(scene, 2);
   m_orbit1->setHitTestVisible(false);
   m_orbit2->setHitTestVisible(false);
-  std::array<char, 256> hostname{};
-  if (gethostname(hostname.data(), hostname.size() - 1) == 0)
-    m_hostname->setText(hostname.data());
+}
+float GreeterChrome::clockHeight(Renderer& renderer, const Label& time, const Label& date) {
+  return labelInk(renderer, time).height
+      + labelInk(renderer, date).height
+      + (!time.text().empty() && !date.text().empty() ? kClockDateGap : 0);
 }
 void GreeterChrome::layout(
     Renderer& renderer, const greeter::GreeterLayout& layout, Label& time, Label& date, ImageNode& logo, bool hasLogo,
@@ -221,27 +251,27 @@ void GreeterChrome::layout(
   const auto& clock = layout[Id::Clock];
   time.setVisible(clock.visible && !time.text().empty());
   date.setVisible(clock.visible && !date.text().empty());
-  m_hostname->setVisible(clock.visible);
-  m_hostGlyph->setVisible(clock.visible);
   if (clock.visible) {
     const float size = layout.narrow ? std::min(timeFontSize, 56.0F) : timeFontSize;
     label(
         &time, renderer, time.text(), clock.x, clock.y, size, colorForRole(ColorRole::OnSurface), clock.width,
         FontWeight::Light
     );
+    label(
+        &date, renderer, date.text(), clock.x + 5, clock.y,
+        layout.narrow ? std::min(dateFontSize, 14.0F) : dateFontSize, colorForRole(ColorRole::OnSurface),
+        clock.width - 5, FontWeight::Medium
+    );
+    const auto timeInk = labelInk(renderer, time), dateInk = labelInk(renderer, date);
+    time.setPosition(clock.x, clock.y - timeInk.top);
+    const float dateY = clock.y + timeInk.height + (!time.text().empty() && !date.text().empty() ? kClockDateGap : 0);
+    date.setPosition(clock.x + 5, dateY - dateInk.top);
     time.setVisible(!time.text().empty());
-    const float dateY = clock.y + (time.text().empty() ? 0 : time.height() + 10);
-    label(
-        &date, renderer, date.text(), clock.x + 5, dateY, layout.narrow ? std::min(dateFontSize, 14.0F) : dateFontSize,
-        colorForRole(ColorRole::OnSurfaceVariant), clock.width - 5
-    );
     date.setVisible(!date.text().empty());
-    const float hostY = dateY + (date.text().empty() ? 0 : date.height() + 24);
-    placeGlyph(m_hostGlyph, "device-desktop", clock.x + 5, hostY, 15);
-    label(
-        m_hostname, renderer, m_hostname->text(), clock.x + 29, hostY - 1, 13,
-        colorForRole(ColorRole::OnSurfaceVariant), clock.width - 29
-    );
+    if (wallpaper)
+      date.setShadow(colorForRole(ColorRole::Shadow, 0.8F), 0, 1);
+    else
+      date.clearShadow();
   }
   const auto& keyboard = layout[Id::Keyboard];
   m_keyboard->setVisible(keyboard.visible && !keyboardName.empty());

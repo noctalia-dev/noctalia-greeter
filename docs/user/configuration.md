@@ -183,7 +183,7 @@ Resolution order is command-line `--user`, then `[user].default`, then the user 
 
 The full card retains its position and field spacing while account selection/search is open. The credential field stays disabled until an account is selected.
 
-The default UI places the clock and host name on the left, the login card on the right, small branding at the top left, and keyboard layout, Appearance, and Power at the bottom right. It uses the current Noctalia default palette. The keyboard indicator shows the active compositor keymap and is read-only. Power opens a menu; suspend, restart, shutdown, and firmware restart require confirmation.
+The default UI places the clock and date on the left, the login card with the host name on the right, small branding at the top left, and keyboard layout, Appearance, and Power at the bottom right. It uses the current Noctalia default palette. The keyboard indicator shows the active compositor keymap and is read-only. Power opens a menu; suspend, restart, shutdown, and firmware restart require confirmation.
 
 When both a default user and a discovered default session are configured (through CLI or `greeter.toml`), the card automatically uses the compact presentation: identity, credential field, and Sign in. A remembered last session alone does not enable it. Missing session defaults use the full card. Press **Esc** to choose another account or session; selecting a different account/session restores the full card.
 
@@ -221,7 +221,7 @@ Placements use output-local logical coordinates. At desktop sizes the card and c
 
 ## Clock
 
-The clock is enabled by default at the left of the screen, with the host name below the date. The login card sits near the right edge. It uses the active palette's `on_surface` color for the time and `on_surface_variant` for the date, including when the **Synced** scheme is selected.
+The clock is enabled by default at the left of the screen, with the date directly below the time. Both use the active palette's `on_surface` color, including when the **Synced** scheme is selected. The date uses medium-weight text and a subtle shadow over wallpapers. Spacing follows the visible text bounds so font line padding does not leave an oversized gap. The host name appears in the login card's subtitle, including with the compact card or when the clock is hidden.
 
 ```toml
 [clock]

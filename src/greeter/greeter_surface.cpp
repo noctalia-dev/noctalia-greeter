@@ -1016,14 +1016,15 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
   const float ph = m_loginComponent->measure(renderer, pw, availableH, view);
   m_clockTimeLabel->setTextAlign(TextAlign::Start);
   m_clockDateLabel->setTextAlign(TextAlign::Start);
-  const float timeSize = sw < 1000 ? std::min(56.0F, m_clockTimeFontSize) : m_clockTimeFontSize;
+  const bool narrowClock = sw < 1000 || sh - reservedTop < 600;
+  const float timeSize = narrowClock ? std::min(56.0F, m_clockTimeFontSize) : m_clockTimeFontSize;
   m_clockTimeLabel->setFontSize(timeSize);
+  m_clockTimeLabel->setFontWeight(FontWeight::Light);
   m_clockTimeLabel->measure(renderer);
-  m_clockDateLabel->setFontSize(m_clockDateFontSize);
+  m_clockDateLabel->setFontSize(narrowClock ? std::min(14.0F, m_clockDateFontSize) : m_clockDateFontSize);
+  m_clockDateLabel->setFontWeight(FontWeight::Medium);
   m_clockDateLabel->measure(renderer);
-  const float clockH = (m_clockTimeLabel->text().empty() ? 0 : m_clockTimeLabel->height() + 10)
-      + (m_clockDateLabel->text().empty() ? 0 : m_clockDateLabel->height() + 24)
-      + 18;
+  const float clockH = GreeterChrome::clockHeight(renderer, *m_clockTimeLabel, *m_clockDateLabel);
   auto layout = greeter::resolveGreeterLayout(
       settings, sw, sh - reservedTop, ph, m_minimalLogin, m_boundOutputName, m_outputIdentifier, clockH
   );
