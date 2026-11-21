@@ -6,6 +6,7 @@
 
 namespace power {
 
+  bool suspend();
   bool powerOff();
   bool reboot();
   bool rebootToFirmwareSetup();

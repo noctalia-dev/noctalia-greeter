@@ -110,6 +110,7 @@ _greeter_sources = files(
   'src/greeter/greetd_user.cpp',
   'src/greeter/privileged_state_paths.cpp',
   'src/greeter/greeter_config_io.cpp',
+  'src/greeter/greeter_layout.cpp',
   'src/greeter/greeter_preferences.cpp',
   'src/greeter/greeter_sessions.cpp',
   'src/greeter/greeter_model.cpp',
@@ -127,6 +128,7 @@ _greeter_sources = files(
   'src/greeter/build_info.cpp',
   'src/greeter/greeter_style.cpp',
   'src/greeter/ui/search_field.cpp',
+  'src/greeter/ui/greeter_components.cpp',
   'src/greeter/render/wallpaper_program.cpp',
   'src/greeter/render/wallpaper_node.cpp',
 ) + [_git_revision_h]
@@ -221,6 +223,7 @@ _apply_appearance_support_sources = files(
   'src/greeter/greetd_user.cpp',
   'src/greeter/privileged_state_paths.cpp',
   'src/greeter/greeter_config_io.cpp',
+    'src/greeter/greeter_layout.cpp',
   'src/greeter/greeter_preferences.cpp',
   'src/tools/secure_appearance_sync.cpp',
 )
@@ -266,6 +269,7 @@ noctalia_greeter_compositor_executable = executable('noctalia-greeter-compositor
     'src/config/output_identity.c',
     'src/greeter/logging.cpp',
     'src/greeter/greeter_config_io.cpp',
+    'src/greeter/greeter_layout.cpp',
   ),
   dependencies: [
     wlroots_dep,
@@ -289,6 +293,7 @@ pointer_config_test = executable(
     'tests/pointer_config_test.cpp',
     'src/compositor/pointer_config.c',
     'src/greeter/greeter_config_io.cpp',
+    'src/greeter/greeter_layout.cpp',
     'src/greeter/logging.cpp',
   ),
   dependencies: [libinput_dep, wlroots_dep, tomlplusplus_dep],
@@ -507,6 +512,16 @@ greeter_frame_loop_test = executable(
   link_args: ['-Wl,--wrap=wl_proxy_add_listener', '-Wl,--wrap=eglSwapBuffers'],
   build_by_default: false,
 )
+
+greeter_layout_test = executable(
+  'greeter-layout-test',
+  sources: files('tests/greeter_layout_test.cpp'),
+  objects: noctalia_greeter_executable.extract_objects(_greeter_sources),
+  dependencies: _greeter_dependencies,
+  include_directories: _greeter_inc,
+  build_by_default: false,
+)
+test('greeter-layout', greeter_layout_test)
 
 greeter_auth_controller_test = executable(
   'greeter-auth-controller-test',

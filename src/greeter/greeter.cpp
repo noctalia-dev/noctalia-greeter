@@ -273,6 +273,7 @@ void Greeter::syncOutputWindows() {
   struct TargetOutput {
     wl_output* output = nullptr;
     std::string name;
+    std::string identifier;
     std::optional<WaylandOutputLayout> layout;
   };
   std::vector<TargetOutput> targets;
@@ -282,6 +283,7 @@ void Greeter::syncOutputWindows() {
           TargetOutput{
               .output = output->output,
               .name = output->name,
+              .identifier = output->stableIdentifier(),
               .layout = m_client->logicalLayoutForOutput(output->output),
           }
       );
@@ -382,6 +384,8 @@ void Greeter::syncOutputWindows() {
   for (std::size_t i = 0; i < targets.size(); ++i) {
     m_views[i].window->bindOutput(targets[i].output);
     m_views[i].surface->setBoundOutputName(targets[i].name);
+    m_views[i].surface->setOutputIdentifier(targets[i].identifier);
+    m_views[i].surface->setKeyboardLayoutName(m_client->connection().currentKeyboardLayoutName());
     m_views[i].surface->setWallpaperSpanParams(greeter::computeWallpaperSpanParams(spanOutputs, i));
     m_views[i].window->matchOutputLogicalSize();
     if (m_sceneReady) {
@@ -482,6 +486,10 @@ void Greeter::setupInputCallbacks(WaylandClient& client) {
     }
   });
 
+  client.connection().setKeyboardLayoutChangeCallback([this] {
+    for (auto& view : m_views)
+      view.surface->setKeyboardLayoutName(m_client->connection().currentKeyboardLayoutName());
+  });
   client.setKeyboardEventCallback([this](const KeyboardEvent& event) {
     onKeyboardEvent(event.sym, event.utf32, event.modifiers, event.pressed, event.preedit);
   });

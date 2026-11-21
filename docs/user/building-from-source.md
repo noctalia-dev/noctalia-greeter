@@ -95,6 +95,8 @@ just build-release
 sudo meson install -C build-release
 ```
 
+The `just` configure recipes explicitly select C++23, including for existing build directories that cached C++20. For a manually managed build directory, run `meson configure build -Dcpp_std=c++23` before rebuilding.
+
 After configuring greetd's session user, initialize greeter state with the
 installed helper:
 

@@ -29,6 +29,8 @@ A minimal login greeter for [greetd](https://github.com/kennylevinsen/greetd) th
 
 Noctalia Greeter is the screen you see before your desktop session starts. It lets you pick a user, enter your password, choose a Wayland session, and pick a color scheme - with the same visual language as Noctalia. A [configurable clock](docs/user/configuration.md#clock) uses Noctalia-compatible time/date formats, separate time and date font sizes, and the active greeter palette.
 
+The default UI pairs a large clock with a right-side login card and Noctalia’s current default palette. Configuring both a default user and session enables a compact card without pickers; **Esc** returns to account selection. [Component layout](docs/user/configuration.md#component-layout) supports per-component placement and visibility in `greeter.toml`.
+
 The default date format matches Noctalia (`%A, %x`). When no time locale is inherited, the greeter reads the system locale configuration, then falls back to an installed English locale. See [Clock](docs/user/configuration.md#clock) for locale precedence and overrides.
 
 Long session and color scheme menus fit within the screen and show a scrollbar.

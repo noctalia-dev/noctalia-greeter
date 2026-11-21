@@ -151,6 +151,7 @@ namespace {
     require(conversation.request("post_auth_message_response").at("response") == "second-prompt", "wrong response");
     conversation.prompt("visible");
     require(state.waitingForInput && state.promptType == GreetdAuthMessageType::Visible, "visible prompt type lost");
+    require(state.prompt == "Sample PAM message", "visible prompt text was not preserved separately");
     auth.submit(1, "visible-answer");
     require(
         conversation.request("post_auth_message_response").at("response") == "visible-answer", "visible input lost"

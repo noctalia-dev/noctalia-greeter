@@ -133,6 +133,7 @@ void GreeterAuthController::setUnavailable(std::string_view reason) {
   m_model.m_state.waitingForInput = false;
   m_model.m_state.startingSession = false;
   m_model.m_state.promptType.reset();
+  m_model.m_state.prompt.clear();
   m_authSessionStarted = false;
   m_hasPendingResponse = false;
   m_pendingResponse.clear();
@@ -240,6 +241,8 @@ void GreeterAuthController::handleAuthMessage(const GreetdAuthMessage& message) 
     return;
   }
 
+  m_model.m_state.prompt = message.message;
+
   // Secret / Visible prompt. Answer with already-submitted input if we have it
   // (empty is allowed), otherwise surface the prompt and wait for the user.
   if (m_hasPendingResponse) {
@@ -332,6 +335,7 @@ void GreeterAuthController::beginSessionStart() {
   m_pendingReplies.push_back(AuthRequest::StartSession);
   m_model.m_state.startingSession = true;
   m_model.m_state.promptType.reset();
+  m_model.m_state.prompt.clear();
   notifyChanged();
 }
 
@@ -346,6 +350,7 @@ bool GreeterAuthController::cancelAuthentication() {
   m_model.m_state.authenticating = false;
   m_model.m_state.waitingForInput = false;
   m_model.m_state.promptType.reset();
+  m_model.m_state.prompt.clear();
   m_hasPendingResponse = false;
   m_pendingResponse.clear();
   clearPasswordInput();
@@ -381,6 +386,7 @@ void GreeterAuthController::onAuthError(const GreetdError& error) {
   m_model.m_state.waitingForInput = false;
   m_model.m_state.startingSession = false;
   m_model.m_state.promptType.reset();
+  m_model.m_state.prompt.clear();
   m_hasPendingResponse = false;
   m_pendingResponse.clear();
   m_pendingReplies.clear();

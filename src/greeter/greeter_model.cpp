@@ -73,6 +73,16 @@ void GreeterModel::initialize() {
     }
   }
   applyInitialUserSelection();
+  auto explicitDefaults = prefs;
+  explicitDefaults.session.reset();
+  const auto explicitSession = greeter::resolveInitialSessionName(explicitDefaults);
+  const auto explicitUser = greeter::resolveInitialUserName(prefs);
+  m_configuredDefaults = explicitSession
+      && explicitUser
+      && !explicitUser->empty()
+      && greeter::findSessionIndex(m_sessions, *explicitSession).has_value();
+  m_configuredUser = explicitUser.value_or("");
+  m_configuredSession = m_state.selectedSession;
 }
 
 void GreeterModel::setOnChanged(std::function<void(GreeterViewId, bool)> callback) {
@@ -111,6 +121,7 @@ void GreeterModel::applyInitialUserSelection() {
     } else {
       // Configured domain accounts need not be present in NSS enumeration.
       m_users.push_back(*initialUser);
+      m_displayNames.push_back(*initialUser);
       m_userUids.push_back(0);
       m_userIconPaths.emplace_back();
       m_state.selectedUser = m_users.size() - 1;
@@ -125,6 +136,7 @@ void GreeterModel::applyInitialUserSelection() {
 
 void GreeterModel::loadUsers() {
   m_users.clear();
+  m_displayNames.clear();
   m_userUids.clear();
   m_userIconPaths.clear();
   static const std::unordered_set<std::string> kHiddenSystemUsers = {
@@ -198,6 +210,13 @@ void GreeterModel::loadUsers() {
   appendDummyUsers(m_users, m_userUids);
   while (m_userIconPaths.size() < m_users.size()) {
     m_userIconPaths.push_back("");
+  }
+
+  for (const auto& user : m_users) {
+    const passwd* account = ::getpwnam(user.c_str());
+    std::string display = account && account->pw_gecos ? account->pw_gecos : "";
+    display = display.substr(0, display.find(','));
+    m_displayNames.push_back(display.empty() ? user : display);
   }
 
   m_state.selectedUser = 0;

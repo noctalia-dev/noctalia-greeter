@@ -2,7 +2,7 @@
 
 # Configure debug build dir
 configure:
-  meson setup build --reconfigure
+  meson setup build --reconfigure -Dcpp_std=c++23
 
 # Default target: build debug
 build: configure
@@ -10,7 +10,7 @@ build: configure
 
 # Configure release build dir
 configure-release:
-  meson setup build-release --buildtype=release -Dnative_optimizations=true --reconfigure
+  meson setup build-release --buildtype=release -Dnative_optimizations=true --reconfigure -Dcpp_std=c++23
 
 # Release build
 build-release: configure-release
@@ -93,7 +93,7 @@ run-local: build
 
 # Configure AddressSanitizer build dir
 configure-asan:
-  meson setup build-asan --buildtype=debug -Db_sanitize=address -Db_lundef=false --reconfigure
+  meson setup build-asan --buildtype=debug -Db_sanitize=address -Db_lundef=false --reconfigure -Dcpp_std=c++23
 
 # Build AddressSanitizer variant
 build-asan: configure-asan

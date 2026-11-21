@@ -29,8 +29,8 @@ password_style = "random"
 hide_logo = false
 # Power controls: bottom-right (default), bottom-left, top-left, top-right, or hidden.
 power_buttons_position = "bottom-right"
-# Scheme picker: top-right (default), top-left, bottom-left, bottom-right, or hidden.
-scheme_selector_position = "top-right"
+# Scheme picker: bottom-right (default), top-left, top-right, bottom-left, or hidden.
+scheme_selector_position = "bottom-right"
 theme_mode = "dark"
 corner_radius_scale = 1.0
 # Optional; empty / omit keeps the greeter default font.
@@ -76,20 +76,45 @@ fill_mode = "crop"
 # fill_mode = "crop"
 
 [clock]
-# Show the clock (default true). The default position centers it above the login panel.
+# Show the clock and host name (default true), to the left of the login card.
 enabled = true
-# above-panel (default), top-left, top-center, top-right, bottom-left, bottom-center, or bottom-right.
-# Corner occupants stack inward without overlapping: scheme selector, power buttons, then clock.
-# bottom-center uses the logo slot when hide_logo is true, or stacks above a visible logo.
-position = "above-panel"
+# center-left (default), above-panel, top-left, top-center, top-right, bottom-left, bottom-center, bottom-right.
+# Optional components move inward or hide when they cannot fit around login.
+position = "center-left"
 # Noctalia-compatible bare strftime or C++ chrono formats. Empty hides that line.
 time_format = "{:%H:%M}"
 # Locale-preferred date, matching Noctalia's default.
 # Uses the inherited time locale, then system locale files, then en_US.UTF-8 (if installed).
 date_format = "%A, %x"
 # Font sizes in logical pixels before UI scaling; positive integers or decimals.
-time_font_size = 48
-date_font_size = 14
+time_font_size = 112
+date_font_size = 19
+
+# Optional component layout overrides. Only greeter.toml owns these settings.
+# All coordinates/sizes are logical pixels; explicit fields override legacy positions.
+[layout]
+# auto/minimal use the compact card only with a configured user and valid default session.
+# full always retains account/session pickers. Esc leaves the compact password step.
+login_mode = "auto"
+
+# Omit these to retain responsive default placement and automatic compact width.
+# [layout.login]
+# anchor = "center-right"
+# width = 420
+# x = 0
+# y = 0
+# Login cannot be hidden or targeted to one output.
+
+# [layout.clock]
+# visible = true
+# anchor = "center-left"
+# output = "DP-1"  # Optional exact connector/stable ID; hides when disconnected.
+
+# [layout.branding]
+# visible = true
+# Other optional component IDs: power, appearance, keyboard.
+# Anchors: top-left/center/right, center-left/center/right, bottom-left/center/right.
+# Offsets x/y: -8192..8192; width: 32..1600 (login further bounded to 280..640).
 
 [output]
 # Use layout, transforms, and scales from sync.toml when not declared here (default true).

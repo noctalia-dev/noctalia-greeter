@@ -8,13 +8,16 @@
 #include "render/scene/glyph_node.h"
 #include "render/scene/input_area.h"
 #include "render/text/glyph_registry.h"
+#include "ui/controls/box.h"
 #include "ui/controls/button.h"
 #include "ui/controls/glyph.h"
 #include "ui/controls/input.h"
+#include "ui/controls/label.h"
 #include "ui/controls/scrollbar.h"
 #include "wayland/wayland_client.h"
 
 #include <EGL/egl.h>
+#include <array>
 #include <cerrno>
 #include <chrono>
 #include <cstdio>
@@ -35,6 +38,12 @@ namespace {
   std::size_t swaps = 0;
   bool frameCallbackPending = false;
   bool swappedWithoutCallback = false;
+
+  class ConfigurableGreeterWindow : public GreeterWindow {
+  public:
+    using GreeterWindow::GreeterWindow;
+    using Surface::onConfigure;
+  };
 
   // Observe the real window callback without replacing its frame handling.
   const wl_callback_listener kFrameListener = {
@@ -100,56 +109,239 @@ namespace {
     require(swaps == before, "an idle window kept swapping buffers");
   }
 
-  void testPowerButtonClicks(WaylandClient& client, GreeterWindow& window, GreeterSurface& surface) {
+  void testAccountSwitchLayout(GreeterWindow& window, GreeterSurface& surface, GreeterModel& model) {
+    window.requestLayout();
     Input* password = nullptr;
-    std::vector<Button*> powerButtons;
+    Button* submit = nullptr;
+    Box* panel = nullptr;
     for (const auto& child : surface.sceneRoot()->children()) {
-      if (auto* input = dynamic_cast<Input*>(child.get()); input != nullptr && input->visible()) {
-        password = input;
-      }
-      auto* button = dynamic_cast<Button*>(child.get());
-      if (button == nullptr || button->glyph() == nullptr || !button->visible()) {
+      if (!child->visible())
         continue;
-      }
-      const auto glyph = static_cast<GlyphNode*>(button->glyph()->children().front().get())->codepoint();
-      if (glyph == GlyphRegistry::lookup("power")
-          || glyph == GlyphRegistry::lookup("reload")
-          || glyph == GlyphRegistry::lookup("cpu")) {
-        powerButtons.push_back(button);
-      }
+      if (auto* input = dynamic_cast<Input*>(child.get()))
+        password = input;
+      if (auto* button = dynamic_cast<Button*>(child.get()); button && button->label()->text() == "Sign in")
+        submit = button;
+      if (auto* box = dynamic_cast<Box*>(child.get()); box && (!panel || box->height() > panel->height()))
+        panel = box;
     }
-    require(password != nullptr, "password input was not visible for the pointer regression");
-    require(powerButtons.size() >= 2, "shutdown and restart buttons were not found");
-
-    unsigned clicks = 0;
-    // Replace every power callback before dispatching any pointer input.
-    for (Button* button : powerButtons) {
-      button->setOnClick([&]() { ++clicks; });
-    }
-    for (Button* button : powerButtons) {
-      clicks = 0;
-      surface.onPointerMotion(password->x() + 8, password->y() + 8);
-      surface.onPointerEvent(password->x() + 8, password->y() + 8, BTN_LEFT, true);
-      surface.onPointerEvent(password->x() + 8, password->y() + 8, BTN_LEFT, false);
-      window.requestLayout();
-      dispatchFor(client, 100ms);
-      const float x = button->x() + button->width() * 0.5f;
-      const float y = button->y() + button->height() * 0.5f;
+    require(password && submit && panel, "account switch controls missing");
+    const auto geometry = [&] {
+      return std::array<float, 12>{panel->x(),    panel->y(),    panel->width(),    panel->height(),
+                                   password->x(), password->y(), password->width(), password->height(),
+                                   submit->x(),   submit->y(),   submit->width(),   submit->height()};
+    };
+    const auto original = geometry();
+    const auto username = model.state().username;
+    surface.onKeyEvent(XKB_KEY_Escape, 0, 0, true, false);
+    require(!model.state().passwordVisible, "escape did not open account selection");
+    require(geometry() == original, "card moved or resized when entering account selection");
+    require(
+        password->visible() && !password->enabled(), "account selection did not reserve a disabled credential field"
+    );
+    surface.onKeyEvent(XKB_KEY_Down, 0, 0, true, false);
+    require(geometry() == original, "opening account search moved the card");
+    surface.onKeyEvent(XKB_KEY_Down, 0, 0, true, false);
+    surface.onKeyEvent(XKB_KEY_Return, 0, 0, true, false);
+    require(
+        model.state().passwordVisible && model.state().username != username, "search did not switch to another account"
+    );
+    require(geometry() == original, "selecting another account moved or resized the card");
+    require(
+        password->enabled() && password->value().empty(), "switched account did not restore a clean credential field"
+    );
+    const auto selected = model.state().username;
+    password->setValue("dismiss-test");
+    InputArea* account = nullptr;
+    for (const auto& child : surface.sceneRoot()->children())
+      if (auto* area = dynamic_cast<InputArea*>(child.get()); area
+          && area->visible()
+          && area->width() == password->width()
+          && area->height() > 40
+          && area->y() < password->y())
+        account = area;
+    require(account, "account dropdown anchor missing");
+    const auto open = [&] {
+      const float x = account->x() + 8, y = account->y() + 8;
       surface.onPointerMotion(x, y);
-      dispatchFor(client, 100ms);
-      const auto before = swaps;
       surface.onPointerEvent(x, y, BTN_LEFT, true);
-      require(
-          dispatchUntil(client, 5s, [&]() { return swaps > before; }),
-          "password blur did not paint a frame between press and release"
-      );
       surface.onPointerEvent(x, y, BTN_LEFT, false);
-      require(clicks == 1, "first power-button click was lost after password blur relayout");
+      require(
+          model.state().passwordVisible && model.state().username == selected,
+          "opening dropdown changed the selected account"
+      );
+    };
+    open();
+    surface.onPointerMotion(12, 12);
+    surface.onPointerEvent(12, 12, BTN_LEFT, true);
+    surface.onPointerEvent(12, 12, BTN_LEFT, false);
+    require(
+        model.state().passwordVisible && model.state().username == selected && password->value() == "dismiss-test",
+        "outside dismissal reset the selected login"
+    );
+    require(password->inputArea()->focused(), "outside dismissal did not restore credential focus");
+    const auto repeatedBlankClicks = [&](InputArea* expected) {
+      for (unsigned click = 0; click < 5; click++) {
+        // Match Greeter::setupInputCallbacks: every pointer event updates the active view.
+        surface.setKeyboardOwner(true);
+        surface.onPointerMotion(12, 12);
+        require(expected->focused(), "background motion changed keyboard focus");
+        surface.setKeyboardOwner(true);
+        surface.onPointerEvent(12, 12, BTN_LEFT, true);
+        require(expected->focused(), "background press cleared keyboard focus");
+        surface.setKeyboardOwner(true);
+        surface.onPointerEvent(12, 12, BTN_LEFT, false);
+        require(expected->focused(), "background release changed keyboard focus");
+      }
+    };
+    repeatedBlankClicks(password->inputArea());
+    open();
+    surface.onKeyEvent(XKB_KEY_Escape, 0, 0, true, false);
+    require(
+        model.state().passwordVisible
+            && model.state().username == selected
+            && password->value() == "dismiss-test"
+            && password->inputArea()->focused(),
+        "escape dismissal reset the selected login or focus"
+    );
+    // Also cover dismissal before a password step, where the account row owns focus.
+    surface.onKeyEvent(XKB_KEY_Escape, 0, 0, true, false);
+    require(!model.state().passwordVisible && account->focused(), "account picker did not receive keyboard focus");
+    const float ax = account->x() + 8, ay = account->y() + 8;
+    surface.onPointerMotion(ax, ay);
+    surface.onPointerEvent(ax, ay, BTN_LEFT, true);
+    surface.onPointerEvent(ax, ay, BTN_LEFT, false);
+    surface.onPointerMotion(12, 12);
+    surface.onPointerEvent(12, 12, BTN_LEFT, true);
+    surface.onPointerEvent(12, 12, BTN_LEFT, false);
+    require(account->focused(), "picker dismissal did not restore account-row focus");
+    repeatedBlankClicks(account);
+    surface.onKeyEvent(XKB_KEY_Return, 0, 0, true, false);
+    require(
+        model.state().passwordVisible && password->inputArea()->focused(),
+        "account selection did not restore credential focus"
+    );
+    password->setValue("");
+    std::puts("layout: account selection/search/switch preserve card and credential positions");
+  }
+
+  void testPowerButtonClicks(WaylandClient& client, GreeterWindow& window, GreeterSurface& surface) {
+    window.requestLayout();
+    Input* password = nullptr;
+    Button* power = nullptr;
+    for (const auto& child : surface.sceneRoot()->children()) {
+      if (auto* input = dynamic_cast<Input*>(child.get()); input && input->visible())
+        password = input;
+      if (auto* button = dynamic_cast<Button*>(child.get());
+          button && button->visible() && button->label()->text() == "Power")
+        power = button;
     }
-    for (Button* button : powerButtons) {
-      button->setOnClick({});
+    require(password && power, "password and power entry were not visible");
+    surface.onPointerEvent(password->x() + 8, password->y() + 8, BTN_LEFT, true);
+    surface.onPointerEvent(password->x() + 8, password->y() + 8, BTN_LEFT, false);
+    dispatchFor(client, 100ms);
+    const float x = power->x() + power->width() / 2, y = power->y() + power->height() / 2;
+    surface.onPointerMotion(x, y);
+    dispatchFor(client, 100ms);
+    const auto before = swaps;
+    surface.onPointerEvent(x, y, BTN_LEFT, true);
+    require(dispatchUntil(client, 5s, [&] { return swaps > before; }), "password blur did not paint before release");
+    surface.onPointerEvent(x, y, BTN_LEFT, false);
+    dispatchFor(client, 100ms);
+    Button* restart = nullptr;
+    for (const auto& child : surface.sceneRoot()->children())
+      if (auto* b = dynamic_cast<Button*>(child.get()); b && b->visible() && b->label()->text() == "Restart…")
+        restart = b;
+    require(restart, "first power click after password focus did not open the menu");
+    surface.onKeyEvent(XKB_KEY_a, 'a', 0, true, false);
+    require(password->value().empty(), "power menu leaked typing into the credential field");
+    const float rx = restart->x() + restart->width() / 2, ry = restart->y() + restart->height() / 2;
+    surface.onPointerMotion(rx, ry);
+    surface.onPointerEvent(rx, ry, BTN_LEFT, true);
+    surface.onPointerEvent(rx, ry, BTN_LEFT, false);
+    dispatchFor(client, 100ms);
+    Button* confirm = nullptr;
+    for (const auto& child : surface.sceneRoot()->children())
+      if (auto* b = dynamic_cast<Button*>(child.get()); b && b->visible() && b->label()->text() == "Restart")
+        confirm = b;
+    require(confirm, "restart did not require confirmation");
+    unsigned clicks = 0;
+    // Replace the command before interacting with the confirmation button.
+    confirm->setOnClick([&] { ++clicks; });
+    const float cx = confirm->x() + confirm->width() / 2, cy = confirm->y() + confirm->height() / 2;
+    surface.onPointerMotion(cx, cy);
+    surface.onPointerEvent(cx, cy, BTN_LEFT, true);
+    surface.onPointerEvent(cx, cy, BTN_LEFT, false);
+    require(clicks == 1, "power confirmation click was lost");
+    confirm->setOnClick({});
+    surface.onKeyEvent(XKB_KEY_Escape, 0, 0, true, false);
+    // The same menu must be reachable without a pointer, with a deliberate return target.
+    require(power->inputArea()->focused(), "closing power menu did not restore entry focus");
+    surface.onKeyEvent(XKB_KEY_Return, 0, 0, true, false);
+    bool cancelVisible = false;
+    for (const auto& child : surface.sceneRoot()->children())
+      if (auto* b = dynamic_cast<Button*>(child.get()); b && b->visible() && b->label()->text() == "Cancel")
+        cancelVisible = true;
+    require(cancelVisible, "keyboard activation did not reopen power menu");
+    surface.onKeyEvent(XKB_KEY_Escape, 0, 0, true, false);
+    std::puts("pointer: power opens on first click, captures typing and requires confirmation");
+  }
+
+  void testPowerMenuResize(WaylandClient& client, ConfigurableGreeterWindow& window, GreeterSurface& surface) {
+    // The prior test leaves focus on the Power entry. Open without executing any action.
+    surface.onKeyEvent(XKB_KEY_Return, 0, 0, true, false);
+    const auto check = [&](float width, float height) {
+      Box* panel = nullptr;
+      for (const auto& child : surface.sceneRoot()->children())
+        if (auto* box = dynamic_cast<Box*>(child.get()); box && box->visible() && box->zIndex() == 100)
+          panel = box;
+      require(panel, "power menu disappeared during resize");
+      float l, t, r, b;
+      Node::transformedBounds(surface.sceneRoot(), l, t, r, b);
+      require(
+          std::abs(l) < 1 && std::abs(t) < 1 && std::abs(r - width) < 1 && std::abs(b - height) < 1,
+          "configure resized the buffer without relaying out the scene"
+      );
+      Node::transformedBounds(panel, l, t, r, b);
+      require(l >= 0 && t >= 0 && r <= width + 1 && b <= height + 1, "resized power menu escaped the window");
+      for (const auto& child : surface.sceneRoot()->children()) {
+        auto* button = dynamic_cast<Button*>(child.get());
+        if (!button || !button->visible() || button->zIndex() != 102)
+          continue;
+        float bl, bt, br, bb;
+        Node::transformedBounds(button, bl, bt, br, bb);
+        require(bl >= l && bt >= t && br <= r + 1 && bb <= b + 1, "resized power action escaped its panel");
+      }
+      return panel->height();
+    };
+    for (auto [width, height] : {std::pair{640U, 360U}, {320U, 480U}, {344U, 285U}, {1280U, 720U}}) {
+      const auto before = swaps;
+      // Exercise the production configure path; no manual requestLayout can mask a missing callback.
+      window.onConfigure(width, height);
+      require(dispatchUntil(client, 5s, [&] { return swaps > before; }), "resize did not paint");
+      check(static_cast<float>(width), static_cast<float>(height));
     }
-    std::puts("pointer: power buttons activate on the first click after password focus");
+    const float menuHeight = check(1280, 720);
+    Button* restart = nullptr;
+    for (const auto& child : surface.sceneRoot()->children())
+      if (auto* button = dynamic_cast<Button*>(child.get());
+          button && button->visible() && button->label()->text() == "Restart…")
+        restart = button;
+    require(restart, "restart entry missing after resize");
+    surface.onKeyEvent(XKB_KEY_Escape, 0, 0, true, false);
+    surface.onKeyEvent(XKB_KEY_Return, 0, 0, true, false);
+    surface.onKeyEvent(XKB_KEY_Tab, 0, 0, true, false);
+    surface.onKeyEvent(XKB_KEY_Down, 0, 0, true, false);
+    require(restart->inputArea()->focused(), "power menu keyboard navigation did not focus restart");
+    surface.onKeyEvent(XKB_KEY_Return, 0, 0, true, false);
+    require(check(1280, 720) < menuHeight, "confirmation did not shrink the power menu");
+    const auto before = swaps;
+    window.onConfigure(344, 285);
+    require(dispatchUntil(client, 5s, [&] { return swaps > before; }), "confirmation resize did not paint");
+    check(344, 285);
+    window.onConfigure(1280, 720);
+    dispatchFor(client, 100ms);
+    surface.onKeyEvent(XKB_KEY_Escape, 0, 0, true, false);
+    std::puts("resize: power menu and confirmation follow window configure bounds");
   }
 
   void testPointerRemoval() {
@@ -224,6 +416,7 @@ namespace {
   }
 
   void testFrameLoop() {
+    initializeGreeterLibrary();
     WaylandClient client;
     require(client.connect(), "could not connect to the headless compositor");
     require(
@@ -244,7 +437,7 @@ namespace {
     model.setOnChanged([&](GreeterViewId source, bool selection) { surface.syncModel(selection && source != 1); });
     surface.initialize(&context);
     surface.setKeyboardOwner(true);
-    GreeterWindow window(client, gl, context, surface);
+    ConfigurableGreeterWindow window(client, gl, context, surface);
     surface.setWindow(&window);
     const auto outputs = client.readyOutputsSorted();
     window.bindOutput(outputs.front()->output);
@@ -305,8 +498,51 @@ namespace {
     requireIdle(client, window);
     testPointerRemoval();
     surface.setKeyboardOwner(true);
+    for (auto [width, height] : {std::pair{320U, 480U}, {640U, 360U}, {720U, 1280U}}) {
+      surface.prepareFrame(width, height, true);
+      for (const auto& child : surface.sceneRoot()->children()) {
+        const bool credential = dynamic_cast<Input*>(child.get()) != nullptr;
+        auto* button = dynamic_cast<Button*>(child.get());
+        if (!child->visible() || (!credential && !(button && button->label()->text() == "Sign in")))
+          continue;
+        float left, top, right, bottom;
+        Node::transformedBounds(child.get(), left, top, right, bottom);
+        require(
+            left >= 0 && top >= 0 && right <= static_cast<float>(width) + 1 && bottom <= static_cast<float>(height) + 1,
+            "responsive view clipped a credential control"
+        );
+      }
+    }
+    window.requestLayout();
+    testAccountSwitchLayout(window, surface, model);
     testPowerButtonClicks(client, window, surface);
+    testPowerMenuResize(client, window, surface);
     testMenuScrollbar(client, surface);
+    if (!model.sessions().empty()) {
+      greeter::setCliDefaultSession(model.sessions().front().name);
+      GreeterModel compactModel;
+      compactModel.initialize();
+      require(compactModel.hasConfiguredDefaults(), "test defaults did not resolve");
+      GreetdClient compactGreetd;
+      GreeterAuthController compactAuth(compactModel, compactGreetd);
+      GreeterSurface compact(compactModel, compactAuth, 2);
+      compact.initialize(&context);
+      compact.setWindow(&window);
+      compact.prepareFrame(1280, 720, true);
+      unsigned visibleInputs = 0;
+      for (const auto& child : compact.sceneRoot()->children()) {
+        if (!child->visible())
+          continue;
+        if (dynamic_cast<Input*>(child.get()))
+          ++visibleInputs;
+        if (auto* label = dynamic_cast<Label*>(child.get()))
+          require(label->text() != "Session", "configured-default card retained session picker");
+      }
+      require(visibleInputs == 1, "compact card lost its credential field");
+      require(compactAuth.showUserPicker(2), "compact card could not return to account selection");
+      require(!compactModel.state().passwordVisible, "compact account escape did not leave the password step");
+      greeter::setCliDefaultSession(std::nullopt);
+    }
     std::puts("frame loop: startup, animation, redraw/layout, idle, and restart passed");
   }
 

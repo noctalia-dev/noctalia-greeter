@@ -41,6 +41,7 @@ namespace {
   // the bounded test step ends; input and auth handling stay on the main thread.
   void pump(Greeter& greeter, WaylandClient& client) {
     std::atomic<bool> stop{false};
+    std::atomic<wl_callback*> pendingWake{nullptr};
     const auto before = pollCount.load();
     std::jthread wake([&](std::stop_token token) {
       // Let the event loop enter poll at least once, even on a busy builder.
@@ -57,14 +58,23 @@ namespace {
       }
       stop = true;
       auto* callback = wl_display_sync(client.display());
+      pendingWake.store(callback);
       static const wl_callback_listener listener = {
-          .done = [](void*, wl_callback* completed, std::uint32_t) { wl_callback_destroy(completed); },
+          .done = [](void* data, wl_callback* completed, std::uint32_t) {
+            static_cast<std::atomic<wl_callback*>*>(data)->store(nullptr);
+            wl_callback_destroy(completed);
+          },
       };
-      wl_callback_add_listener(callback, &listener, nullptr);
+      wl_callback_add_listener(callback, &listener, &pendingWake);
       (void)client.flush();
     });
     const int result = greeter.run(client, stop);
     wake.request_stop();
+    wake.join();
+    // A transport failure can end run() before the sync reply is dispatched.
+    // Release that test-owned proxy rather than leaking it at display teardown.
+    if (auto* callback = pendingWake.exchange(nullptr))
+      wl_callback_destroy(callback);
     require(result == 0, "greeter event loop failed");
   }
 

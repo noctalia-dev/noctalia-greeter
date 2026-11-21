@@ -457,11 +457,11 @@ date_font_size = 18.5
       const ScopedStateDirectory stateDirectory(fixture.runtimeDirectory);
       const auto preferences = greeter::loadGreeterPreferences();
       expect(
-          "omitted or invalid clock time font size uses default", preferences.clockTimeFontSize == 48.0f, true,
+          "omitted or invalid clock time font size uses default", preferences.clockTimeFontSize == 112.0f, true,
           std::string(value), passed
       );
       expect(
-          "omitted or invalid clock date font size uses default", preferences.clockDateFontSize == 14.0f, true,
+          "omitted or invalid clock date font size uses default", preferences.clockDateFontSize == 19.0f, true,
           std::string(value), passed
       );
     }
@@ -480,11 +480,11 @@ date_font_size = 18.5
       const ScopedStateDirectory stateDirectory(fixture.runtimeDirectory);
       const auto preferences = greeter::loadGreeterPreferences();
       expect(
-          "clock time font size is independent", preferences.clockTimeFontSize == (timeOnly ? 60.0f : 48.0f), true, {},
+          "clock time font size is independent", preferences.clockTimeFontSize == (timeOnly ? 60.0f : 112.0f), true, {},
           passed
       );
       expect(
-          "clock date font size is independent", preferences.clockDateFontSize == (timeOnly ? 14.0f : 20.0f), true, {},
+          "clock date font size is independent", preferences.clockDateFontSize == (timeOnly ? 19.0f : 20.0f), true, {},
           passed
       );
     }

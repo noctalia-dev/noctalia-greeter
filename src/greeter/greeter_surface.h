@@ -3,6 +3,7 @@
 #include "config/config_types.h"
 #include "greeter/appearance_config.h"
 #include "greeter/greeter_auth_controller.h"
+#include "greeter/greeter_layout.h"
 #include "greeter/greeter_model.h"
 #include "greeter/greeter_sessions.h"
 #include "greeter/render/wallpaper_types.h"
@@ -36,6 +37,8 @@ class Renderer;
 class ImageNode;
 class RectNode;
 class WallpaperNode;
+class GreeterLoginPanel;
+class GreeterChrome;
 
 class GreeterSurface {
 public:
@@ -58,6 +61,8 @@ public:
   void onKeyEvent(std::uint32_t sym, std::uint32_t utf32, std::uint32_t modifiers, bool pressed, bool preedit);
 
   void onThemeChanged();
+  void setKeyboardLayoutName(std::string name);
+  void setOutputIdentifier(std::string id) { m_outputIdentifier = std::move(id); }
   [[nodiscard]] bool handleNavigationKey(std::uint32_t sym, std::uint32_t utf32, std::uint32_t modifiers);
   void requestLayout();
   void requestRedraw();
@@ -103,6 +108,11 @@ private:
   void
   layoutClock(float ox, float oy, float sw, float sh, float panelX, float panelY, float panelWidth, float panelHeight);
   void commitImmediateFrame(bool layout);
+  void togglePowerMenu();
+  void closePowerMenu();
+  void requestPowerAction(int action);
+  void layoutPowerMenu(float width, float height);
+  bool minimalLogin() const;
   void setFocusIndex(std::ptrdiff_t index);
   void syncFocusIndexFromFocused();
   [[nodiscard]] std::ptrdiff_t defaultFocusIndex() const;
@@ -164,6 +174,24 @@ private:
   std::uint64_t m_credentialGeneration = 0;
   std::optional<std::size_t> m_appliedScheme;
 
+  std::unique_ptr<GreeterLoginPanel> m_loginComponent;
+  std::unique_ptr<GreeterChrome> m_chromeComponent;
+  float m_sceneScale = 1.0F;
+  greeter::GreeterLayoutConfig m_layoutConfig;
+  bool m_minimalLogin = false;
+  std::string m_keyboardLayout;
+  std::string m_outputIdentifier;
+  Label* m_sessionCaptionLabel = nullptr;
+  std::size_t m_userMenuVisibleRows = 8;
+  Label* m_userSecondaryLabel = nullptr;
+  Button* m_powerMenuButton = nullptr;
+  Button* m_suspendButton = nullptr;
+  Button* m_powerCancel = nullptr;
+  Button* m_powerConfirm = nullptr;
+  Box* m_powerPanel = nullptr;
+  Label* m_powerTitle = nullptr;
+  bool m_powerMenuOpen = false;
+  int m_pendingPowerAction = 0;
   WallpaperNode* m_wallpaper = nullptr;
   RectNode* m_letterbox = nullptr;
   Node* m_backdrop = nullptr;

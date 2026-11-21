@@ -22,6 +22,7 @@ namespace greeter {
   };
 
   struct GreeterPreferences {
+    GreeterLayoutConfig layout;
     std::optional<std::string> defaultSession;
     std::optional<std::string> defaultUser;
     std::optional<std::string> session;
@@ -37,18 +38,19 @@ namespace greeter {
     std::optional<std::string> powerButtonsPosition;
     std::optional<std::string> schemeSelectorPosition;
     bool clockEnabled = true;
-    std::string clockPosition = "above-panel";
+    std::string clockPosition = "center-left";
     std::string clockTimeFormat = "{:%H:%M}";
     std::string clockDateFormat = "%A, %x";
     // Font sizes in logical pixels before UI scaling.
-    float clockTimeFontSize = 48.0f;
-    float clockDateFontSize = 14.0f;
+    float clockTimeFontSize = 112.0f;
+    float clockDateFontSize = 19.0f;
   };
 
   [[nodiscard]] std::filesystem::path greeterConfPath();
   [[nodiscard]] std::filesystem::path greeterSyncPath();
 
   [[nodiscard]] GreeterPreferences loadGreeterPreferences();
+  [[nodiscard]] GreeterLayoutConfig effectiveGreeterLayout(const GreeterPreferences& prefs);
   // Persists [session].last and [appearance].scheme to sync.toml only.
   [[nodiscard]] bool saveGreeterPreferences(const GreeterPreferences& prefs);
 

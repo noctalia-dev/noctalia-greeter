@@ -34,11 +34,15 @@ The greeter works without a mouse.
 | `Ctrl+U` | Delete the selection or everything left of the cursor in a text field |
 | `Ctrl+Backspace` / `Ctrl+Delete` | Delete word-wise in a text field. In the password field, delete everything left or right of the cursor so the masked text does not reveal spaces |
 | `Ctrl+←` / `Ctrl+→` | Move the cursor word-wise in a text field. In the password field, jump to the start or end |
-| `F3` | Open the session picker |
+| `F3` | Open the session picker when the full card is shown |
 | `F7` | Open the color scheme picker |
 | `Ctrl+Alt+F1`–`F12` | Switch to a virtual terminal (TTY) |
 
-Returning to the user list with Back or `Esc` cancels the active login,
+The keyboard layout indicator reflects the active compositor keymap; it is read-only. Power opens a keyboard-accessible menu and asks for confirmation before executing an action. **Esc** closes it.
+
+Opening the account dropdown preserves the selected account and entered password. Clicking outside or pressing `Esc` dismisses it and returns focus to the credential field. Further clicks on empty background leave keyboard focus unchanged.
+
+Pressing `Esc` from the password step returns to account selection and cancels the active login,
 including an attempt started on another monitor. Choosing another account
 clears entered passwords across all monitors. Password entry stays disabled
 until the previous attempt has been cancelled; a busy PAM device may take time to return its

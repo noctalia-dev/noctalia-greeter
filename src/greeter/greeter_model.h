@@ -21,6 +21,7 @@ struct GreeterState {
   std::size_t selectedSession = 0;
   std::size_t selectedScheme = 0;
   bool passwordVisible = false;
+  std::string prompt;
   std::string status;
   bool statusIsError = false;
   bool authenticating = false;
@@ -49,6 +50,14 @@ public:
   [[nodiscard]] const std::optional<GreeterSyncedAppearance>& syncedAppearance() const noexcept {
     return m_syncedAppearance;
   }
+  [[nodiscard]] std::string_view displayName(std::size_t index) const noexcept {
+    return index < m_displayNames.size() ? std::string_view(m_displayNames[index]) : std::string_view{};
+  }
+  [[nodiscard]] bool hasConfiguredDefaults() const noexcept {
+    return m_configuredDefaults
+        && m_state.username == m_configuredUser
+        && m_state.selectedSession == m_configuredSession;
+  }
   [[nodiscard]] bool allowEmptyPassword() const noexcept { return m_allowEmptyPassword; }
 
   void selectSession(GreeterViewId source, std::size_t index);
@@ -64,6 +73,10 @@ private:
 
   GreeterState m_state;
   std::vector<std::string> m_users;
+  std::vector<std::string> m_displayNames;
+  bool m_configuredDefaults = false;
+  std::string m_configuredUser;
+  std::size_t m_configuredSession = 0;
   std::vector<uid_t> m_userUids;
   std::vector<std::string> m_userIconPaths;
   std::vector<greeter::SessionOption> m_sessions;

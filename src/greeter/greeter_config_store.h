@@ -1,5 +1,7 @@
 #pragma once
 
+#include "greeter/greeter_layout.h"
+
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -39,6 +41,7 @@ namespace greeter::config {
 
   // Full declarative greeter.toml. UI and Sync never write this file.
   struct GreeterConfigFile {
+    GreeterLayoutConfig layout;
     std::optional<std::string> sessionDefault;
     // Legacy only: migrated into sync.toml; stripped on greeter.toml write.
     std::optional<std::string> sessionLast;

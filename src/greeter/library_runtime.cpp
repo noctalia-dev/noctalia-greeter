@@ -3,6 +3,7 @@
 #include "core/application_identity.h"
 #include "core/deferred_call.h"
 #include "core/input/key_symbols.h"
+#include "core/input/keybind_matcher.h"
 #include "core/timer_manager.h"
 #include "render/codecs/codecs.h"
 #include "ui/controls/input.h"
@@ -13,6 +14,9 @@ void initializeGreeterLibrary() {
     setApplicationIdentity({.name = "noctalia-greeter", .envPrefix = "NOCTALIA_GREETER"});
     codecs::installImageDecoder();
     Input::setValidateKeyMatcher([](std::uint32_t sym, std::uint32_t) { return KeySymbol::isEnter(sym); });
+    KeybindMatcher::setMatcher(KeybindAction::Validate, [](std::uint32_t sym, std::uint32_t) {
+      return KeySymbol::isEnter(sym);
+    });
     return true;
   }();
   (void)initialized;

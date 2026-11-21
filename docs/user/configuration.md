@@ -12,6 +12,7 @@ Administrator-controlled settings live in `/var/lib/noctalia-greeter/greeter.tom
 - [Configuration reference](#configuration-reference)
 - [Default session](#default-session)
 - [Default user](#default-user)
+- [Component layout](#component-layout)
 - [Clock](#clock)
 - [Full example](#full-example)
 
@@ -62,7 +63,7 @@ Set these keys in `greeter.toml`. A command-line `--session` or `--user` value t
 | `[appearance].password_style` | Password mask: `default` or `random` |
 | `[appearance].hide_logo` | Hide the Noctalia brand logo |
 | `[appearance].power_buttons_position` | Power controls: `bottom-right` (default), `bottom-left`, `top-left`, `top-right`, or `hidden` |
-| `[appearance].scheme_selector_position` | Scheme picker: `top-right` (default), `top-left`, `bottom-left`, `bottom-right`, or `hidden` |
+| `[appearance].scheme_selector_position` | Scheme picker: `bottom-right` (default), `top-left`, `bottom-left`, `bottom-right`, or `hidden` |
 | `[appearance].theme_mode` | Theme mode for the Synced appearance, such as `dark` |
 | `[appearance].corner_radius_scale` | Corner-radius scale for the Synced appearance |
 | `[appearance].font_family` | Fontconfig family for the Synced appearance |
@@ -70,11 +71,11 @@ Set these keys in `greeter.toml`. A command-line `--session` or `--user` value t
 | `[appearance.wallpaper]` | Default wallpaper `path`, `fill_mode`, `fill_color`, `blur`, and `tint`; `fill_color` also works without an image, `fill_mode` accepts `center`, `crop`, `fit`, `stretch`, `repeat`, or `span`, and `blur`/`tint` take an intensity from `0.0` (off, default) to `1.0` |
 | `[appearance.wallpapers.<connector>]` | Per-output wallpaper override using the same fill modes |
 | `[clock].enabled` | Show the clock; defaults to `true` |
-| `[clock].position` | `above-panel` (default), `top-left`, `top-center`, `top-right`, `bottom-left`, `bottom-center`, or `bottom-right` |
+| `[clock].position` | `center-left` (default), `above-panel`, `top-left`, `top-center`, `top-right`, `bottom-left`, `bottom-center`, or `bottom-right` |
 | `[clock].time_format` | Time line format; defaults to `{:%H:%M}` |
 | `[clock].date_format` | Date line format; defaults to `%A, %x` |
-| `[clock].time_font_size` | Time font size before UI scaling; positive number, default `48` |
-| `[clock].date_font_size` | Date font size before UI scaling; positive number, default `14` |
+| `[clock].time_font_size` | Time font size before UI scaling; positive number, default `112` |
+| `[clock].date_font_size` | Date font size before UI scaling; positive number, default `19` |
 | `[output].name` | Connector or stable EDID identifier on which to pin the greeter |
 | `[output].use_synced_settings` | Use synced layout, transforms, and scales when not declared here; defaults to `true`. Set `false` to use declarative output settings and compositor defaults only |
 | `[output].layout` | Multi-monitor positions by connector or stable identifier; overrides synced layout |
@@ -165,22 +166,62 @@ To open directly on one account's password step:
 default = "alice"
 ```
 
-You can instead pass `--user alice` after the session wrapper's `--`. Use the exact login name from `/etc/passwd`. **Esc** or the back button returns to the user list.
+You can instead pass `--user alice` after the session wrapper's `--`. Use the exact login name from `/etc/passwd`. **Esc** returns to the user list. In the full card, the account row also opens account search.
 
 Resolution order is command-line `--user`, then `[user].default`, then the user picker.
 
+## Component layout
+
+The full card retains its position and field spacing while account selection/search is open. The credential field stays disabled until an account is selected.
+
+The default UI places the clock and host name on the left, the login card on the right, small branding at the top left, and keyboard layout, Appearance, and Power at the bottom right. It uses the current Noctalia default palette. The keyboard indicator shows the active compositor keymap and is read-only. Power opens a menu; suspend, restart, shutdown, and firmware restart require confirmation.
+
+When both a default user and a discovered default session are configured (through CLI or `greeter.toml`), the card automatically uses the compact presentation: identity, credential field, and Sign in. A remembered last session alone does not enable it. Missing session defaults use the full card. Press **Esc** to choose another account or session; selecting a different account/session restores the full card.
+
+Configure components only in `greeter.toml`. The existing appearance sync payload is unchanged; the UI and sync helper never write these settings.
+
+```toml
+[layout]
+login_mode = "auto"
+
+[layout.login]
+anchor = "center-right"
+width = 420
+
+[layout.clock]
+anchor = "center-left"
+x = 16
+
+[layout.branding]
+visible = false
+```
+
+`login_mode` accepts `auto` (default), `full` (always show pickers), or `minimal` (use the compact card when valid defaults are available, otherwise show the full card). Component IDs are `login`, `clock`, `branding`, `power`, `appearance`, and `keyboard`. Settings are partial overrides of built-in defaults, resolved by ID; there are no component lists or removal operations. Hide an optional component with `visible = false`.
+
+| Field | Values and behavior |
+| --- | --- |
+| `visible` | Boolean. Login is required: `false` is rejected for `login`. |
+| `anchor` | `top-left`, `top-center`, `top-right`, `center-left`, `center`, `center-right`, `bottom-left`, `bottom-center`, `bottom-right`. |
+| `x`, `y` | Finite logical-pixel offsets from the anchor, from -8192 to 8192. Final placement is clamped inside the output. |
+| `width` | Finite logical pixels, from 32 to 1600; login width is further bounded to 280–640 and available space. |
+| `output` | Optional exact connector name or stable monitor identifier. An absent/disconnected target hides that optional component. Rejected for `login`, which remains on every active greeter output. |
+
+Explicit component fields override corresponding `[clock]` and `[appearance]` keys. When a component field is absent, clock enabled/position, hide-logo, power position, and scheme position remain fallbacks. Removing an override restores that fallback or the built-in default. `above-panel` positions the clock above the card when there is room. Unknown IDs/fields, wrong types, invalid anchors, and out-of-range/non-finite values are ignored individually and reported in the startup log and configuration banner. Valid sibling fields remain active. No layout version field is currently required; unsupported keys are ignored with diagnostics.
+
+Placements use output-local logical coordinates. At desktop sizes the card and clock use matching outer gutters (6% of width, bounded to 64–128 logical pixels). Branding and footer use 48-pixel gutters. Widths below 1000 or heights below 600 use the narrow composition with smaller margins. Login keeps priority, followed by clock, branding, Power, Appearance, and keyboard; colliding optional components move inward or disappear. Layout reserves space for configuration errors. Very small views uniformly scale a minimum 320×520 logical canvas, including hit testing, so credential controls stay reachable. Each view calculates its own geometry; fractional/mixed output scaling does not mutate global UI metrics. Configured fonts, palettes, and wallpapers still use the existing appearance rules.
+
 ## Clock
 
-The clock is enabled by default and centered above the login panel. It uses the active palette's `on_surface` color for the time and `on_surface_variant` for the date, including when the **Synced** scheme is selected.
+The clock is enabled by default at the left of the screen, with the host name below the date. The login card sits near the right edge. It uses the active palette's `on_surface` color for the time and `on_surface_variant` for the date, including when the **Synced** scheme is selected.
 
 ```toml
 [clock]
 enabled = true
-position = "above-panel"
+position = "center-left"
 time_format = "{:%H:%M}"
 date_format = "%A, %x"
-time_font_size = 48
-date_font_size = 14
+time_font_size = 112
+date_font_size = 19
 ```
 
 Set `time_font_size` and `date_font_size` independently, in logical pixels before UI scaling. Both accept positive integers or decimals and follow the greeter's automatic or manual display scale. Omitted or invalid values use the defaults shown above.
@@ -200,7 +241,7 @@ command = "env LC_TIME=en_GB.UTF-8 /usr/local/bin/noctalia-greeter-session"
 
 Keep your existing binary path and arguments. `LC_ALL` takes precedence over `LC_TIME`, so remove or adjust an existing `LC_ALL` override too. Restart greetd after changing the command. See [Date format or language differs from the desktop](troubleshooting.md#date-format-or-language-differs-from-the-desktop) for diagnostics.
 
-Set either format to an empty string to hide only that line, or set `enabled = false` to disable the clock. The four corner positions use the same names as the power and scheme controls. When multiple elements use one corner, they stack inward in this order: scheme selector, power buttons, clock. `top-center` stays below a configuration-error banner. `bottom-center` occupies the logo's bottom-center slot when `[appearance].hide_logo = true`; with the logo visible, the clock stacks directly above it. On a display too short to fit a centered clock without touching the login panel, the date is omitted first; the clock is hidden only if the time line still cannot fit without overlap.
+Set either format to an empty string to hide that line, or set `enabled = false` to hide the clock and host name. Existing corner positions and `above-panel` remain accepted. Component layout settings take precedence over the matching legacy position/visibility setting. Optional components stack inward when they collide and are hidden if they cannot fit; the login card has priority. On narrow displays the time size is capped at 56 logical pixels.
 
 ## Full example
 

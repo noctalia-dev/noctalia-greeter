@@ -228,6 +228,8 @@ namespace power {
 
   } // namespace
 
+  bool suspend() { return runSyncedOrFallback("suspend", {{"systemctl", "suspend"}, {"loginctl", "suspend"}}); }
+
   bool powerOff() {
     return runSyncedOrFallback(
         "shutdown",

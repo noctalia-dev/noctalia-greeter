@@ -19,6 +19,12 @@ GreeterWindow::GreeterWindow(WaylandClient& client, GlSharedContext&, RenderCont
     if (m_sceneReady)
       m_greeterSurface.prepareFrame(width(), height(), needsLayout);
   });
+  setConfigureCallback([this](std::uint32_t, std::uint32_t) {
+    // A resize must reflow the scene as well as resize its render target.
+    // Queue the layout until configure handling is complete.
+    m_forceRender = true;
+    Surface::requestLayout();
+  });
   setScaleChangedCallback([this](float scale) { m_client.setOutputPreferredScale(m_boundOutput, scale); });
 }
 

@@ -4,6 +4,7 @@
 #include "greeter/appearance_sync.h"
 #include "greeter/greeter_config_store.h"
 
+#include <algorithm>
 #include <cerrno>
 #include <cmath>
 #include <cstdio>
@@ -52,7 +53,8 @@ namespace {
         || key == "keyboard"
         || key == "auth"
         || key == "idle"
-        || key == "clock";
+        || key == "clock"
+        || key == "layout";
   }
 
   [[nodiscard]] bool isKnownSessionKey(std::string_view key) {
@@ -207,6 +209,70 @@ namespace {
     kLog.warn("{}: unrecognized key '{}.{}' (ignored)", path.string(), section, key);
   }
 
+  void layoutDiagnostic(const std::filesystem::path& path, const toml::node& node, std::string message) {
+    if (std::ranges::none_of(g_diagnostics, [&](const auto& d) { return d.path == path && d.message == message; })) {
+      g_diagnostics.push_back({path, node.source().begin.line, node.source().begin.column, std::move(message)});
+      kLog.warn("{}: {}", path.string(), g_diagnostics.back().message);
+    }
+  }
+  greeter::GreeterLayoutConfig parseLayout(const toml::table& table, const std::filesystem::path& path) {
+    greeter::GreeterLayoutConfig result;
+    for (const auto& [key, node] : table) {
+      if (key.str() == "login_mode") {
+        const auto value = node.value<std::string>();
+        if (value && *value == "full")
+          result.loginPresentation = greeter::LoginPresentation::Full;
+        else if (value && *value == "minimal")
+          result.loginPresentation = greeter::LoginPresentation::Minimal;
+        else if (!value || *value != "auto")
+          layoutDiagnostic(path, node, "layout.login_mode must be auto, full, or minimal");
+        continue;
+      }
+      const auto id = std::ranges::find(greeter::kGreeterComponentIds, key.str());
+      if (id == greeter::kGreeterComponentIds.end() || !node.is_table()) {
+        layoutDiagnostic(path, node, "unknown or invalid layout component: " + std::string(key.str()));
+        continue;
+      }
+      const auto index = static_cast<unsigned>(id - greeter::kGreeterComponentIds.begin());
+      auto& placement = result.components[index];
+      for (const auto& [field, value] : *node.as_table()) {
+        const auto name = field.str();
+        const auto invalid = [&] {
+          layoutDiagnostic(path, value, "invalid layout." + std::string(key.str()) + "." + std::string(name));
+        };
+        if (name == "visible") {
+          if (const auto visible = value.value<bool>(); visible && (index != 0 || *visible))
+            placement.visible = *visible;
+          else
+            invalid();
+        } else if (name == "anchor") {
+          if (const auto anchor = value.value<std::string>(); anchor && greeter::validLayoutAnchor(*anchor))
+            placement.anchor = *anchor;
+          else
+            invalid();
+        } else if (name == "output") {
+          if (const auto output = value.value<std::string>();
+              index != 0 && output && !output->empty() && output->size() <= 512)
+            placement.output = *output;
+          else
+            invalid();
+        } else if (name == "x" || name == "y" || name == "width") {
+          const auto number = value.value<double>();
+          if (!number
+              || !std::isfinite(*number)
+              || (name == "width" ? (*number < 32 || *number > 1600) : std::abs(*number) > 8192)) {
+            invalid();
+            continue;
+          }
+          auto& target = name == "x" ? placement.x : name == "y" ? placement.y : placement.width;
+          target = static_cast<float>(*number);
+        } else
+          invalid();
+      }
+    }
+    return result;
+  }
+
   [[nodiscard]] greeter::config::GreeterConfigFile
   parseConfig(const toml::table& root, const std::filesystem::path& path) {
     greeter::config::GreeterConfigFile config;
@@ -227,6 +293,10 @@ namespace {
       }
 
       const toml::table& section = *node.as_table();
+      if (keyView == "layout") {
+        config.layout = parseLayout(section, path);
+        continue;
+      }
       for (const auto& [entryKey, entryNode] : section) {
         const auto entryView = entryKey.str();
         if (keyView == "session") {
@@ -559,6 +629,31 @@ namespace {
 
   [[nodiscard]] toml::table buildTomlTable(const greeter::config::GreeterConfigFile& config) {
     toml::table root;
+    toml::table layout;
+    if (config.layout.loginPresentation != greeter::LoginPresentation::Auto)
+      layout.insert(
+          "login_mode", config.layout.loginPresentation == greeter::LoginPresentation::Full ? "full" : "minimal"
+      );
+    for (unsigned i = 0; i < greeter::kGreeterComponentIds.size(); i++) {
+      const auto& p = config.layout.components[i];
+      toml::table component;
+      if (p.visible)
+        component.insert("visible", *p.visible);
+      if (p.anchor)
+        component.insert("anchor", *p.anchor);
+      if (p.output)
+        component.insert("output", *p.output);
+      if (p.x)
+        component.insert("x", static_cast<double>(*p.x));
+      if (p.y)
+        component.insert("y", static_cast<double>(*p.y));
+      if (p.width)
+        component.insert("width", static_cast<double>(*p.width));
+      if (!component.empty())
+        layout.insert(greeter::kGreeterComponentIds[i], std::move(component));
+    }
+    if (!layout.empty())
+      root.insert("layout", std::move(layout));
 
     toml::table session;
     insertString(

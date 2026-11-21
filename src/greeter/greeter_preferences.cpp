@@ -397,12 +397,37 @@ namespace greeter {
     return config::writeSync(syncPath, sync);
   }
 
+  GreeterLayoutConfig effectiveGreeterLayout(const GreeterPreferences& prefs) {
+    auto layout = prefs.layout;
+    auto& clock = layout.components[1];
+    if (!clock.visible)
+      clock.visible = prefs.clockEnabled;
+    if (!clock.anchor && prefs.clockPosition != "center-left")
+      clock.anchor = prefs.clockPosition;
+    auto& brand = layout.components[2];
+    if (!brand.visible)
+      brand.visible = !prefs.hideLogo;
+    const auto mapCorner = [](ComponentPlacement& part, const std::optional<std::string>& legacy) {
+      if (!legacy)
+        return;
+      if (*legacy == "hidden") {
+        if (!part.visible)
+          part.visible = false;
+      } else if (!part.anchor && validLayoutAnchor(*legacy))
+        part.anchor = *legacy;
+    };
+    mapCorner(layout.components[3], prefs.powerButtonsPosition);
+    mapCorner(layout.components[4], prefs.schemeSelectorPosition);
+    return layout;
+  }
+
   GreeterPreferences loadGreeterPreferences() {
     migrateLegacyRuntimeKeysToSync();
     const config::GreeterConfigFile file = config::loadConfig(greeterConfPath());
     const config::GreeterSyncFile sync = config::loadSync(greeterSyncPath());
 
     GreeterPreferences prefs;
+    prefs.layout = file.layout;
     prefs.defaultSession = file.sessionDefault;
     prefs.defaultUser = file.userDefault;
     prefs.session = sync.sessionLast;
@@ -426,13 +451,13 @@ namespace greeter {
       prefs.clockEnabled = *file.clockEnabled;
     }
     if (file.clockPosition.has_value()) {
-      constexpr std::array<std::string_view, 7> kClockPositions{"above-panel", "top-left",    "top-center",
-                                                                "top-right",   "bottom-left", "bottom-center",
-                                                                "bottom-right"};
+      constexpr std::array<std::string_view, 8> kClockPositions{"above-panel",  "top-left",    "top-center",
+                                                                "top-right",    "bottom-left", "bottom-center",
+                                                                "bottom-right", "center-left"};
       if (std::ranges::find(kClockPositions, *file.clockPosition) != kClockPositions.end()) {
         prefs.clockPosition = *file.clockPosition;
       } else {
-        kLog.warn("invalid clock.position '{}' (using above-panel)", *file.clockPosition);
+        kLog.warn("invalid clock.position '{}' (using center-left)", *file.clockPosition);
       }
     }
     if (file.clockTimeFormat.has_value()) {

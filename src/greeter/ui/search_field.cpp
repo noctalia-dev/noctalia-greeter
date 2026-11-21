@@ -77,10 +77,10 @@ void SearchField::setActiveChrome(bool active) {
     m_divider->setVisible(!active);
   }
   if (m_icon != nullptr) {
-    m_icon->setColor(active ? colorForRole(ColorRole::OnSecondary) : colorForRole(ColorRole::OnSurfaceVariant));
+    m_icon->setColor(colorForRole(ColorRole::OnSurfaceVariant));
   }
   if (m_input != nullptr) {
-    m_input->setEmbeddedOnSolidPrimary(active);
+    m_input->setEmbeddedOnSolidPrimary(false);
   }
   markLayoutDirty();
 }
