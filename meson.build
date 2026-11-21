@@ -111,6 +111,7 @@ _greeter_sources = files(
   'src/greeter/privileged_state_paths.cpp',
   'src/greeter/greeter_config_io.cpp',
   'src/greeter/greeter_layout.cpp',
+  'src/greeter/widgets/widget_model.cpp',
   'src/greeter/greeter_preferences.cpp',
   'src/greeter/greeter_sessions.cpp',
   'src/greeter/greeter_model.cpp',
@@ -567,6 +568,15 @@ greeter_layout_test = executable(
   build_by_default: false,
 )
 test('greeter-layout', greeter_layout_test)
+
+widget_model_test = executable(
+  'widget-model-test',
+  sources: files('tests/widget_model_test.cpp', 'src/greeter/widgets/widget_model.cpp'),
+  include_directories: include_directories('src'),
+  cpp_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow'],
+  build_by_default: false,
+)
+test('widget-model', widget_model_test)
 
 greeter_auth_controller_test = executable(
   'greeter-auth-controller-test',
