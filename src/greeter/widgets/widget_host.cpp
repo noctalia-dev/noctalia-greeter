@@ -1,10 +1,12 @@
 #include "greeter/widgets/widget_host.h"
 
 #include "core/ui_phase.h"
+#include "greeter/widgets/digital_clock_widget.h"
 #include "greeter/widgets/label_widget.h"
 #include "greeter/widgets/widget_settings.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <stdexcept>
@@ -39,7 +41,7 @@ namespace greeter {
     issues.insert(issues.end(), settingIssues.begin(), settingIssues.end());
     if (!issues.empty())
       return std::unexpected(std::move(issues));
-    if (instance.type != "label")
+    if (instance.type != "label" && instance.type != "clock")
       return std::unexpected(
           std::vector<WidgetModelIssue>{
               {"widgets.widget." + instance.id + ".type", "presentation is not implemented for this widget type"}
@@ -50,14 +52,32 @@ namespace greeter {
     for (const auto& field : *widgetSettingDefinitions(instance.type))
       settings.try_emplace(std::string(field.key), field.defaultValue);
     const auto text = [&](const char* key) -> const std::string& { return std::get<std::string>(settings.at(key)); };
-    auto content = std::make_unique<LabelWidget>(LabelWidget::Options{
-        .title = text("title"),
-        .description = text("description"),
-        .fontFamily = text("font_family"),
-        .color = colorSpec(text("color")),
-        .opacity = number(settings.at("opacity")),
-        .shadow = std::get<bool>(settings.at("shadow")),
-    });
+    std::unique_ptr<WidgetContent> content;
+    if (instance.type == "clock") {
+      if (text("clock_style") != "digital")
+        return std::unexpected(
+            std::vector<WidgetModelIssue>{
+                {"widgets.widget." + instance.id + ".settings.clock_style", "analog presentation is not implemented"}
+            }
+        );
+      content = std::make_unique<DigitalClockWidget>(DigitalClockWidget::Options{
+          .format = text("format"),
+          .timezone = text("timezone"),
+          .fontFamily = text("font_family"),
+          .color = colorSpec(text("color")),
+          .shadow = std::get<bool>(settings.at("shadow")),
+          .centerText = std::get<bool>(settings.at("center_text")),
+      });
+    } else {
+      content = std::make_unique<LabelWidget>(LabelWidget::Options{
+          .title = text("title"),
+          .description = text("description"),
+          .fontFamily = text("font_family"),
+          .color = colorSpec(text("color")),
+          .opacity = number(settings.at("opacity")),
+          .shadow = std::get<bool>(settings.at("shadow")),
+      });
+    }
     return std::unique_ptr<WidgetHost>(new WidgetHost(
         instance, std::move(content), std::get<bool>(settings.at("background")),
         scaleAlpha(colorSpec(text("background_color")), number(settings.at("background_opacity"))),
@@ -97,9 +117,44 @@ namespace greeter {
     const float width = m_boxWidth > 0.0F ? m_boxWidth : m_content->width() + 2.0F * m_padding;
     const float height = m_boxHeight > 0.0F ? m_boxHeight : m_content->height() + 2.0F * m_padding;
     m_content->setPosition(
-        std::round((width - m_content->width()) * 0.5F), std::round((height - m_content->height()) * 0.5F)
+        m_content->alignsToStart() ? m_padding : std::round((width - m_content->width()) * 0.5F),
+        std::round((height - m_content->height()) * 0.5F)
     );
     setSize(width, height);
+  }
+
+  void WidgetHost::refreshTime() {
+    if (m_content->updateTime(std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now())))
+      markLayoutDirty();
+  }
+
+  void WidgetHost::setActive(bool active) {
+    active = active && visible();
+    if (m_active == active)
+      return;
+    m_active = active;
+    m_tickTimer.stop();
+    if (m_active) {
+      scheduleTick();
+      refreshTime();
+    }
+  }
+
+  void WidgetHost::scheduleTick() {
+    const auto interval = m_content->tickInterval();
+    if (!interval)
+      return;
+    const auto now = std::chrono::system_clock::now();
+    const auto whole = std::chrono::floor<std::chrono::seconds>(now);
+    const auto next = whole - whole.time_since_epoch() % *interval + *interval;
+    m_tickTimer.start(std::chrono::ceil<std::chrono::milliseconds>(next - now), [this] {
+      if (!visible()) {
+        m_active = false;
+        return;
+      }
+      scheduleTick();
+      refreshTime();
+    });
   }
 
 } // namespace greeter

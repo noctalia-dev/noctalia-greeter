@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/timer_manager.h"
 #include "greeter/widgets/widget_model.h"
 #include "ui/controls/box.h"
 
@@ -19,17 +20,25 @@ namespace greeter {
     static std::expected<std::unique_ptr<WidgetHost>, std::vector<WidgetModelIssue>>
     create(const WidgetInstance& instance);
 
+    // The view owner activates mounted, effectively visible instances and deactivates
+    // them before hiding/detaching. Destruction cancels pending ticks automatically.
+    void setActive(bool active);
+
   private:
     WidgetHost(
         const WidgetInstance& instance, std::unique_ptr<WidgetContent> content, bool background,
         const ColorSpec& backgroundColor, float radius, float padding
     );
     void doLayout(Renderer& renderer) override;
+    void scheduleTick();
+    void refreshTime();
 
     WidgetContent* m_content;
     float m_boxWidth;
     float m_boxHeight;
     float m_padding;
+    bool m_active = false;
+    Timer m_tickTimer;
   };
 
 } // namespace greeter
