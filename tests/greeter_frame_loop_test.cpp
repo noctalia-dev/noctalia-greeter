@@ -278,11 +278,10 @@ namespace {
     // The same menu must be reachable without a pointer, with a deliberate return target.
     require(power->inputArea()->focused(), "closing power menu did not restore entry focus");
     surface.onKeyEvent(XKB_KEY_Return, 0, 0, true, false);
-    bool cancelVisible = false;
+    require(restart->visible(), "keyboard activation did not reopen power menu");
     for (const auto& child : surface.sceneRoot()->children())
-      if (auto* b = dynamic_cast<Button*>(child.get()); b && b->visible() && b->label()->text() == "Cancel")
-        cancelVisible = true;
-    require(cancelVisible, "keyboard activation did not reopen power menu");
+      if (auto* b = dynamic_cast<Button*>(child.get()); b && b->label()->text() == "Cancel")
+        require(!b->visible(), "main power menu still contains Cancel");
     surface.onKeyEvent(XKB_KEY_Escape, 0, 0, true, false);
     std::puts("pointer: power opens on first click, captures typing and requires confirmation");
   }
@@ -340,7 +339,6 @@ namespace {
     require(restart, "restart entry missing after resize");
     surface.onKeyEvent(XKB_KEY_Escape, 0, 0, true, false);
     surface.onKeyEvent(XKB_KEY_Return, 0, 0, true, false);
-    surface.onKeyEvent(XKB_KEY_Tab, 0, 0, true, false);
     surface.onKeyEvent(XKB_KEY_Down, 0, 0, true, false);
     require(restart->inputArea()->focused(), "power menu keyboard navigation did not focus restart");
     surface.onKeyEvent(XKB_KEY_Return, 0, 0, true, false);

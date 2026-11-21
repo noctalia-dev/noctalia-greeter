@@ -1084,8 +1084,12 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
   if (!m_isKeyboardOwner)
     return;
   if (m_powerMenuOpen && m_focusIndex < 0) {
-    m_inputDispatcher.setFocus(m_powerCancel->inputArea());
-    syncFocusIndexFromFocused();
+    if (m_pendingPowerAction) {
+      m_inputDispatcher.setFocus(m_powerCancel->inputArea());
+      syncFocusIndexFromFocused();
+    } else {
+      setFocusIndex(0);
+    }
   }
   if (!m_initialFocusDone && !m_focusRing.empty()) {
     setFocusIndex(defaultFocusIndex());
@@ -1109,8 +1113,6 @@ void GreeterSurface::togglePowerMenu() {
   m_pendingPowerAction = 0;
   m_inputDispatcher.setFocus(nullptr);
   requestLayout();
-  if (m_powerCancel->visible())
-    m_inputDispatcher.setFocus(m_powerCancel->inputArea());
 }
 void GreeterSurface::closePowerMenu() {
   m_powerMenuOpen = false;
@@ -1147,7 +1149,6 @@ void GreeterSurface::layoutPowerMenu(float sw, float sh) {
       actions.push_back(m_shutdownButton);
     if (m_firmwareButton)
       actions.push_back(m_firmwareButton);
-    actions.push_back(m_powerCancel);
   }
   const float gap = 4;
   const float rowH = std::min(38.0F, std::max(24.0F, (sh - 100) / static_cast<float>(actions.size()) - gap));
@@ -1767,17 +1768,18 @@ void GreeterSurface::layoutPanelSessionSelector(float x, float y, float w, float
   m_sessionCaptionLabel->setColor(colorForRole(ColorRole::OnSurfaceVariant));
   m_sessionCaptionLabel->setMaxWidth(w * .3F);
   m_sessionCaptionLabel->measure(*m_renderer);
-  m_sessionCaptionLabel->setPosition(x, y + (h - m_sessionCaptionLabel->height()) / 2);
+  const float padding = Style::spaceMd;
+  m_sessionCaptionLabel->setPosition(x + padding, y + (h - m_sessionCaptionLabel->height()) / 2);
   m_sessionSelectGlyph->setVisible(true);
   m_sessionSelectGlyph->setGlyphSize(16);
   m_sessionSelectGlyph->measure(*m_renderer);
-  m_sessionSelectGlyph->setPosition(x + w - 16, y + (h - m_sessionSelectGlyph->height()) / 2);
+  m_sessionSelectGlyph->setPosition(x + w - padding - 16, y + (h - m_sessionSelectGlyph->height()) / 2);
   m_sessionSelectLabel->setVisible(true);
   m_sessionSelectLabel->setFontSize(13);
-  m_sessionSelectLabel->setMaxWidth(std::max(1.0F, w * .65F - 28));
+  m_sessionSelectLabel->setMaxWidth(std::max(1.0F, w * .65F - 28 - 2 * padding));
   m_sessionSelectLabel->measure(*m_renderer);
   m_sessionSelectLabel->setPosition(
-      x + w - 28 - m_sessionSelectLabel->width(), y + (h - m_sessionSelectLabel->height()) / 2
+      x + w - padding - 28 - m_sessionSelectLabel->width(), y + (h - m_sessionSelectLabel->height()) / 2
   );
   m_sessionSelectArea->setVisible(true);
   m_sessionSelectArea->setPosition(x, y);
@@ -2598,7 +2600,7 @@ void GreeterSurface::buildMenu(
   const std::size_t count = names.size();
   if (anchor == nullptr || count == 0)
     return;
-  constexpr float headerH = 38;
+  const float headerH = anchor == m_schemeSelectBox ? 38 : 0;
   const float border = Style::borderWidth;
   const float rowH = Style::controlHeightSm;
   std::vector<ContextMenuControlEntry> entries;
@@ -2660,15 +2662,17 @@ void GreeterSurface::buildMenu(
         *panel, {.contentWidth = bounds.width, .contentHeight = bounds.height}, ShadowStyle{.alpha = 0.35F},
         Style::scaledRadiusLg()
     );
-  auto title = std::make_unique<Label>();
-  title->setText(anchor == m_schemeSelectBox ? "Appearance" : "Session");
-  title->setFontSize(14);
-  title->setFontWeight(FontWeight::Medium);
-  title->setColor(colorForRole(ColorRole::OnSurface));
-  title->setMaxWidth(bounds.width - 32);
-  title->measure(*m_renderer);
-  title->setPosition(16, 12);
-  panel->addChild(std::move(title));
+  if (headerH > 0) {
+    auto title = std::make_unique<Label>();
+    title->setText("Appearance");
+    title->setFontSize(14);
+    title->setFontWeight(FontWeight::Medium);
+    title->setColor(colorForRole(ColorRole::OnSurface));
+    title->setMaxWidth(bounds.width - 32);
+    title->measure(*m_renderer);
+    title->setPosition(16, 12);
+    panel->addChild(std::move(title));
+  }
   auto control = std::make_unique<ContextMenuControl>();
   controlOut = control.get();
   control->setEntries(
