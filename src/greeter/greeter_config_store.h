@@ -83,6 +83,7 @@ namespace greeter::config {
     std::optional<bool> keyboardNumlock;
 
     std::optional<bool> authAllowEmptyPassword;
+    std::optional<bool> authAutoStartPam;
     std::optional<int> authRequestTimeoutSec;
 
     std::optional<bool> clockEnabled;

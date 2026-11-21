@@ -44,6 +44,7 @@ public:
   [[nodiscard]] std::uint32_t height() const noexcept { return m_height; }
   [[nodiscard]] wl_surface* wlSurface() const noexcept { return m_wlSurface; }
   [[nodiscard]] RenderTarget& renderTarget() noexcept { return m_renderTarget; }
+  [[nodiscard]] const GreeterSurface& greeterSurface() const noexcept { return m_greeterSurface; }
 
   static void handleXdgSurfaceConfigure(void* data, xdg_surface* surface, std::uint32_t serial);
   static void handleToplevelConfigure(

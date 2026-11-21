@@ -107,7 +107,7 @@ namespace {
   }
 
   [[nodiscard]] bool isKnownAuthKey(std::string_view key) {
-    return key == "allow_empty_password" || key == "request_timeout";
+    return key == "auto_start_pam" || key == "allow_empty_password" || key == "request_timeout";
   }
 
   [[nodiscard]] std::optional<std::string> stringValue(const toml::node& node) {
@@ -457,7 +457,13 @@ namespace {
             warnUnknownSectionKey(path, keyView, entryView);
             continue;
           }
-          if (entryView == "allow_empty_password") {
+          if (entryView == "auto_start_pam") {
+            if (const auto value = entryNode.value<bool>()) {
+              config.authAutoStartPam = *value;
+            } else {
+              kLog.warn("{}: invalid auth.auto_start_pam value", path.string());
+            }
+          } else if (entryView == "allow_empty_password") {
             if (const auto value = entryNode.value<bool>()) {
               config.authAllowEmptyPassword = *value;
             } else {
@@ -756,8 +762,13 @@ namespace {
       root.insert("keyboard", std::move(keyboard));
     }
 
-    if (config.authAllowEmptyPassword.has_value() || config.authRequestTimeoutSec.has_value()) {
+    if (config.authAutoStartPam.has_value()
+        || config.authAllowEmptyPassword.has_value()
+        || config.authRequestTimeoutSec.has_value()) {
       toml::table auth;
+      if (config.authAutoStartPam.has_value()) {
+        auth.insert_or_assign("auto_start_pam", *config.authAutoStartPam);
+      }
       if (config.authAllowEmptyPassword.has_value()) {
         auth.insert_or_assign("allow_empty_password", *config.authAllowEmptyPassword);
       }
@@ -1093,7 +1104,8 @@ namespace greeter::config {
     out << "# [output] name/use_synced_settings/layout/scale/scales/width/height/refresh_rate/transforms, "
            "[idle] timeout, [cursor] theme/size/path\n";
     out << "# [keyboard] layout/variant/options/numlock, [pointer] accel_profile/accel_speed\n";
-    out << "# [auth] allow_empty_password (bool), request_timeout (0-3600 seconds; default 60, 0 disables)\n";
+    out << "# [auth] auto_start_pam (bool), allow_empty_password (bool), request_timeout (0-3600 "
+           "seconds; default 60, 0 disables)\n";
     out << "# [clock] enabled/position/time_format/date_format/time_font_size/date_font_size\n";
     out << '\n';
     out << formatToml(table);
