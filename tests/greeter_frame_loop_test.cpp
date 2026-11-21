@@ -10,6 +10,7 @@
 #include "render/text/glyph_registry.h"
 #include "ui/controls/box.h"
 #include "ui/controls/button.h"
+#include "ui/controls/context_menu.h"
 #include "ui/controls/glyph.h"
 #include "ui/controls/input.h"
 #include "ui/controls/label.h"
@@ -303,6 +304,16 @@ namespace {
       );
       Node::transformedBounds(panel, l, t, r, b);
       require(l >= 0 && t >= 0 && r <= width + 1 && b <= height + 1, "resized power menu escaped the window");
+      if (width >= 1000 && height >= 600) {
+        for (const auto& child : surface.sceneRoot()->children()) {
+          auto* trigger = dynamic_cast<Button*>(child.get());
+          if (!trigger || !trigger->visible() || trigger->label()->text() != "Power")
+            continue;
+          float tl, tt, tr, tb;
+          Node::transformedBounds(trigger, tl, tt, tr, tb);
+          require(std::abs(r - tr) < 1 && std::abs(b - (tt - 10)) < 1, "power popup is not attached above its trigger");
+        }
+      }
       for (const auto& child : surface.sceneRoot()->children()) {
         auto* button = dynamic_cast<Button*>(child.get());
         if (!button || !button->visible() || button->zIndex() != 102)
@@ -373,9 +384,31 @@ namespace {
     require(clicks == 0, "release activated a removed menu row");
   }
 
-  void testMenuScrollbar(WaylandClient& client, GreeterSurface& surface) {
+  void testMenuScrollbar(WaylandClient& client, GreeterSurface& surface, GreeterModel& model) {
     surface.onKeyEvent(XKB_KEY_F7, 0, 0, true, false);
     dispatchFor(client, 100ms);
+    Box* panel = nullptr;
+    Label* anchorLabel = nullptr;
+    for (const auto& child : surface.sceneRoot()->children()) {
+      if (auto* box = dynamic_cast<Box*>(child.get()); box && box->visible() && box->zIndex() == 60)
+        panel = box;
+      if (auto* label = dynamic_cast<Label*>(child.get()); label && label->visible() && label->text() == "Appearance")
+        anchorLabel = label;
+    }
+    require(panel && anchorLabel, "appearance popup or trigger missing");
+    bool matchedAnchor = false;
+    for (const auto& child : surface.sceneRoot()->children()) {
+      auto* anchor = dynamic_cast<Box*>(child.get());
+      if (!anchor || !anchor->visible() || anchor->height() != 36 || anchor->x() + 36 != anchorLabel->x())
+        continue;
+      matchedAnchor = true;
+      require(
+          std::abs(panel->x() + panel->width() - anchor->x() - anchor->width()) < 1
+              && std::abs(panel->y() + panel->height() - (anchor->y() - 10)) < 1,
+          "appearance popup is not attached above its trigger"
+      );
+    }
+    require(matchedAnchor, "appearance trigger geometry missing");
     Scrollbar* scrollbar = nullptr;
     for (const auto& child : surface.sceneRoot()->children()) {
       if (auto* bar = dynamic_cast<Scrollbar*>(child.get()); bar != nullptr && bar->visible()) {
@@ -412,6 +445,38 @@ namespace {
     surface.onKeyEvent(XKB_KEY_Escape, 0, 0, true, false);
     surface.onPointerMotion(x, y);
     surface.onPointerEvent(x, y, BTN_LEFT, false);
+
+    // Activate a shared menu row with the pointer. Selection must finish after
+    // dispatch, safely close the row's owning control, and return input focus.
+    surface.onKeyEvent(XKB_KEY_F7, 0, 0, true, false);
+    dispatchFor(client, 100ms);
+    ContextMenuControl* menu = nullptr;
+    for (const auto& child : surface.sceneRoot()->children()) {
+      auto* popup = dynamic_cast<Box*>(child.get());
+      if (!popup || !popup->visible() || popup->zIndex() != 60)
+        continue;
+      for (const auto& content : popup->children())
+        if (auto* control = dynamic_cast<ContextMenuControl*>(content.get()))
+          menu = control;
+    }
+    require(menu && menu->entryCount() > 1, "shared appearance menu missing rows");
+    const auto current = menu->highlightedIndex(), next = (current + 1) % menu->entryCount();
+    const auto expected = model.state().selectedScheme - current + next;
+    float ml, mt, mr, mb;
+    Node::transformedBounds(menu, ml, mt, mr, mb);
+    const float rowX = (ml + mr) / 2;
+    const float rowY = mt + (menu->rowTop(next) + menu->rowBottom(next)) / 2;
+    surface.onPointerMotion(rowX, rowY);
+    surface.onPointerEvent(rowX, rowY, BTN_LEFT, true);
+    surface.onPointerEvent(rowX, rowY, BTN_LEFT, false);
+    dispatchFor(client, 100ms);
+    require(model.state().selectedScheme == expected, "pointer activation selected the wrong appearance");
+    for (const auto& child : surface.sceneRoot()->children()) {
+      if (auto* popup = dynamic_cast<Box*>(child.get()); popup && popup->zIndex() == 60)
+        require(!popup->visible(), "appearance menu did not close after pointer activation");
+      if (auto* input = dynamic_cast<Input*>(child.get()); input && input->visible())
+        require(input->inputArea()->focused(), "appearance selection did not return credential focus");
+    }
     std::puts("pointer: removed rows release capture and menu scrollbar dragging survives relayout");
   }
 
@@ -517,7 +582,7 @@ namespace {
     testAccountSwitchLayout(window, surface, model);
     testPowerButtonClicks(client, window, surface);
     testPowerMenuResize(client, window, surface);
-    testMenuScrollbar(client, surface);
+    testMenuScrollbar(client, surface, model);
     if (!model.sessions().empty()) {
       greeter::setCliDefaultSession(model.sessions().front().name);
       GreeterModel compactModel;

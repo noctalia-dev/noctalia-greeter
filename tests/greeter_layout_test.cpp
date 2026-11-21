@@ -34,6 +34,20 @@ int main() {
   std::filesystem::path directory;
   try {
     greeter::GreeterLayoutConfig defaults;
+    const greeter::LayoutRect bottomTrigger{1150, 650, 88, 36, true};
+    auto popup = greeter::placeGreeterPopup(bottomTrigger, 280, 260, 1280, 720, true);
+    require(
+        popup.x + popup.width == bottomTrigger.x + bottomTrigger.width, "popup detached horizontally from its trigger"
+    );
+    require(popup.y + popup.height == bottomTrigger.y - 10, "footer popup did not open above trigger");
+    const greeter::LayoutRect topTrigger{1150, 30, 88, 36, true};
+    popup = greeter::placeGreeterPopup(topTrigger, 280, 260, 1280, 720, true);
+    require(popup.y == topTrigger.y + topTrigger.height + 10, "popup did not flip below top trigger");
+    popup = greeter::placeGreeterPopup({0, 0, 88, 36, true}, 5000, 5000, 320, 520, false);
+    require(
+        popup.x >= 12 && popup.y >= 12 && popup.x + popup.width <= 308 && popup.y + popup.height <= 508,
+        "oversized popup escaped viewport padding"
+    );
     for (auto [w, h] : {std::pair{1706.F, 960.F}, {1280.F, 720.F}, {720.F, 1280.F}, {640.F, 520.F}, {320.F, 520.F}}) {
       for (bool minimal : {false, true}) {
         auto layout = greeter::resolveGreeterLayout(defaults, w, h, minimal ? 270 : 468, minimal, "DP-1", "monitor-id");

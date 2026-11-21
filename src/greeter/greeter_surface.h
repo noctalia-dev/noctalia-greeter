@@ -25,6 +25,7 @@
 
 class Box;
 class Button;
+class ContextMenuControl;
 class Glyph;
 class GreeterWindow;
 class Input;
@@ -123,8 +124,7 @@ private:
   void applyMenuHighlight();
   void buildMenu(
       const std::vector<std::string>& names, std::size_t selected, Box* anchor, bool upward, bool rightAlign, int zBase,
-      Box*& panelOut, std::vector<Box*>& rows, std::vector<Label*>& labels, std::vector<InputArea*>& areas,
-      MenuScroll& scroll, std::function<void(std::size_t)> onSelect
+      Box*& panelOut, ContextMenuControl*& controlOut, MenuScroll& scroll, std::function<void(std::size_t)> onSelect
   );
   void rebuildUserMenu();
   void refreshUserMenuRows();
@@ -179,6 +179,7 @@ private:
   Button* m_powerConfirm = nullptr;
   Box* m_powerPanel = nullptr;
   Label* m_powerTitle = nullptr;
+  RectNode* m_powerShadow = nullptr;
   bool m_powerMenuOpen = false;
   int m_pendingPowerAction = 0;
   WallpaperNode* m_wallpaper = nullptr;
@@ -266,13 +267,10 @@ private:
   std::vector<Label*> m_userMenuLabels;
   std::vector<InputArea*> m_userMenuAreas;
   std::vector<Box*> m_userMenuRows;
-  std::vector<Label*> m_sessionMenuLabels;
-  std::vector<InputArea*> m_sessionMenuAreas;
-  std::vector<Box*> m_sessionMenuRows;
+  ContextMenuControl* m_sessionMenuControl = nullptr;
   Box* m_schemeMenuPanel = nullptr;
-  std::vector<Label*> m_schemeMenuLabels;
-  std::vector<InputArea*> m_schemeMenuAreas;
-  std::vector<Box*> m_schemeMenuRows;
+  ContextMenuControl* m_schemeMenuControl = nullptr;
+  std::function<void()> m_pendingMenuActivation;
   std::optional<GreeterSyncedAppearance> m_syncedAppearance;
   std::optional<GreeterWallpaperAppearance> m_wallpaperAppearance;
 

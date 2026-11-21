@@ -37,6 +37,25 @@ namespace greeter {
         && a.y < b.y + b.height + gap
         && a.y + a.height + gap > b.y;
   }
+  LayoutRect placeGreeterPopup(
+      const LayoutRect& anchor, float popupWidth, float popupHeight, float width, float height, bool upward,
+      bool rightAlign
+  ) {
+    constexpr float margin = 12, gap = 10;
+    const float w = std::clamp(popupWidth, 1.0F, std::max(1.0F, width - 2 * margin));
+    const float h = std::clamp(popupHeight, 1.0F, std::max(1.0F, height - 2 * margin));
+    const float above = anchor.y - gap - margin;
+    const float below = height - margin - anchor.y - anchor.height - gap;
+    if (h > (upward ? above : below) && (upward ? below : above) > (upward ? above : below))
+      upward = !upward;
+    return {
+        std::clamp(rightAlign ? anchor.x + anchor.width - w : anchor.x, margin, std::max(margin, width - w - margin)),
+        std::clamp(
+            upward ? anchor.y - gap - h : anchor.y + anchor.height + gap, margin, std::max(margin, height - h - margin)
+        ),
+        w, h, true
+    };
+  }
   GreeterLayout resolveGreeterLayout(
       const GreeterLayoutConfig& config, float width, float height, float panelHeight, bool minimal,
       std::string_view connector, std::string_view stableIdentifier, float clockHeight

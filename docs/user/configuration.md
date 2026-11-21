@@ -219,6 +219,8 @@ Explicit component fields override corresponding `[clock]` and `[appearance]` ke
 
 Placements use output-local logical coordinates. At desktop sizes the card and clock use matching outer gutters (6% of width, bounded to 64–128 logical pixels). Branding and footer use 48-pixel gutters. Widths below 1000 or heights below 600 use the narrow composition with smaller margins. Login keeps priority, followed by clock, branding, Power, Appearance, and keyboard; colliding optional components move inward or disappear. Layout reserves space for configuration errors. Very small views uniformly scale a minimum 320×520 logical canvas, including hit testing, so credential controls stay reachable. Each view calculates its own geometry; fractional/mixed output scaling does not mutate global UI metrics. Configured fonts, palettes, and wallpapers still use the existing appearance rules.
 
+Power and Appearance popups align with the right edge of their trigger, separated by 10 logical pixels. Account and session pickers align with the left edge. Popups switch above or below their trigger when space requires it and stay within the view, including when components are moved to the top of the screen.
+
 ## Clock
 
 The clock is enabled by default at the left of the screen, with the date directly below the time. Both use the active palette's `on_surface` color, including when the **Synced** scheme is selected. The date uses medium-weight text and a subtle shadow over wallpapers. Spacing follows the visible text bounds so font line padding does not leave an oversized gap. The host name appears in the login card's subtitle, including with the compact card or when the clock is hidden.

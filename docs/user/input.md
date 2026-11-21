@@ -38,7 +38,7 @@ The greeter works without a mouse.
 | `F7` | Open the color scheme picker |
 | `Ctrl+Alt+F1`–`F12` | Switch to a virtual terminal (TTY) |
 
-The keyboard layout indicator reflects the active compositor keymap; it is read-only. Power opens a keyboard-accessible menu and asks for confirmation before executing an action. **Esc** closes it.
+The keyboard layout indicator reflects the active compositor keymap; it is read-only. Power opens a keyboard-accessible menu and asks for confirmation before executing an action. Confirmation presents Cancel beside the action, with Cancel focused initially. **Esc** closes it.
 
 Opening the account dropdown preserves the selected account and entered password. Clicking outside or pressing `Esc` dismisses it and returns focus to the credential field. Further clicks on empty background leave keyboard focus unchanged.
 
@@ -52,7 +52,8 @@ are blocked until it finishes.
 Long session and color scheme menus stay within the screen and show a scrollbar
 when their entries do not fit. Scroll with the mouse wheel over the menu, drag
 the scrollbar thumb, or click its track. Using `↑` / `↓` automatically scrolls
-the menu to keep the highlighted item visible.
+the menu to keep the highlighted item visible. A checkmark identifies the current
+selection; built-in color schemes also show palette previews.
 
 ---
 

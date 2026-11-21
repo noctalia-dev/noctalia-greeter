@@ -36,6 +36,10 @@ namespace greeter {
 
   bool validLayoutAnchor(std::string_view anchor);
   bool rectanglesOverlap(const LayoutRect& a, const LayoutRect& b, float gap = 8);
+  LayoutRect placeGreeterPopup(
+      const LayoutRect& anchor, float popupWidth, float popupHeight, float width, float height, bool upward,
+      bool rightAlign = true
+  );
   // Required login always stays on every active view. Optional components yield
   // to it and stack inward or disappear if there is no usable space.
   GreeterLayout resolveGreeterLayout(

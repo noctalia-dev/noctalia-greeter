@@ -28,11 +28,13 @@
 #include "time/time_format.h"
 #include "ui/controls/box.h"
 #include "ui/controls/button.h"
+#include "ui/controls/context_menu.h"
 #include "ui/controls/glyph.h"
 #include "ui/controls/input.h"
 #include "ui/controls/label.h"
 #include "ui/controls/scrollbar.h"
 #include "ui/palette.h"
+#include "ui/popup_chrome.h"
 #include "ui/style.h"
 
 #include <algorithm>
@@ -42,6 +44,7 @@
 #include <filesystem>
 #include <linux/input-event-codes.h>
 #include <sstream>
+#include <utility>
 #include <wayland-client.h>
 
 namespace {
@@ -49,26 +52,6 @@ namespace {
   constexpr float kHeaderAvatarBorderScale = 2.0f;
   // Blur taps at quarter resolution; matches the shader's 40-tap cap.
   constexpr float kWallpaperMaxBlurRadius = 40.0f;
-
-  Button::ButtonStateColors
-  makePaletteState(ColorRole bg, std::optional<ColorRole> border, ColorRole label, float alpha = 1.0f) {
-    return Button::ButtonStateColors{
-        colorSpecFromRole(bg, alpha),
-        border.has_value() ? colorSpecFromRole(*border, alpha) : clearColorSpec(),
-        colorSpecFromRole(label, alpha),
-    };
-  }
-
-  Button::ButtonPalette powerButtonPalette(ColorRole hover, ColorRole onHover) {
-    return Button::ButtonPalette{
-        .borderWidth = Style::borderWidth,
-        .normal = makePaletteState(ColorRole::Surface, ColorRole::OutlineVariant, ColorRole::OnSurface, 0.78f),
-        .hover = makePaletteState(hover, std::nullopt, onHover),
-        .pressed = makePaletteState(hover, hover, onHover),
-        .disabled = makePaletteState(ColorRole::Surface, ColorRole::OutlineVariant, ColorRole::OnSurface, 0.40f),
-        .selected = std::nullopt,
-    };
-  }
 
   constexpr std::size_t kUserDropdownMaxVisibleRows = 8;
   constexpr std::size_t kSelectorMenuMaxVisibleRows = 8;
@@ -451,13 +434,13 @@ void GreeterSurface::initialize(RenderContext* context) {
 
   const bool canRebootToFirmware = power::canRebootToFirmwareSetup();
 
-  const auto makePowerButton =
-      [this](std::string_view icon, ColorRole hover, ColorRole onHover, std::function<void()> action) -> Button* {
+  const auto makePowerButton = [this](std::string_view icon, std::function<void()> action) -> Button* {
     auto btn = std::make_unique<Button>();
     btn->setGlyph(icon);
     btn->setGlyphSize(18.0f);
-    btn->setContentAlign(ButtonContentAlign::Center);
-    btn->setCustomPalette(powerButtonPalette(hover, onHover));
+    btn->setContentAlign(ButtonContentAlign::Start);
+    btn->setVariant(ButtonVariant::Ghost);
+    btn->setFontSize(14);
     btn->setOnClick(std::move(action));
     btn->setZIndex(8);
     Button* ptr = btn.get();
@@ -465,15 +448,12 @@ void GreeterSurface::initialize(RenderContext* context) {
     return ptr;
   };
 
-  m_shutdownButton =
-      makePowerButton("power", ColorRole::Error, ColorRole::OnError, [this]() { requestPowerAction(3); });
+  m_shutdownButton = makePowerButton("power", [this]() { requestPowerAction(3); });
   m_shutdownButton->setTooltip("Shut down");
-  m_rebootButton =
-      makePowerButton("reload", ColorRole::Secondary, ColorRole::OnSecondary, [this]() { requestPowerAction(2); });
+  m_rebootButton = makePowerButton("reload", [this]() { requestPowerAction(2); });
   m_rebootButton->setTooltip("Restart");
   if (canRebootToFirmware) {
-    m_firmwareButton =
-        makePowerButton("cpu", ColorRole::Secondary, ColorRole::OnSecondary, [this]() { requestPowerAction(4); });
+    m_firmwareButton = makePowerButton("cpu", [this]() { requestPowerAction(4); });
     m_firmwareButton->setTooltip("Restart to UEFI firmware setup");
   }
 
@@ -556,6 +536,8 @@ void GreeterSurface::initialize(RenderContext* context) {
   m_powerPanel = powerPanel.get();
   powerPanel->setZIndex(100);
   powerPanel->setHitTestVisible(false);
+  m_powerShadow = popup_chrome::addShadow(*powerPanel, {}, ShadowStyle{.alpha = 0.35F}, Style::scaledRadiusLg());
+  m_powerShadow->setHitTestVisible(false);
   m_root.addChild(std::move(powerPanel));
   auto powerTitle = std::make_unique<Label>();
   m_powerTitle = powerTitle.get();
@@ -708,16 +690,11 @@ void GreeterSurface::onPointerLeave() {
 void GreeterSurface::onPointerEvent(float x, float y, std::uint32_t button, bool pressed) {
   const float sceneX = x / m_sceneScale, sceneY = y / m_sceneScale;
   if (m_powerMenuOpen) {
-    bool hit = false;
-    for (Button* b :
-         {m_suspendButton, m_rebootButton, m_shutdownButton, m_firmwareButton, m_powerCancel, m_powerConfirm})
-      if (b
-          && b->visible()
-          && sceneX >= b->x()
-          && sceneX <= b->x() + b->width()
-          && sceneY >= b->y()
-          && sceneY <= b->y() + b->height())
-        hit = true;
+    const bool hit = m_powerPanel
+        && sceneX >= m_powerPanel->x()
+        && sceneY >= m_powerPanel->y()
+        && sceneX <= m_powerPanel->x() + m_powerPanel->width()
+        && sceneY <= m_powerPanel->y() + m_powerPanel->height();
     if (!hit) {
       if (pressed && button == BTN_LEFT)
         closePowerMenu();
@@ -753,6 +730,8 @@ void GreeterSurface::onPointerEvent(float x, float y, std::uint32_t button, bool
     return;
   m_inInputDispatch = true;
   m_inputDispatcher.pointerButton(x, y, button, pressed, 0, 0, false);
+  if (auto activate = std::exchange(m_pendingMenuActivation, {}))
+    activate();
   m_inInputDispatch = false;
   flushDeferredFrameRequests();
   if (m_root.paintDirty() || m_root.layoutDirty()) {
@@ -1154,10 +1133,7 @@ void GreeterSurface::layoutPowerMenu(float sw, float sh) {
       node->setVisible(false);
   if (!m_powerMenuOpen)
     return;
-  const float w = std::min(320.0F, sw - 24),
-              x = std::clamp(
-                  m_powerMenuButton->x() - m_powerMenuButton->width() - w, 12.0F, std::max(12.0F, sw - w - 12)
-              );
+  const float w = std::min(280.0F, sw - 24);
   const bool confirm = m_pendingPowerAction != 0;
   std::vector<Button*> actions;
   if (confirm)
@@ -1173,22 +1149,31 @@ void GreeterSurface::layoutPowerMenu(float sw, float sh) {
       actions.push_back(m_firmwareButton);
     actions.push_back(m_powerCancel);
   }
-  const float rowH = std::min(40.0F, std::max(24.0F, (sh - 100) / static_cast<float>(actions.size())));
-  const float h = 64 + rowH * static_cast<float>(actions.size());
-  const float y = std::clamp(m_powerMenuButton->y() - h - 10, 12.0F, std::max(12.0F, sh - h - 12));
+  const float gap = 4;
+  const float rowH = std::min(38.0F, std::max(24.0F, (sh - 100) / static_cast<float>(actions.size()) - gap));
+  const float h = confirm ? 52 + rowH + 12 : 52 + (rowH + gap) * static_cast<float>(actions.size()) + 16;
+  const auto bounds = greeter::placeGreeterPopup(
+      {m_powerMenuButton->x(), m_powerMenuButton->y(), m_powerMenuButton->width(), m_powerMenuButton->height(), true},
+      w, h, sw, sh, m_powerMenuButton->y() > sh / 2
+  );
+  const float x = bounds.x, y = bounds.y;
   m_powerPanel->setVisible(true);
   m_powerPanel->setPosition(x, y);
-  m_powerPanel->setSize(w, h);
-  m_powerPanel->setStyle(
-      {.fill = colorForRole(ColorRole::SurfaceContainerHigh),
-       .border = colorForRole(ColorRole::OutlineVariant),
-       .radius = 18 * Style::cornerRadiusScale(),
-       .borderWidth = 1}
+  m_powerPanel->setSize(bounds.width, bounds.height);
+  m_powerPanel->setCardStyle(1, 1, Style::popupBordersEnabled());
+  m_powerPanel->setStyleRadius(Style::radiusLg, 1);
+  m_powerShadow->setVisible(Style::popupShadowsEnabled());
+  m_powerShadow->setFrameSize(bounds.width, bounds.height);
+  m_powerShadow->setStyle(
+      surface_shadow::style(
+          ShadowStyle{.alpha = 0.35F}, 1, surface_shadow::Shape{.radius = Radii(Style::scaledRadiusLg())}
+      )
   );
   const std::array<std::string_view, 5> labels{"Power", "Suspend?", "Restart?", "Shut down?", "Restart to firmware?"};
   m_powerTitle->setVisible(true);
   m_powerTitle->setText(labels[m_pendingPowerAction]);
-  m_powerTitle->setFontSize(18);
+  m_powerTitle->setFontSize(16);
+  m_powerTitle->setFontWeight(FontWeight::Medium);
   m_powerTitle->setColor(colorForRole(ColorRole::OnSurface));
   m_powerTitle->setMaxWidth(w - 32);
   m_powerTitle->measure(*m_renderer);
@@ -1199,9 +1184,20 @@ void GreeterSurface::layoutPowerMenu(float sw, float sh) {
     auto* button = actions[i];
     button->setVisible(true);
     button->setZIndex(102);
+    if (button != m_powerConfirm)
+      button->setVariant(ButtonVariant::Ghost);
+    button->setContentAlign(
+        confirm || button == m_powerCancel ? ButtonContentAlign::Center : ButtonContentAlign::Start
+    );
+    button->setFontSize(14);
+    button->setRadius(Style::scaledRadiusSm());
     button->setControlHeight(rowH);
-    button->setPosition(x + 12, y + 52 + static_cast<float>(i) * rowH);
-    button->setSize(w - 24, rowH);
+    const float buttonW = confirm ? (w - 24 - gap) / 2 : w - 24;
+    button->setPosition(
+        x + 12 + (confirm ? static_cast<float>(i) * (buttonW + gap) : 0),
+        y + 52 + (confirm ? 0 : static_cast<float>(i) * (rowH + gap))
+    );
+    button->setSize(buttonW, rowH);
     button->layout(*m_renderer);
   }
 }
@@ -1868,18 +1864,16 @@ void GreeterSurface::activateFocused() {
 }
 
 void GreeterSurface::applyMenuHighlight() {
+  if (auto* control = m_sessionMenuOpen ? m_sessionMenuControl : m_schemeMenuOpen ? m_schemeMenuControl : nullptr) {
+    const auto* scroll = activeMenuScroll();
+    const auto highlight = m_menuHighlight < 0 ? control->entryCount() : static_cast<std::size_t>(m_menuHighlight);
+    control->setHighlightedIndex(highlight >= scroll->offset ? highlight - scroll->offset : control->entryCount());
+    return;
+  }
   std::vector<Box*>* rows = nullptr;
   std::vector<Label*>* labels = nullptr;
   std::size_t selected = 0;
-  if (m_sessionMenuOpen) {
-    rows = &m_sessionMenuRows;
-    labels = &m_sessionMenuLabels;
-    selected = m_model.state().selectedSession;
-  } else if (m_schemeMenuOpen) {
-    rows = &m_schemeMenuRows;
-    labels = &m_schemeMenuLabels;
-    selected = m_model.state().selectedScheme;
-  } else if (m_userMenuOpen) {
+  if (m_userMenuOpen) {
     rows = &m_userMenuRows;
     labels = &m_userMenuLabels;
     if (m_model.state().selectedUser < m_model.users().size()) {
@@ -1950,9 +1944,9 @@ void GreeterSurface::applyMenuHighlight() {
     Color iconColor = colorForRole(ColorRole::OnSurfaceVariant);
     if (m_userMenuOpen) {
       if (highlighted) {
-        rowFill = colorForRole(ColorRole::Primary);
-        labelColor = colorForRole(ColorRole::OnPrimary);
-        iconColor = colorForRole(ColorRole::OnPrimary);
+        rowFill = colorForRole(ColorRole::Hover);
+        labelColor = colorForRole(ColorRole::OnHover);
+        iconColor = colorForRole(ColorRole::OnHover);
       } else if (isSelected) {
         rowFill = colorForRole(ColorRole::Primary, 0.16f);
         labelColor = colorForRole(ColorRole::Primary);
@@ -2320,19 +2314,7 @@ void GreeterSurface::clearSessionMenu() {
     (void)m_root.removeChild(m_sessionMenuPanel);
     m_sessionMenuPanel = nullptr;
   }
-  for (auto* label : m_sessionMenuLabels) {
-    (void)m_root.removeChild(label);
-  }
-  for (auto* area : m_sessionMenuAreas) {
-
-    (void)m_root.removeChild(area);
-  }
-  for (auto* row : m_sessionMenuRows) {
-    (void)m_root.removeChild(row);
-  }
-  m_sessionMenuLabels.clear();
-  m_sessionMenuAreas.clear();
-  m_sessionMenuRows.clear();
+  m_sessionMenuControl = nullptr;
   if (!m_sessionMenuOpen && m_sessionMenuScroll.bar != nullptr) {
 
     (void)m_root.removeChild(m_sessionMenuScroll.bar);
@@ -2345,19 +2327,7 @@ void GreeterSurface::clearSchemeMenu() {
     (void)m_root.removeChild(m_schemeMenuPanel);
     m_schemeMenuPanel = nullptr;
   }
-  for (auto* label : m_schemeMenuLabels) {
-    (void)m_root.removeChild(label);
-  }
-  for (auto* area : m_schemeMenuAreas) {
-
-    (void)m_root.removeChild(area);
-  }
-  for (auto* row : m_schemeMenuRows) {
-    (void)m_root.removeChild(row);
-  }
-  m_schemeMenuLabels.clear();
-  m_schemeMenuAreas.clear();
-  m_schemeMenuRows.clear();
+  m_schemeMenuControl = nullptr;
   if (!m_schemeMenuOpen && m_schemeMenuScroll.bar != nullptr) {
 
     (void)m_root.removeChild(m_schemeMenuScroll.bar);
@@ -2438,9 +2408,13 @@ void GreeterSurface::refreshUserMenuRows() {
   const float panelX = std::clamp(anchorX, Style::spaceLg, std::max(Style::spaceLg, screenW - Style::spaceLg - panelW));
   const float minY = 12;
   const float maxY = m_root.height() - 12;
-  const float below = maxY - (m_userSelectBox->y() + m_userSelectBox->height() + 4);
-  const float above = m_userSelectBox->y() - 4 - minY;
-  const bool openAbove = above > below;
+  const float below = maxY - (m_userSelectBox->y() + m_userSelectBox->height() + 10);
+  const float above = m_userSelectBox->y() - 10 - minY;
+  const float desiredH = 2 * (kUserMenuPadding + borderWidth)
+      + static_cast<float>(
+            std::min(kUserDropdownMaxVisibleRows, std::max(std::size_t{1}, m_userMenuFilteredIndices.size()))
+        ) * (rowH + kUserMenuRowGap);
+  const bool openAbove = desiredH > below && above > below;
   const float space = std::max(0.0F, openAbove ? above : below);
   m_userMenuVisibleRows = std::clamp(
       static_cast<std::size_t>(std::max(
@@ -2451,8 +2425,11 @@ void GreeterSurface::refreshUserMenuRows() {
   const float rows =
       static_cast<float>(std::max(std::size_t{1}, std::min(m_userMenuFilteredIndices.size(), m_userMenuVisibleRows)));
   const float estimatedH = 2 * (kUserMenuPadding + borderWidth) + rows * rowH + (rows - 1) * kUserMenuRowGap;
-  const float panelY = openAbove ? std::max(minY, m_userSelectBox->y() - 4 - estimatedH)
-                                 : m_userSelectBox->y() + m_userSelectBox->height() + 4;
+  const float panelY = greeter::placeGreeterPopup(
+                           {anchorX, m_userSelectBox->y(), anchorW, m_userSelectBox->height(), true}, panelW,
+                           estimatedH, screenW, m_root.height(), openAbove, false
+  )
+                           .y;
   const float innerX = panelX + borderWidth + kUserMenuPadding;
   const float innerW = panelW - 2.0f * borderWidth - 2.0f * kUserMenuPadding;
   const float listTop = panelY + borderWidth + kUserMenuPadding;
@@ -2616,157 +2593,131 @@ void GreeterSurface::rebuildUserMenu() {
 
 void GreeterSurface::buildMenu(
     const std::vector<std::string>& names, std::size_t selected, Box* anchor, bool upward, bool rightAlign, int zBase,
-    Box*& panelOut, std::vector<Box*>& rows, std::vector<Label*>& labels, std::vector<InputArea*>& areas,
-    MenuScroll& scroll, std::function<void(std::size_t)> onSelect
+    Box*& panelOut, ContextMenuControl*& controlOut, MenuScroll& scroll, std::function<void(std::size_t)> onSelect
 ) {
   const std::size_t count = names.size();
-  if (anchor == nullptr || count == 0) {
+  if (anchor == nullptr || count == 0)
     return;
+  constexpr float headerH = 38;
+  const float border = Style::borderWidth;
+  const float rowH = Style::controlHeightSm;
+  std::vector<ContextMenuControlEntry> entries;
+  entries.reserve(count);
+  for (std::size_t i = 0; i < count; ++i) {
+    ContextMenuControlEntry entry{.id = static_cast<std::int32_t>(i), .label = names[i]};
+    entry.checkmark = true;
+    entry.toggleState = i == selected ? 1 : 0;
+    if (anchor == m_schemeSelectBox) {
+      const auto* builtin = noctalia::theme::findBuiltinPalette(names[i]);
+      const Palette* palette = builtin ? &(isLightPalette() ? builtin->light.palette : builtin->dark.palette) : nullptr;
+      if (palette) {
+        entry.swatchPreview.surface = fixedColorSpec(palette->surface);
+        entry.swatchPreview.swatches = {
+            fixedColorSpec(palette->primary), fixedColorSpec(palette->secondary), fixedColorSpec(palette->tertiary)
+        };
+      }
+    }
+    entries.push_back(std::move(entry));
   }
-
-  const float rowH = GreeterMetrics::selectorRowHeight;
-  const float borderWidth = Style::borderWidth;
-  const float margin = Style::spaceLg;
-  const float screenW = m_root.width();
-  const float screenH = m_root.height();
-  const float top = margin;
-  const float bottom = screenH - margin;
-  const float above = std::max(0.0f, anchor->y() - Style::spaceXs - top);
-  const float below = std::max(0.0f, bottom - anchor->y() - anchor->height() - Style::spaceXs);
-  const float desiredH = rowH * static_cast<float>(std::min(count, kSelectorMenuMaxVisibleRows)) + 2.0f * borderWidth;
-  if (desiredH > (upward ? above : below) && (upward ? below : above) > (upward ? above : below)) {
+  const float above = std::max(0.0F, anchor->y() - 10 - 12);
+  const float below = std::max(0.0F, m_root.height() - 12 - anchor->y() - anchor->height() - 10);
+  const float paddingH = ContextMenuControl::preferredHeight({}, 1);
+  const float wantedH =
+      headerH + ContextMenuControl::preferredHeight(entries, kSelectorMenuMaxVisibleRows) + 2 * border;
+  if (wantedH > (upward ? above : below) && (upward ? below : above) > (upward ? above : below))
     upward = !upward;
-  }
   const float availableH = upward ? above : below;
-  const std::size_t availableRows =
-      static_cast<std::size_t>(std::max(1.0f, std::floor((availableH - 2.0f * borderWidth) / rowH)));
+  const auto availableRows =
+      static_cast<std::size_t>(std::max(1.0F, std::floor((availableH - headerH - paddingH - 2 * border) / rowH)));
   scroll.visibleCount = std::min({count, kSelectorMenuMaxVisibleRows, availableRows});
-  const std::size_t maxOffset = count - scroll.visibleCount;
+  const auto maxOffset = count - scroll.visibleCount;
   if (m_menuHighlight < 0) {
     m_menuHighlight = static_cast<std::ptrdiff_t>(std::min(selected, count - 1));
-    const std::size_t highlight = static_cast<std::size_t>(m_menuHighlight);
+    const auto highlight = static_cast<std::size_t>(m_menuHighlight);
     scroll.offset = highlight >= scroll.visibleCount ? highlight + 1 - scroll.visibleCount : 0;
   }
   scroll.offset = std::min(scroll.offset, maxOffset);
-
-  const float gutter = maxOffset > 0 ? (GreeterMetrics::scrollbarWidth + Style::scrollbarGap) : 0.0f;
-  float contentW = anchor->width();
-  for (const auto& name : names) {
-    const float textW = m_renderer->measureText(name, Style::fontSizeBody).width;
-    contentW = std::max(contentW, textW + 2.0f * Style::spaceMd + gutter + 2.0f * borderWidth);
-  }
-  const float w = std::min(contentW, std::max(1.0f, screenW - 2.0f * margin));
-  const float minX = margin;
-  const float maxX = std::max(minX, screenW - margin - w);
-  const float x = std::clamp(rightAlign ? anchor->x() + anchor->width() - w : anchor->x(), minX, maxX);
-  const float listH = rowH * static_cast<float>(scroll.visibleCount);
-  const float panelH = listH + 2.0f * borderWidth;
-  const float y = std::clamp(
-      upward ? anchor->y() - panelH - Style::spaceXs : anchor->y() + anchor->height() + Style::spaceXs, top,
-      std::max(top, bottom - panelH)
+  const float gutter = maxOffset > 0 ? GreeterMetrics::scrollbarWidth + Style::scrollbarGap : 0;
+  const float menuW = std::max(
+      anchor->width(), std::max(240.0F, ContextMenuControl::preferredWidth(*m_renderer, entries)) + gutter + 2 * border
   );
-
+  const float listH = rowH * static_cast<float>(scroll.visibleCount) + paddingH;
+  const auto bounds = greeter::placeGreeterPopup(
+      {anchor->x(), anchor->y(), anchor->width(), anchor->height(), true}, menuW, headerH + listH + 2 * border,
+      m_root.width(), m_root.height(), upward, rightAlign
+  );
   auto panel = std::make_unique<Box>();
   panelOut = panel.get();
-  panelOut->setZIndex(zBase);
-  panelOut->setHitTestVisible(false);
-  m_root.addChild(std::move(panel));
-  panelOut->setPosition(x, y);
-  panelOut->setSize(w, panelH);
-  panelOut->setStyle(
-      RoundedRectStyle{
-          .fill = colorForRole(ColorRole::SurfaceContainer),
-          .border = colorForRole(ColorRole::OutlineVariant),
-          .fillMode = FillMode::Solid,
-          .radius = Style::scaledRadiusLg(),
-          .softness = 1.0f,
-          .borderWidth = borderWidth,
-      }
-  );
-
-  const float panelRadius = Style::scaledRadiusLg();
-  for (std::size_t visibleIndex = 0; visibleIndex < scroll.visibleCount; ++visibleIndex) {
-    const std::size_t i = scroll.offset + visibleIndex;
-    const float rowX = x + borderWidth;
-    const float rowY = y + borderWidth + rowH * static_cast<float>(visibleIndex);
-    const float rowW = w - 2.0f * borderWidth - gutter;
-
-    auto row = std::make_unique<Box>();
-    auto* rowPtr = row.get();
-    rowPtr->setZIndex(zBase + 1);
-    rowPtr->setPosition(rowX, rowY);
-    rowPtr->setSize(rowW, rowH);
-
-    Radii rowRadius(0.0f);
-    if (scroll.visibleCount == 1) {
-      rowRadius = Radii(panelRadius - borderWidth);
-    } else if (visibleIndex == 0) {
-      rowRadius = Radii(panelRadius - borderWidth, panelRadius - borderWidth, 0.0f, 0.0f);
-    } else if (visibleIndex == scroll.visibleCount - 1) {
-      rowRadius = Radii(0.0f, 0.0f, panelRadius - borderWidth, panelRadius - borderWidth);
-    }
-    rowPtr->setStyle(
-        RoundedRectStyle{
-            .fill = colorForRole(ColorRole::SurfaceContainer),
-            .fillMode = FillMode::Solid,
-            .radius = rowRadius,
-        }
+  panel->setZIndex(zBase);
+  // This host contains the shared menu's interactive row subtree.
+  panel->setHitTestVisible(true);
+  panel->setPosition(bounds.x, bounds.y);
+  panel->setSize(bounds.width, bounds.height);
+  panel->setCardStyle(1, 1, Style::popupBordersEnabled());
+  panel->setStyleRadius(Style::radiusLg, 1);
+  if (Style::popupShadowsEnabled())
+    popup_chrome::addShadow(
+        *panel, {.contentWidth = bounds.width, .contentHeight = bounds.height}, ShadowStyle{.alpha = 0.35F},
+        Style::scaledRadiusLg()
     );
-    m_root.addChild(std::move(row));
-    rows.push_back(rowPtr);
-
-    auto label = std::make_unique<Label>();
-    auto* labelPtr = label.get();
-    labelPtr->setText(names[i]);
-    labelPtr->setFontSize(Style::fontSizeBody);
-    labelPtr->setColor(colorForRole(ColorRole::OnSurface));
-    labelPtr->setMaxLines(1);
-    labelPtr->setMaxWidth(std::max(1.0f, rowW - 2.0f * Style::spaceMd));
-    labelPtr->setZIndex(zBase + 2);
-    m_root.addChild(std::move(label));
-    labelPtr->measure(*m_renderer);
-    labelPtr->setPosition(rowX + Style::spaceMd, rowY + std::round((rowH - labelPtr->height()) * 0.5f));
-    labels.push_back(labelPtr);
-
-    auto area = std::make_unique<InputArea>();
-    auto* areaPtr = area.get();
-    areaPtr->setFocusable(true);
-    areaPtr->setZIndex(zBase + 3);
-    areaPtr->setOnEnter([this, i](const InputArea::PointerData&) {
-      m_menuHighlight = static_cast<std::ptrdiff_t>(i);
-      applyMenuHighlight();
-      requestRedraw();
-    });
-    areaPtr->setOnClick([onSelect, i](const InputArea::PointerData& data) {
-      if (data.button == BTN_LEFT) {
-        onSelect(i);
-      }
-    });
-    m_root.addChild(std::move(area));
-    areaPtr->setPosition(rowX, rowY);
-    areaPtr->setSize(rowW, rowH);
-    areas.push_back(areaPtr);
-  }
-
-  if (maxOffset > 0 && scroll.bar == nullptr) {
+  auto title = std::make_unique<Label>();
+  title->setText(anchor == m_schemeSelectBox ? "Appearance" : "Session");
+  title->setFontSize(14);
+  title->setFontWeight(FontWeight::Medium);
+  title->setColor(colorForRole(ColorRole::OnSurface));
+  title->setMaxWidth(bounds.width - 32);
+  title->measure(*m_renderer);
+  title->setPosition(16, 12);
+  panel->addChild(std::move(title));
+  auto control = std::make_unique<ContextMenuControl>();
+  controlOut = control.get();
+  control->setEntries(
+      std::vector<ContextMenuControlEntry>(
+          entries.begin() + static_cast<std::ptrdiff_t>(scroll.offset),
+          entries.begin() + static_cast<std::ptrdiff_t>(scroll.offset + scroll.visibleCount)
+      )
+  );
+  control->setMenuWidth(bounds.width - 2 * border - gutter);
+  control->setMaxVisible(scroll.visibleCount);
+  control->setPosition(border, headerH + border);
+  control->setOnActivate([this, onSelect](const ContextMenuControlEntry& entry) {
+    // Selection can destroy this control. Run it after shared pointer dispatch
+    // has returned, while the surface still defers its layout requests.
+    m_pendingMenuActivation = [onSelect, id = entry.id]() { onSelect(static_cast<std::size_t>(id)); };
+  });
+  auto* rawControl = control.get();
+  control->setRedrawCallback([this, rawControl, &scroll] {
+    const auto index = rawControl->highlightedIndex();
+    if (index < rawControl->entryCount())
+      m_menuHighlight = static_cast<std::ptrdiff_t>(scroll.offset + index);
+    requestRedraw();
+  });
+  control->layout(*m_renderer);
+  panel->addChild(std::move(control));
+  m_root.addChild(std::move(panel));
+  if (maxOffset > 0 && !scroll.bar) {
     auto bar = std::make_unique<Scrollbar>();
     scroll.bar = bar.get();
     scroll.bar->setZIndex(zBase + 4);
     m_root.addChild(std::move(bar));
   }
-  if (scroll.bar != nullptr) {
-
-    scroll.bar->setTrackInset(std::min(panelRadius, listH * 0.25f));
-    scroll.bar->setPosition(x + w - borderWidth - GreeterMetrics::scrollbarWidth, y + borderWidth);
-    scroll.bar->setSize(GreeterMetrics::scrollbarWidth, listH);
+  if (scroll.bar) {
+    scroll.bar->setTrackInset(6);
+    scroll.bar->setPosition(
+        bounds.x + bounds.width - border - GreeterMetrics::scrollbarWidth, bounds.y + headerH + border + paddingH / 2
+    );
+    scroll.bar->setSize(GreeterMetrics::scrollbarWidth, rowH * static_cast<float>(scroll.visibleCount));
     scroll.bar->setOnScrollChanged([this, &scroll, rowH, maxOffset](float offset) {
-      const std::size_t rowOffset = std::min(maxOffset, static_cast<std::size_t>(std::round(offset / rowH)));
+      const auto rowOffset = std::min(maxOffset, static_cast<std::size_t>(std::round(offset / rowH)));
       if (rowOffset != scroll.offset) {
         scroll.offset = rowOffset;
         requestLayout();
       }
     });
-    scroll.bar->update(listH, rowH * static_cast<float>(count), rowH * static_cast<float>(scroll.offset));
+    scroll.bar->update(
+        rowH * static_cast<float>(scroll.visibleCount), rowH * static_cast<float>(count),
+        rowH * static_cast<float>(scroll.offset)
+    );
   }
 }
 
@@ -2782,8 +2733,8 @@ void GreeterSurface::rebuildSessionMenu() {
   }
   buildMenu(
       names, m_model.state().selectedSession, m_sessionSelectBox, /*upward=*/false,
-      /*rightAlign=*/false, /*zBase=*/50, m_sessionMenuPanel, m_sessionMenuRows, m_sessionMenuLabels,
-      m_sessionMenuAreas, m_sessionMenuScroll, [this](std::size_t i) { selectSession(i); }
+      /*rightAlign=*/false, /*zBase=*/50, m_sessionMenuPanel, m_sessionMenuControl, m_sessionMenuScroll,
+      [this](std::size_t i) { selectSession(i); }
   );
 }
 
@@ -2797,7 +2748,7 @@ void GreeterSurface::rebuildSchemeMenu() {
   buildMenu(
       m_model.schemeNames(), m_model.state().selectedScheme, m_schemeSelectBox,
       /*upward=*/upward,
-      /*rightAlign=*/true, /*zBase=*/60, m_schemeMenuPanel, m_schemeMenuRows, m_schemeMenuLabels, m_schemeMenuAreas,
-      m_schemeMenuScroll, [this](std::size_t i) { selectScheme(i); }
+      /*rightAlign=*/true, /*zBase=*/60, m_schemeMenuPanel, m_schemeMenuControl, m_schemeMenuScroll,
+      [this](std::size_t i) { selectScheme(i); }
   );
 }
