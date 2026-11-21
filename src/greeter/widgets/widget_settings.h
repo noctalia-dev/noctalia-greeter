@@ -9,7 +9,7 @@
 
 namespace greeter {
 
-  enum class WidgetSettingType : std::uint8_t { Bool, Int, Double, String, Color };
+  enum class WidgetSettingType : std::uint8_t { Bool, Int, Double, String, Color, Enum };
 
   struct WidgetSettingDefinition {
     std::string_view key;
@@ -19,6 +19,7 @@ namespace greeter {
     std::optional<double> maxValue = std::nullopt;
     // Editor increment; floating-point values are not quantized during validation.
     std::optional<double> step = std::nullopt;
+    std::span<const std::string_view> enumValues;
   };
 
   // Background fields for applicable types. Button owns its own presentation fields.

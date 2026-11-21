@@ -609,6 +609,21 @@ widget_settings_test = executable(
 )
 test('widget-settings', widget_settings_test)
 
+widget_clock_settings_test = executable(
+  'widget-clock-settings-test',
+  sources: files(
+    'tests/widget_clock_settings_test.cpp',
+    'src/greeter/widgets/widget_catalog.cpp',
+    'src/greeter/widgets/widget_settings.cpp',
+    'src/greeter/widgets/widget_settings_validation.cpp',
+  ),
+  dependencies: noctalia_ui_dep,
+  include_directories: _greeter_inc,
+  cpp_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow'],
+  build_by_default: false,
+)
+test('widget-clock-settings', widget_clock_settings_test)
+
 greeter_auth_controller_test = executable(
   'greeter-auth-controller-test',
   sources: files('tests/greeter_auth_controller_test.cpp'),

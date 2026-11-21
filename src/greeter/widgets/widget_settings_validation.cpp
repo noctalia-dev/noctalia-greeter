@@ -4,6 +4,7 @@
 #include "ui/palette.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <string>
 #include <string_view>
@@ -17,6 +18,16 @@ namespace greeter {
       if (const auto* integer = std::get_if<std::int64_t>(&value))
         return static_cast<double>(*integer);
       return std::nullopt;
+    }
+
+    bool validClockTimezone(std::string_view name) {
+      if (name.empty())
+        return true;
+      try {
+        return std::chrono::locate_zone(name) != nullptr;
+      } catch (...) {
+        return false;
+      }
     }
 
     const char* settingError(const WidgetSettingDefinition& definition, const WidgetSettingValue& value) {
@@ -38,6 +49,12 @@ namespace greeter {
       }
       case WidgetSettingType::String:
         return std::holds_alternative<std::string>(value) ? nullptr : "expected a string";
+      case WidgetSettingType::Enum: {
+        const auto* text = std::get_if<std::string>(&value);
+        if (text == nullptr)
+          return "expected an enum value string";
+        return std::ranges::contains(definition.enumValues, *text) ? nullptr : "unsupported value for this setting";
+      }
       case WidgetSettingType::Color: {
         const auto* text = std::get_if<std::string>(&value);
         if (text == nullptr)
@@ -75,6 +92,8 @@ namespace greeter {
         issue(key, "setting is unavailable for this greeter widget");
       } else if (const char* message = settingError(*definition, value)) {
         issue(key, message);
+      } else if (widget.type == "clock" && key == "timezone" && !validClockTimezone(std::get<std::string>(value))) {
+        issue(key, "unknown timezone");
       }
     }
     return issues;

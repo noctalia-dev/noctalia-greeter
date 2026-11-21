@@ -119,7 +119,7 @@ int main() {
 
     widget.settings = {{"background", false}, {"background_color", std::string("invalid-color")}};
     require(!greeter::validateWidgetSettings(widget).empty(), "hidden background options bypassed validation");
-    for (const auto type : std::array<std::string_view, 4>{"clock", "sticker", "sysmon", "button"}) {
+    for (const auto type : std::array<std::string_view, 3>{"sticker", "sysmon", "button"}) {
       widget = label();
       widget.type = type;
       require(!greeter::widgetSettingDefinitions(type), "unfinished schema advertised as complete");
