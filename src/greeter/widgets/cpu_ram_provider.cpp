@@ -1,6 +1,7 @@
 #include "greeter/widgets/cpu_ram_provider.h"
 
 #include "greeter/widgets/cpu_frequency_source.h"
+#include "greeter/widgets/gpu_temperature_source.h"
 
 #include <algorithm>
 #include <charconv>
@@ -185,37 +186,28 @@ namespace greeter {
       : m_procRoot(std::move(procRoot)), m_cpuRoot(std::move(cpuRoot)), m_hwmonRoot(std::move(hwmonRoot)),
         m_thermalRoot(std::move(thermalRoot)) {}
 
-  void CpuRamProvider::resetTemperature() {
-    m_temperature = {};
-    m_temperatureSensor.reset();
-    m_temperatureHistory.clear();
-    m_temperatureMin = 30;
-    m_temperatureMax = 80;
-  }
-
-  void CpuRamProvider::sampleTemperature() {
-    const auto sample = readCpuTemperature(m_hwmonRoot, m_thermalRoot);
+  void CpuRamProvider::recordTemperature(TemperatureState& state, const std::optional<TemperatureSample>& sample) {
     if (!sample) {
-      resetTemperature();
+      state = {};
       return;
     }
-    if (m_temperatureSensor != sample->sensor) {
-      resetTemperature();
-      m_temperatureSensor = sample->sensor;
+    if (state.sensor != sample->sensor) {
+      state = {};
+      state.sensor = sample->sensor;
     }
-    m_temperature.current = sample->celsius;
-    m_temperatureMin = std::min(m_temperatureMin, sample->celsius);
-    m_temperatureMax = std::max(m_temperatureMax, sample->celsius);
-    if (m_temperatureHistory.size() == 120)
-      m_temperatureHistory.erase(m_temperatureHistory.begin());
-    m_temperatureHistory.push_back(sample->celsius);
-    const auto normalize = [this](double value) {
-      return static_cast<float>((value - m_temperatureMin) / (m_temperatureMax - m_temperatureMin));
+    state.reading.current = sample->celsius;
+    state.minimum = std::min(state.minimum, sample->celsius);
+    state.maximum = std::max(state.maximum, sample->celsius);
+    if (state.history.size() == 120)
+      state.history.erase(state.history.begin());
+    state.history.push_back(sample->celsius);
+    const auto normalize = [&state](double value) {
+      return static_cast<float>((value - state.minimum) / (state.maximum - state.minimum));
     };
-    m_temperature.history.clear();
-    for (const auto value : m_temperatureHistory)
-      m_temperature.history.push_back(normalize(value));
-    m_temperature.gauge = SysmonGaugeReading{normalize(sample->celsius), highlightFactor(sample->celsius, 60, 85)};
+    state.reading.history.clear();
+    for (const auto value : state.history)
+      state.reading.history.push_back(normalize(value));
+    state.reading.gauge = SysmonGaugeReading{normalize(sample->celsius), highlightFactor(sample->celsius, 60, 85)};
   }
 
   void CpuRamProvider::setDemand(CpuRamDemand demand) {
@@ -230,7 +222,9 @@ namespace greeter {
     if (!demand.frequency)
       m_frequency = {};
     if (!demand.temperature)
-      resetTemperature();
+      m_temperature = {};
+    if (!demand.gpuTemperature)
+      m_gpuTemperature = {};
     m_demand = demand;
     publish();
   }
@@ -254,7 +248,9 @@ namespace greeter {
     if (m_demand.frequency)
       recordFrequency(m_frequency, readCpuFrequency(m_cpuRoot));
     if (m_demand.temperature)
-      sampleTemperature();
+      recordTemperature(m_temperature, readCpuTemperature(m_hwmonRoot, m_thermalRoot));
+    if (m_demand.gpuTemperature)
+      recordTemperature(m_gpuTemperature, readGpuTemperature(m_hwmonRoot));
     publish();
     return m_snapshot;
   }
@@ -264,7 +260,8 @@ namespace greeter {
         std::array{
             SysmonMetricReading{SysmonMetric::CpuUsage, m_cpu}, SysmonMetricReading{SysmonMetric::RamPct, m_ram},
             SysmonMetricReading{SysmonMetric::SwapPct, m_swap}, SysmonMetricReading{SysmonMetric::CpuFreq, m_frequency},
-            SysmonMetricReading{SysmonMetric::CpuTemp, m_temperature}
+            SysmonMetricReading{SysmonMetric::CpuTemp, m_temperature.reading},
+            SysmonMetricReading{SysmonMetric::GpuTemp, m_gpuTemperature.reading}
         }
     );
     if (!snapshot)

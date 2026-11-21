@@ -17,6 +17,7 @@ namespace greeter {
     bool swap = false;
     bool frequency = false;
     bool temperature = false;
+    bool gpuTemperature = false;
   };
 
   // One owner shares sampled snapshots across views. No timer, thread, callback or
@@ -34,8 +35,14 @@ namespace greeter {
 
   private:
     void publish();
-    void resetTemperature();
-    void sampleTemperature();
+    struct TemperatureState {
+      SysmonReading reading;
+      std::optional<TemperatureSensor> sensor;
+      std::vector<double> history;
+      double minimum = 30;
+      double maximum = 80;
+    };
+    static void recordTemperature(TemperatureState& state, const std::optional<TemperatureSample>& sample);
 
     std::filesystem::path m_procRoot;
     std::filesystem::path m_cpuRoot;
@@ -47,11 +54,8 @@ namespace greeter {
     SysmonReading m_ram;
     SysmonReading m_swap;
     SysmonReading m_frequency;
-    SysmonReading m_temperature;
-    std::optional<CpuTemperatureSensor> m_temperatureSensor;
-    std::vector<double> m_temperatureHistory;
-    double m_temperatureMin = 30;
-    double m_temperatureMax = 80;
+    TemperatureState m_temperature;
+    TemperatureState m_gpuTemperature;
     SysmonSnapshot m_snapshot;
   };
 

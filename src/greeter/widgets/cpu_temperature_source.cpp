@@ -14,7 +14,7 @@
 namespace greeter {
   namespace {
     struct Candidate {
-      CpuTemperatureSample sample;
+      TemperatureSample sample;
       int driverPriority;
       int sensorPriority;
     };
@@ -124,7 +124,7 @@ namespace greeter {
       return 20;
     }
 
-    std::optional<CpuTemperatureSample> choose(std::vector<Candidate>& candidates) {
+    std::optional<TemperatureSample> choose(std::vector<Candidate>& candidates) {
       if (candidates.empty())
         return std::nullopt;
       const auto rank = [](const Candidate& candidate) {
@@ -138,7 +138,7 @@ namespace greeter {
     }
   } // namespace
 
-  std::optional<CpuTemperatureSample>
+  std::optional<TemperatureSample>
   readCpuTemperature(const std::filesystem::path& hwmonRoot, const std::filesystem::path& thermalRoot) {
     std::size_t visited = 0;
     const auto hwmons = entries(hwmonRoot, visited);
