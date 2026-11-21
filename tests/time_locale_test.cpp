@@ -114,14 +114,16 @@ int main() {
       && passed;
 
   resetLocale();
+  const bool libcReportsUnavailableLocale = std::setlocale(LC_TIME, "noctalia_INVALID.UTF-8") == nullptr;
   writeFile(primary, "LC_TIME=noctalia_INVALID.UTF-8\n");
-  passed = expect("unavailable configured locale is reported", !initialize()) && passed;
+  passed =
+      expect("unavailable configured locale is reported", !initialize() == libcReportsUnavailableLocale) && passed;
 
   resetLocale();
   ::setenv("LANG", "noctalia_INVALID.UTF-8", 1);
   passed = expect(
                "unavailable explicit locale is reported without replacement",
-               !initialize() && environmentValue("LC_TIME").empty()
+               !initialize() == libcReportsUnavailableLocale && environmentValue("LC_TIME").empty()
            )
       && passed;
 
