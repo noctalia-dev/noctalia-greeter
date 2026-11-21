@@ -13,6 +13,7 @@ namespace greeter {
     bool cpu = false;
     bool ram = false;
     bool swap = false;
+    bool frequency = false;
   };
 
   // One owner shares sampled snapshots across views. No timer, thread, callback or
@@ -20,7 +21,9 @@ namespace greeter {
   class CpuRamProvider {
   public:
     // An internal source seam for fixtures, not a user-facing configuration path.
-    explicit CpuRamProvider(std::filesystem::path procRoot = "/proc");
+    explicit CpuRamProvider(
+        std::filesystem::path procRoot = "/proc", std::filesystem::path cpuRoot = "/sys/devices/system/cpu"
+    );
     void setDemand(CpuRamDemand demand);
     const SysmonSnapshot& sample();
     const SysmonSnapshot& snapshot() const noexcept { return m_snapshot; }
@@ -29,11 +32,13 @@ namespace greeter {
     void publish();
 
     std::filesystem::path m_procRoot;
+    std::filesystem::path m_cpuRoot;
     CpuRamDemand m_demand;
     std::optional<std::array<std::uint64_t, 8>> m_previousCpu;
     SysmonReading m_cpu;
     SysmonReading m_ram;
     SysmonReading m_swap;
+    SysmonReading m_frequency;
     SysmonSnapshot m_snapshot;
   };
 

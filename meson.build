@@ -123,6 +123,7 @@ _greeter_sources = files(
   'src/greeter/widgets/sticker_widget.cpp',
   'src/greeter/widgets/sysmon_snapshot.cpp',
   'src/greeter/widgets/cpu_ram_provider.cpp',
+  'src/greeter/widgets/cpu_frequency_source.cpp',
   'src/greeter/widgets/sysmon_graph_widget.cpp',
   'src/greeter/widgets/sysmon_gauge_widget.cpp',
   'src/greeter/widgets/button_widget.cpp',
@@ -695,6 +696,7 @@ cpu_ram_provider_test = executable(
   sources: files(
     'tests/cpu_ram_provider_test.cpp',
     'src/greeter/widgets/cpu_ram_provider.cpp',
+    'src/greeter/widgets/cpu_frequency_source.cpp',
     'src/greeter/widgets/sysmon_snapshot.cpp',
   ),
   include_directories: include_directories('src'),

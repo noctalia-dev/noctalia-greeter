@@ -1,5 +1,7 @@
 #include "greeter/widgets/cpu_ram_provider.h"
 
+#include "greeter/widgets/cpu_frequency_source.h"
+
 #include <algorithm>
 #include <charconv>
 #include <fstream>
@@ -134,6 +136,15 @@ namespace greeter {
       return result;
     }
 
+    float highlightFactor(double value, double activity, double critical) {
+      // Desktop gradientFactor: no highlight below activity, 25% onset above it.
+      if (value <= activity)
+        return 0;
+      if (value >= critical)
+        return 1;
+      return static_cast<float>(0.25 + 0.75 * (value - activity) / (critical - activity));
+    }
+
     void record(SysmonReading& reading, std::optional<double> value, double activity, double critical) {
       if (!value) {
         reading = {};
@@ -142,18 +153,33 @@ namespace greeter {
       reading.current = value;
       reading.absence = SysmonAbsence::Unavailable;
       const auto normalized = static_cast<float>(*value / 100.0);
-      // Desktop gradientFactor: no highlight below activity, 25% onset above it.
-      const float highlight = *value <= activity ? 0.0F
-          : *value >= critical                   ? 1.0F
-                               : static_cast<float>(0.25 + 0.75 * (*value - activity) / (critical - activity));
-      reading.gauge = SysmonGaugeReading{normalized, highlight};
+      reading.gauge = SysmonGaugeReading{normalized, highlightFactor(*value, activity, critical)};
+      if (reading.history.size() == 120)
+        reading.history.erase(reading.history.begin());
+      reading.history.push_back(normalized);
+    }
+
+    void recordFrequency(SysmonReading& reading, const CpuFrequencySample& sample) {
+      if (!sample.currentMhz) {
+        reading = {};
+        return;
+      }
+      reading.current = sample.currentMhz;
+      if (!sample.maximumMhz) {
+        reading.gauge.reset();
+        reading.history.clear();
+        return;
+      }
+      const auto normalized = static_cast<float>(std::clamp(*sample.currentMhz / *sample.maximumMhz, 0.0, 1.0));
+      reading.gauge = SysmonGaugeReading{normalized, highlightFactor(*sample.currentMhz / 1000.0, 2.5, 4.5)};
       if (reading.history.size() == 120)
         reading.history.erase(reading.history.begin());
       reading.history.push_back(normalized);
     }
   } // namespace
 
-  CpuRamProvider::CpuRamProvider(std::filesystem::path procRoot) : m_procRoot(std::move(procRoot)) {}
+  CpuRamProvider::CpuRamProvider(std::filesystem::path procRoot, std::filesystem::path cpuRoot)
+      : m_procRoot(std::move(procRoot)), m_cpuRoot(std::move(cpuRoot)) {}
 
   void CpuRamProvider::setDemand(CpuRamDemand demand) {
     if (!demand.cpu) {
@@ -164,6 +190,8 @@ namespace greeter {
       m_ram = {};
     if (!demand.swap)
       m_swap = {};
+    if (!demand.frequency)
+      m_frequency = {};
     m_demand = demand;
     publish();
   }
@@ -184,6 +212,8 @@ namespace greeter {
           m_swap.absence = SysmonAbsence::NotConfigured;
       }
     }
+    if (m_demand.frequency)
+      recordFrequency(m_frequency, readCpuFrequency(m_cpuRoot));
     publish();
     return m_snapshot;
   }
@@ -192,7 +222,7 @@ namespace greeter {
     auto snapshot = SysmonSnapshot::create(
         std::array{
             SysmonMetricReading{SysmonMetric::CpuUsage, m_cpu}, SysmonMetricReading{SysmonMetric::RamPct, m_ram},
-            SysmonMetricReading{SysmonMetric::SwapPct, m_swap}
+            SysmonMetricReading{SysmonMetric::SwapPct, m_swap}, SysmonMetricReading{SysmonMetric::CpuFreq, m_frequency}
         }
     );
     if (!snapshot)

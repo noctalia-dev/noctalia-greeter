@@ -42,6 +42,12 @@ namespace {
     void ram(std::uint64_t total, std::uint64_t available) const {
       write("meminfo", std::format("MemTotal: {} kB\nMemFree: 0 kB\nMemAvailable: {} kB\n", total, available));
     }
+    void frequency(std::string_view core, std::string_view current, std::string_view maximum) const {
+      const auto base = std::filesystem::path("cpus") / core / "cpufreq";
+      std::filesystem::create_directories(root / base);
+      write((base / "scaling_cur_freq").string(), current);
+      write((base / "scaling_max_freq").string(), maximum);
+    }
   };
 
   void near(double value, double expected, const char* message) {
@@ -157,6 +163,108 @@ namespace {
     provider.sample();
     require(
         provider.snapshot().reading(SysmonMetric::SwapPct).history.size() == 1, "resuming swap retained paused history"
+    );
+  }
+
+  void checkFrequency(const Fixture& fixture) {
+    using namespace greeter;
+    const auto cpuRoot = fixture.root / "cpus";
+    CpuRamProvider provider(fixture.root, cpuRoot);
+    provider.setDemand({false, false, false, true});
+    provider.sample();
+    unavailable(provider.snapshot().reading(SysmonMetric::CpuFreq));
+    fixture.frequency("cpu0", "2000000\n", "4000000\n");
+    fixture.frequency("cpu3", "4000000\n", "5000000\n");
+    fixture.frequency("cpu1", "0\n", "0\n");
+    fixture.frequency("cpu2", "broken", "0");
+    for (const auto* name : {"cpu", "cpufreq", "cpu3-extra", "gpu0"})
+      fixture.frequency(name, "999000000", "999000000");
+    provider.sample();
+    const auto retained = provider.snapshot();
+    const auto& initial = retained.reading(SysmonMetric::CpuFreq);
+    near(*initial.current, 3000, "frequency did not average readable nonzero cores");
+    near(initial.gauge->normalized, 0.6, "frequency did not use highest reported ceiling");
+    near(initial.gauge->highlight, 0.4375, "frequency highlight used wrong units or thresholds");
+    require(formatSysmonValue(*findSysmonMetric("cpu_freq"), initial) == "3.0 GHz", "frequency display unit incorrect");
+    unavailable(retained.reading(SysmonMetric::CpuUsage));
+    unavailable(retained.reading(SysmonMetric::RamPct));
+    unavailable(retained.reading(SysmonMetric::SwapPct));
+    provider.setDemand({false, false, false, true});
+    provider.sample();
+    require(
+        provider.snapshot().reading(SysmonMetric::CpuFreq).history.size() == 2, "same frequency demand reset history"
+    );
+    std::filesystem::remove_all(cpuRoot);
+    for (const auto text : std::array<std::string_view, 10>{
+             "", " \t\n", "0", "-1", "+1000", "1000x", "1000 2000", "1e6", "1.5", "18446744073709551616"
+         }) {
+      fixture.frequency("cpu0", text, "5000000");
+      provider.sample();
+      unavailable(provider.snapshot().reading(SysmonMetric::CpuFreq));
+    }
+    fixture.frequency("cpu0", std::string(65, '1'), "5000000");
+    provider.sample();
+    unavailable(provider.snapshot().reading(SysmonMetric::CpuFreq));
+    for (const auto text : std::array<std::string_view, 5>{"", "0", "broken", "-1", "18446744073709551616"}) {
+      fixture.frequency("cpu0", " \t2500000\n", text);
+      provider.sample();
+      const auto& reading = provider.snapshot().reading(SysmonMetric::CpuFreq);
+      near(*reading.current, 2500, "missing ceiling hid readable frequency");
+      require(!reading.gauge && reading.history.empty(), "frequency invented a normalization ceiling");
+    }
+    fixture.frequency("cpu0", "3000000", "2000000");
+    provider.sample();
+    near(*provider.snapshot().reading(SysmonMetric::CpuFreq).current, 3000, "boosted raw frequency clipped");
+    near(provider.snapshot().reading(SysmonMetric::CpuFreq).gauge->normalized, 1, "boosted frequency fill not bounded");
+    for (const auto khz : {2500000, 3500000, 4500000}) {
+      fixture.frequency("cpu0", std::to_string(khz), "5000000");
+      provider.sample();
+      near(
+          provider.snapshot().reading(SysmonMetric::CpuFreq).gauge->highlight,
+          khz == 2500000       ? 0
+              : khz == 3500000 ? 0.625
+                               : 1,
+          "frequency gradient boundary incorrect"
+      );
+    }
+    fixture.frequency("cpu0", "2500000", "18446744073709551615");
+    provider.sample();
+    require(provider.snapshot().reading(SysmonMetric::CpuFreq).gauge.has_value(), "valid large ceiling overflowed");
+    fixture.frequency("cpu0", "2500000", "broken");
+    provider.sample();
+    require(
+        provider.snapshot().reading(SysmonMetric::CpuFreq).history.empty(), "lost ceiling retained normalized history"
+    );
+    std::filesystem::remove(cpuRoot / "cpu0/cpufreq/scaling_cur_freq");
+    provider.sample();
+    unavailable(provider.snapshot().reading(SysmonMetric::CpuFreq));
+    near(*retained.reading(SysmonMetric::CpuFreq).current, 3000, "retained frequency snapshot mutated");
+    provider.setDemand({});
+    unavailable(provider.snapshot().reading(SysmonMetric::CpuFreq));
+    provider.setDemand({false, false, false, true});
+    for (int i = 0; i <= 125; ++i) {
+      fixture.frequency("cpu0", std::to_string(1000000 + i * 1000), "2000000");
+      provider.sample();
+    }
+    const auto& history = provider.snapshot().reading(SysmonMetric::CpuFreq).history;
+    require(history.size() == 120, "frequency history exceeded bound");
+    near(history.front(), 0.503, "oldest frequency sample incorrect");
+    near(history.back(), 0.5625, "latest frequency sample incorrect");
+    provider.setDemand({true, true, true, true});
+    fixture.cpu(0, 0);
+    fixture.write("meminfo", "MemTotal: 1000 kB\nMemAvailable: 500 kB\nSwapTotal: 1000 kB\nSwapFree: 800 kB\n");
+    provider.sample();
+    provider.setDemand({true, true, true, false});
+    unavailable(provider.snapshot().reading(SysmonMetric::CpuFreq));
+    fixture.cpu(1, 1);
+    provider.sample();
+    near(*provider.snapshot().reading(SysmonMetric::CpuUsage).current, 50, "dropping frequency cleared CPU baseline");
+    near(*provider.snapshot().reading(SysmonMetric::RamPct).current, 50, "dropping frequency cleared RAM");
+    near(*provider.snapshot().reading(SysmonMetric::SwapPct).current, 20, "dropping frequency cleared swap");
+    provider.setDemand({false, false, false, true});
+    provider.sample();
+    require(
+        provider.snapshot().reading(SysmonMetric::CpuFreq).history.size() == 1, "resuming frequency retained history"
     );
   }
 } // namespace
@@ -291,6 +399,7 @@ int main() {
     unavailable(provider.snapshot().reading(SysmonMetric::CpuUsage));
     unavailable(provider.snapshot().reading(SysmonMetric::RamPct));
     checkSwap(fixture);
+    checkFrequency(fixture);
     return 0;
   } catch (const std::exception& error) {
     std::println(stderr, "cpu-ram-provider-test: {}", error.what());
