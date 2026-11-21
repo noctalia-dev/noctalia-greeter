@@ -80,13 +80,27 @@ int main() {
           "gauge boundary not preserved"
       );
     }
-    for (const auto& metric : sysmonMetricDefinitions())
-      require(formatSysmonValue(metric, std::nullopt) == "--", "unavailable value formatting changed");
-    require(formatSysmonValue(*findSysmonMetric("cpu_usage"), 42) == "42%", "percent unit incorrect");
-    require(formatSysmonValue(*findSysmonMetric("cpu_temp"), -10) == "-10°C", "temperature unit incorrect");
-    require(formatSysmonValue(*findSysmonMetric("cpu_freq"), 2400) == "2.4 GHz", "frequency unit incorrect");
+    const SysmonReading noSwap{std::nullopt, {}, std::nullopt, SysmonAbsence::NotConfigured};
     require(
-        formatSysmonValue(*findSysmonMetric("gpu_vram_used"), 3.0 * 1024 * 1024 * 1024) == "3.0 GiB",
+        SysmonSnapshot::create(std::array{SysmonMetricReading{SysmonMetric::SwapPct, noSwap}}).has_value(),
+        "not-configured swap rejected"
+    );
+    require(
+        formatSysmonValue(*findSysmonMetric("swap_pct"), noSwap) == "No swap",
+        "not-configured swap formatting incorrect"
+    );
+    rejects(SysmonMetric::CpuUsage, noSwap);
+    rejects(SysmonMetric::SwapPct, {0, {}, std::nullopt, SysmonAbsence::NotConfigured});
+    rejects(SysmonMetric::SwapPct, {std::nullopt, {0}, std::nullopt, SysmonAbsence::NotConfigured});
+    rejects(SysmonMetric::SwapPct, {std::nullopt, {}, SysmonGaugeReading{0}, SysmonAbsence::NotConfigured});
+    rejects(SysmonMetric::SwapPct, {std::nullopt, {}, std::nullopt, static_cast<SysmonAbsence>(255)});
+    for (const auto& metric : sysmonMetricDefinitions())
+      require(formatSysmonValue(metric, {}) == "--", "unavailable value formatting changed");
+    require(formatSysmonValue(*findSysmonMetric("cpu_usage"), {42, {}}) == "42%", "percent unit incorrect");
+    require(formatSysmonValue(*findSysmonMetric("cpu_temp"), {-10, {}}) == "-10°C", "temperature unit incorrect");
+    require(formatSysmonValue(*findSysmonMetric("cpu_freq"), {2400, {}}) == "2.4 GHz", "frequency unit incorrect");
+    require(
+        formatSysmonValue(*findSysmonMetric("gpu_vram_used"), {3.0 * 1024 * 1024 * 1024, {}}) == "3.0 GiB",
         "memory unit incorrect"
     );
     return 0;

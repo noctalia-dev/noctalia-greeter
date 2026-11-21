@@ -38,6 +38,7 @@ namespace greeter {
     float highlight = 0.0F;
     bool operator==(const SysmonGaugeReading&) const = default;
   };
+  enum class SysmonAbsence : std::uint8_t { Unavailable, NotConfigured };
   struct SysmonReading {
     // Raw value in the metric's documented unit; null is unavailable, not zero.
     std::optional<double> current;
@@ -45,6 +46,8 @@ namespace greeter {
     std::vector<float> history;
     // Missing range information leaves an empty track while preserving the raw label.
     std::optional<SysmonGaugeReading> gauge = std::nullopt;
+    // NotConfigured is reserved for a validated zero-capacity swap source.
+    SysmonAbsence absence = SysmonAbsence::Unavailable;
     bool operator==(const SysmonReading&) const = default;
   };
   struct SysmonMetricReading {
@@ -59,6 +62,6 @@ namespace greeter {
   private:
     std::array<SysmonReading, 9> m_readings;
   };
-  std::string formatSysmonValue(const SysmonMetricDefinition& metric, std::optional<double> value);
+  std::string formatSysmonValue(const SysmonMetricDefinition& metric, const SysmonReading& reading);
 
 } // namespace greeter

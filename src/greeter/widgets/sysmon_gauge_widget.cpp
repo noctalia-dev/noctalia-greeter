@@ -46,12 +46,13 @@ namespace greeter {
   bool SysmonGaugeWidget::updateMetrics(const SysmonSnapshot& snapshot) {
     uiAssertNotRendering("SysmonGaugeWidget::updateMetrics");
     const auto& reading = snapshot.reading(m_metric);
-    if (m_current == reading.current && m_reading == reading.gauge)
+    if (m_current == reading.current && m_reading == reading.gauge && m_absence == reading.absence)
       return false;
     m_current = reading.current;
     m_reading = reading.gauge;
+    m_absence = reading.absence;
     if (m_label != nullptr)
-      m_label->setText(formatSysmonValue(sysmonMetricDefinitions()[static_cast<std::size_t>(m_metric)], m_current));
+      m_label->setText(formatSysmonValue(sysmonMetricDefinitions()[static_cast<std::size_t>(m_metric)], reading));
     syncProgress();
     syncColor();
     return true;

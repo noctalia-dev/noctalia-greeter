@@ -55,7 +55,7 @@ namespace greeter {
       m_readings[i] = reading;
       if (m_labels[i] != nullptr)
         m_labels[i]->setText(
-            formatSysmonValue(sysmonMetricDefinitions()[static_cast<std::size_t>(m_metrics[i])], reading.current)
+            formatSysmonValue(sysmonMetricDefinitions()[static_cast<std::size_t>(m_metrics[i])], reading)
         );
     }
     if (changed)

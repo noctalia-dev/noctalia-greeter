@@ -85,33 +85,53 @@ namespace greeter {
       return 100.0 * (1.0 - static_cast<double>(idleDelta) / static_cast<double>(totalDelta));
     }
 
-    std::optional<double> readRam(const std::filesystem::path& path) {
+    struct MemoryValues {
+      std::optional<double> ram;
+      std::optional<double> swap;
+      bool noSwap = false;
+    };
+
+    MemoryValues readMemory(const std::filesystem::path& path, CpuRamDemand demand) {
       std::ifstream file(path);
       if (!file)
-        return std::nullopt;
+        return {};
       std::array<char, 65537> buffer{};
       file.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
       if (file.bad() || file.gcount() == static_cast<std::streamsize>(buffer.size()))
-        return std::nullopt;
+        return {};
       std::string_view input(buffer.data(), static_cast<std::size_t>(file.gcount()));
-      std::optional<std::uint64_t> total;
-      std::optional<std::uint64_t> available;
+      constexpr std::array<std::string_view, 4> keys{"MemTotal:", "MemAvailable:", "SwapTotal:", "SwapFree:"};
+      std::array<std::optional<std::uint64_t>, 4> fields;
+      std::array<bool, 2> valid{true, true};
       while (!input.empty()) {
         const auto end = input.find('\n');
         auto line = input.substr(0, end);
         input.remove_prefix(end == std::string_view::npos ? input.size() : end + 1);
         const auto key = token(line);
-        if (key != "MemTotal:" && key != "MemAvailable:")
+        const auto* entry = std::ranges::find(keys, key);
+        if (entry == keys.end())
           continue;
-        auto& destination = key == "MemTotal:" ? total : available;
+        const auto index = static_cast<std::size_t>(entry - keys.begin());
+        if (index < 2 ? !demand.ram : !demand.swap)
+          continue;
+        auto& destination = fields[index];
         const auto value = unsignedValue(token(line));
-        if (destination || !value || token(line) != "kB" || !token(line).empty())
-          return std::nullopt;
+        if (destination || !value || token(line) != "kB" || !token(line).empty()) {
+          valid[index / 2] = false;
+          continue;
+        }
         destination = value;
       }
-      if (!total || *total == 0 || !available || *available > *total)
-        return std::nullopt;
-      return 100.0 * (static_cast<double>(*total - *available) / static_cast<double>(*total));
+      MemoryValues result;
+      if (demand.ram && valid[0] && fields[0] && *fields[0] > 0 && fields[1] && *fields[1] <= *fields[0])
+        result.ram = 100.0 * (static_cast<double>(*fields[0] - *fields[1]) / static_cast<double>(*fields[0]));
+      if (demand.swap && valid[1] && fields[2] && fields[3] && *fields[3] <= *fields[2]) {
+        if (*fields[2] == 0)
+          result.noSwap = true;
+        else
+          result.swap = 100.0 * (static_cast<double>(*fields[2] - *fields[3]) / static_cast<double>(*fields[2]));
+      }
+      return result;
     }
 
     void record(SysmonReading& reading, std::optional<double> value, double activity, double critical) {
@@ -120,6 +140,7 @@ namespace greeter {
         return;
       }
       reading.current = value;
+      reading.absence = SysmonAbsence::Unavailable;
       const auto normalized = static_cast<float>(*value / 100.0);
       // Desktop gradientFactor: no highlight below activity, 25% onset above it.
       const float highlight = *value <= activity ? 0.0F
@@ -141,6 +162,8 @@ namespace greeter {
     }
     if (!demand.ram)
       m_ram = {};
+    if (!demand.swap)
+      m_swap = {};
     m_demand = demand;
     publish();
   }
@@ -151,15 +174,26 @@ namespace greeter {
       record(m_cpu, current && m_previousCpu ? cpuUsage(*m_previousCpu, *current) : std::nullopt, 50, 90);
       m_previousCpu = current;
     }
-    if (m_demand.ram)
-      record(m_ram, readRam(m_procRoot / "meminfo"), 60, 90);
+    if (m_demand.ram || m_demand.swap) {
+      const auto memory = readMemory(m_procRoot / "meminfo", m_demand);
+      if (m_demand.ram)
+        record(m_ram, memory.ram, 60, 90);
+      if (m_demand.swap) {
+        record(m_swap, memory.swap, 20, 80);
+        if (memory.noSwap)
+          m_swap.absence = SysmonAbsence::NotConfigured;
+      }
+    }
     publish();
     return m_snapshot;
   }
 
   void CpuRamProvider::publish() {
     auto snapshot = SysmonSnapshot::create(
-        std::array{SysmonMetricReading{SysmonMetric::CpuUsage, m_cpu}, SysmonMetricReading{SysmonMetric::RamPct, m_ram}}
+        std::array{
+            SysmonMetricReading{SysmonMetric::CpuUsage, m_cpu}, SysmonMetricReading{SysmonMetric::RamPct, m_ram},
+            SysmonMetricReading{SysmonMetric::SwapPct, m_swap}
+        }
     );
     if (!snapshot)
       throw std::logic_error("invalid CPU/RAM provider snapshot: " + snapshot.error());

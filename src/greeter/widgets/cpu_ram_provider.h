@@ -12,6 +12,7 @@ namespace greeter {
   struct CpuRamDemand {
     bool cpu = false;
     bool ram = false;
+    bool swap = false;
   };
 
   // One owner shares sampled snapshots across views. No timer, thread, callback or
@@ -32,6 +33,7 @@ namespace greeter {
     std::optional<std::array<std::uint64_t, 8>> m_previousCpu;
     SysmonReading m_cpu;
     SysmonReading m_ram;
+    SysmonReading m_swap;
     SysmonSnapshot m_snapshot;
   };
 

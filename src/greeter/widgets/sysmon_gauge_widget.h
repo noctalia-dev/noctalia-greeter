@@ -39,6 +39,7 @@ namespace greeter {
     float m_labelMinWidth;
     std::optional<double> m_current;
     std::optional<SysmonGaugeReading> m_reading;
+    SysmonAbsence m_absence = SysmonAbsence::Unavailable;
     Glyph* m_glyph = nullptr;
     Label* m_label = nullptr;
     ProgressBar* m_gauge = nullptr;

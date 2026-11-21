@@ -48,7 +48,116 @@ namespace {
     require(std::abs(value - expected) < 0.0001, message);
   }
   void unavailable(const greeter::SysmonReading& reading) {
-    require(!reading.current && !reading.gauge && reading.history.empty(), "unavailable metric retained data");
+    require(
+        !reading.current
+            && !reading.gauge
+            && reading.history.empty()
+            && reading.absence == greeter::SysmonAbsence::Unavailable,
+        "unavailable metric retained data"
+    );
+  }
+
+  void checkSwap(const Fixture& fixture) {
+    using namespace greeter;
+    CpuRamProvider provider(fixture.root);
+    provider.setDemand({false, false, true});
+    fixture.write("meminfo", "SwapTotal: 1000 kB\nSwapFree: 500 kB\n");
+    provider.sample();
+    const auto retained = provider.snapshot();
+    const auto& swap = retained.reading(SysmonMetric::SwapPct);
+    near(*swap.current, 50, "swap-only demand required RAM fields");
+    near(swap.gauge->normalized, 0.5, "swap fill normalization incorrect");
+    near(swap.gauge->highlight, 0.625, "swap gradient differs from desktop");
+    unavailable(retained.reading(SysmonMetric::RamPct));
+    unavailable(retained.reading(SysmonMetric::CpuUsage));
+    provider.setDemand({false, false, true});
+    provider.sample();
+    require(provider.snapshot().reading(SysmonMetric::SwapPct).history.size() == 2, "same swap demand reset history");
+
+    for (const auto text : std::array<std::string_view, 12>{
+             "", "SwapTotal: 1000 kB\n", "SwapFree: 100 kB\n", "SwapTotal: 0 kB\nSwapFree: 1 kB\n",
+             "SwapTotal: 10 kB\nSwapFree: 11 kB\n", "SwapTotal: -1 kB\nSwapFree: 0 kB\n",
+             "SwapTotal: 10 MB\nSwapFree: 0 kB\n", "SwapTotal: 10 kB\nSwapFree: 0 kB junk\n",
+             "SwapTotal: 10 kB\nSwapTotal: 10 kB\nSwapFree: 0 kB\n",
+             "SwapTotal: 18446744073709551616 kB\nSwapFree: 0 kB\n",
+             "SwapTotal: 10 kB\nSwapFree: 1 kB\nSwapFree: 2 kB\n", "SwapTotal: 10 kB\nSwapFree: -1 kB\n"
+         }) {
+      fixture.write("meminfo", "MemTotal: 1000 kB\nMemAvailable: 400 kB\n" + std::string(text));
+      provider.setDemand({false, true, true});
+      provider.sample();
+      unavailable(provider.snapshot().reading(SysmonMetric::SwapPct));
+      near(*provider.snapshot().reading(SysmonMetric::RamPct).current, 60, "bad swap fields poisoned RAM");
+    }
+    fixture.write("meminfo", "MemTotal: broken kB\nSwapTotal: 1000 kB\nSwapFree: 500 kB\n");
+    provider.sample();
+    unavailable(provider.snapshot().reading(SysmonMetric::RamPct));
+    near(*provider.snapshot().reading(SysmonMetric::SwapPct).current, 50, "bad RAM fields poisoned swap");
+
+    fixture.write("meminfo", "SwapTotal: 0 kB\nSwapFree: 0 kB\n");
+    provider.sample();
+    const auto& absent = provider.snapshot().reading(SysmonMetric::SwapPct);
+    require(
+        !absent.current && !absent.gauge && absent.history.empty() && absent.absence == SysmonAbsence::NotConfigured,
+        "no swap fabricated usage or retained history"
+    );
+    require(formatSysmonValue(*findSysmonMetric("swap_pct"), absent) == "No swap", "no swap not distinguishable");
+    fixture.write("meminfo", "SwapTotal: 1000 kB\nSwapFree: 1000 kB\n");
+    provider.sample();
+    near(*provider.snapshot().reading(SysmonMetric::SwapPct).current, 0, "enabling swap did not produce real zero");
+    require(
+        provider.snapshot().reading(SysmonMetric::SwapPct).absence == SysmonAbsence::Unavailable,
+        "enabling swap retained not-configured status"
+    );
+    std::filesystem::remove(fixture.root / "meminfo");
+    provider.sample();
+    unavailable(provider.snapshot().reading(SysmonMetric::SwapPct));
+    fixture.write("meminfo", std::string(65537, 'x'));
+    provider.sample();
+    unavailable(provider.snapshot().reading(SysmonMetric::SwapPct));
+
+    provider.setDemand({false, false, true});
+    for (const auto free : {std::uint64_t{1000}, std::uint64_t{800}, std::uint64_t{200}, std::uint64_t{0}}) {
+      fixture.write("meminfo", std::format("SwapTotal: 1000 kB\nSwapFree: {} kB\n", free));
+      provider.sample();
+      const auto& reading = provider.snapshot().reading(SysmonMetric::SwapPct);
+      near(*reading.current, static_cast<double>(1000 - free) / 10, "swap boundary value incorrect");
+      require(
+          reading.absence == SysmonAbsence::Unavailable && reading.gauge.has_value(),
+          "swap did not recover from absence"
+      );
+      near(reading.gauge->highlight, free >= 800 ? 0 : 1, "swap threshold boundary incorrect");
+    }
+    near(*retained.reading(SysmonMetric::SwapPct).current, 50, "retained swap snapshot mutated");
+    provider.setDemand({});
+    unavailable(provider.snapshot().reading(SysmonMetric::SwapPct));
+    provider.setDemand({true, true, true});
+    fixture.cpu(0, 0);
+    for (std::uint64_t i = 0; i <= 125; ++i) {
+      fixture.cpu(i, i);
+      fixture.write(
+          "meminfo",
+          std::format("MemTotal: 1000 kB\nMemAvailable: 500 kB\nSwapTotal: 1000 kB\nSwapFree: {} kB\n", 1000 - i)
+      );
+      provider.sample();
+    }
+    const auto& history = provider.snapshot().reading(SysmonMetric::SwapPct).history;
+    require(history.size() == 120, "swap history exceeded bound");
+    near(history.front(), 0.006, "oldest swap history sample incorrect");
+    near(history.back(), 0.125, "latest swap history sample incorrect");
+    const auto ramHistorySize = provider.snapshot().reading(SysmonMetric::RamPct).history.size();
+    provider.setDemand({true, true, false});
+    unavailable(provider.snapshot().reading(SysmonMetric::SwapPct));
+    require(
+        provider.snapshot().reading(SysmonMetric::RamPct).history.size() == ramHistorySize, "dropping swap cleared RAM"
+    );
+    fixture.cpu(126, 126);
+    provider.sample();
+    near(*provider.snapshot().reading(SysmonMetric::CpuUsage).current, 50, "dropping swap cleared CPU baseline");
+    provider.setDemand({false, false, true});
+    provider.sample();
+    require(
+        provider.snapshot().reading(SysmonMetric::SwapPct).history.size() == 1, "resuming swap retained paused history"
+    );
   }
 } // namespace
 
@@ -181,6 +290,7 @@ int main() {
     provider.sample();
     unavailable(provider.snapshot().reading(SysmonMetric::CpuUsage));
     unavailable(provider.snapshot().reading(SysmonMetric::RamPct));
+    checkSwap(fixture);
     return 0;
   } catch (const std::exception& error) {
     std::println(stderr, "cpu-ram-provider-test: {}", error.what());

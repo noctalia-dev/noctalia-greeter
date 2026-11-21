@@ -38,6 +38,13 @@ namespace greeter {
         return std::unexpected("unknown or duplicate local metric");
       seen[index] = true;
       const auto& data = entry.reading;
+      if (data.absence != SysmonAbsence::Unavailable
+          && (data.absence != SysmonAbsence::NotConfigured
+              || entry.metric != SysmonMetric::SwapPct
+              || data.current
+              || data.gauge
+              || !data.history.empty()))
+        return std::unexpected("not-configured status requires swap with no value, gauge or history");
       if (data.gauge
           && (!data.current
               || !std::isfinite(data.gauge->normalized)
@@ -67,18 +74,19 @@ namespace greeter {
     return m_readings.at(static_cast<std::size_t>(metric));
   }
 
-  std::string formatSysmonValue(const SysmonMetricDefinition& metric, std::optional<double> value) {
-    if (!value)
-      return "--";
+  std::string formatSysmonValue(const SysmonMetricDefinition& metric, const SysmonReading& reading) {
+    if (!reading.current)
+      return reading.absence == SysmonAbsence::NotConfigured ? "No swap" : "--";
+    const auto value = *reading.current;
     switch (metric.unit) {
     case SysmonUnit::Percent:
-      return std::format("{:.0F}%", *value);
+      return std::format("{:.0F}%", value);
     case SysmonUnit::Celsius:
-      return std::format("{:.0F}°C", *value);
+      return std::format("{:.0F}°C", value);
     case SysmonUnit::Megahertz:
-      return std::format("{:.1f} GHz", *value / 1000.0);
+      return std::format("{:.1f} GHz", value / 1000.0);
     case SysmonUnit::Bytes:
-      return std::format("{:.1F} GiB", *value / (1024.0 * 1024.0 * 1024.0));
+      return std::format("{:.1F} GiB", value / (1024.0 * 1024.0 * 1024.0));
     }
     return "--";
   }
