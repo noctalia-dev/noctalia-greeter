@@ -448,6 +448,26 @@ output_layout_move_test = executable(
 
 test('output-layout-move', output_layout_move_test)
 
+compositor_lifecycle_test = executable(
+  'compositor-lifecycle-test',
+  sources: files('tests/compositor_lifecycle_test.c'),
+  objects: noctalia_greeter_compositor_executable.extract_objects(files(
+    'src/compositor/output_layout_move.c',
+    'src/compositor/output_render.c',
+    'src/compositor/pointer_config.c',
+    'src/compositor/system_keyboard_config.c',
+    'src/config/output_identity.c',
+    'src/greeter/logging.cpp',
+    'src/greeter/greeter_config_io.cpp',
+    'src/greeter/greeter_layout.cpp',
+  )),
+  dependencies: [wlroots_dep, libinput_dep, wayland_server_dep, xkbcommon_dep, tomlplusplus_dep],
+  include_directories: include_directories('src', 'lib'),
+  c_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-DWLR_USE_UNSTABLE'],
+  link_args: ['-Wl,--wrap=wlr_backend_start', '-Wl,--wrap=wl_display_run'],
+  build_by_default: false,
+)
+
 output_render_test = executable(
   'output-render-test',
   sources: files(
@@ -578,6 +598,17 @@ test(
   args: [
     meson.project_source_root() / 'tests/greeter_user_switch_test.sh',
     noctalia_greeter_compositor_executable,
+    greeter_user_switch_test,
+  ],
+  timeout: 60,
+)
+
+test(
+  'compositor-lifecycle',
+  find_program('sh'),
+  args: [
+    meson.project_source_root() / 'tests/compositor_lifecycle_test.sh',
+    compositor_lifecycle_test,
     greeter_user_switch_test,
   ],
   timeout: 60,

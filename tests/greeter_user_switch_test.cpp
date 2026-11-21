@@ -17,6 +17,7 @@
 #include <string_view>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <sys/wait.h>
 #include <thread>
 #include <unistd.h>
 #include <vector>
@@ -226,6 +227,119 @@ allow_empty_password = true
     server.noRequest();
   }
 
+  void control(char command) {
+    const char* configured = std::getenv("NOCTALIA_TEST_CONTROL_FD");
+    require(configured != nullptr, "fixture control descriptor missing");
+    const int fd = std::stoi(configured);
+    require(::write(fd, &command, 1) == 1, "fixture command write failed");
+    pollfd ready{fd, POLLIN, 0};
+    require(::poll(&ready, 1, 5000) > 0, "fixture command timed out");
+    char response = 0;
+    require(::read(fd, &response, 1) == 1 && response == command, "compositor fixture assertion failed");
+  }
+
+  void testForeignClient() {
+    WaylandClient client;
+    require(client.connect(), "foreign Wayland connection failed");
+    // Same UID and app ID as the real greeter: admission must use process
+    // credentials, rather than trusting either of these client properties.
+    ToplevelSurface surface(client.connection());
+    bool closed = false;
+    surface.setClosedCallback([&]() { closed = true; });
+    (void)surface.initialize(nullptr, {.title = "Foreign greeter", .appId = "dev.noctalia.Greeter"});
+    for (int i = 0; i < 3 && !closed; ++i) {
+      require(wl_display_roundtrip(client.display()) >= 0, "foreign roundtrip failed");
+    }
+    require(closed, "foreign toplevel did not receive close");
+  }
+
+  void runForeignClient(const char* executable) {
+    const pid_t pid = ::fork();
+    require(pid >= 0, "foreign client fork failed");
+    if (pid == 0) {
+      ::execl(executable, executable, "foreign-client", nullptr);
+      ::_exit(127);
+    }
+    int status = 0;
+    require(
+        ::waitpid(pid, &status, 0) == pid && WIFEXITED(status) && WEXITSTATUS(status) == 0,
+        "foreign client admission check failed"
+    );
+  }
+
+  void testHotplug(std::string_view stage, const char* executable) {
+    control('E');
+    runForeignClient(executable);
+    control('E');
+    FakeGreetd server;
+    WaylandClient client;
+    require(client.connect(), "Wayland connection failed");
+    Greeter greeter;
+    require(greeter.initialize(client), "greeter initialization failed");
+    pump(greeter, client);
+    require(windows.size() == 2, "hotplug test requires two real greeter views");
+    control('M');
+    server.acceptPeer();
+    control('B');
+    runForeignClient(executable);
+    control('F');
+
+    const bool ownerRemoved = stage == "hotplug-owner";
+    focusOutput(0);
+    if (ownerRemoved) {
+      submit(greeter, "removed-owner-token");
+      require(server.request("create_session").at("username") == "user-switch-test", "wrong initial account");
+      server.prompt(greeter, client, "secret");
+      require(
+          server.request("post_auth_message_response").at("response") == "removed-owner-token",
+          "wrong initial credential"
+      );
+      server.prompt(greeter, client, "secret");
+    }
+    control('D');          // Destroy the backend output while its mapped view is alive.
+    pump(greeter, client); // Dispatch wl_output removal and the real view teardown.
+    require(client.readyOutputsSorted().size() == 1, "destroyed output still advertised");
+    control('S');
+    focusOutput(1); // This view survives; windows[0] was destroyed and is not accessed.
+    if (ownerRemoved) {
+      server.disconnected();
+      submit(greeter, "must-not-be-sent");
+      pump(greeter, client);
+      server.disconnected();
+    } else {
+      server.noRequest();
+      type(greeter, "unsent-survivor-input");
+      selectUser(greeter, 1, "dummy-user-01");
+      server.noRequest();
+    }
+
+    control('R');
+    pump(greeter, client);
+    require(
+        client.readyOutputsSorted().size() == 2 && windows.size() == 3,
+        "replacement output did not create a new greeter view"
+    );
+    control('V');
+    focusOutput(2);
+    if (ownerRemoved) {
+      submit(greeter, "must-not-resume-old-conversation");
+      pump(greeter, client);
+      server.disconnected();
+    } else {
+      submit(greeter, "replacement-output-token");
+      require(
+          server.request("create_session").at("username") == "dummy-user-01", "replacement output lost selected account"
+      );
+      server.prompt(greeter, client, "secret");
+      require(
+          server.request("post_auth_message_response").at("response") == "replacement-output-token",
+          "replacement output leaked old credential"
+      );
+      finish(server, greeter, client);
+    }
+    control('X');
+  }
+
   void testSwitch(std::string_view stage) {
     FakeGreetd server;
     WaylandClient client;
@@ -360,7 +474,16 @@ extern "C" int __wrap_poll(pollfd* descriptors, nfds_t count, int timeout) {
 int main(int argc, char** argv) {
   try {
     require(argc == 2, "test stage is required");
-    testSwitch(argv[1]);
+    const std::string_view stage = argv[1];
+    if (stage == "foreign-client") {
+      testForeignClient();
+      return 0;
+    }
+    if (stage == "hotplug-idle" || stage == "hotplug-owner") {
+      testHotplug(stage, argv[0]);
+    } else {
+      testSwitch(stage);
+    }
     std::puts("user switch: cancellation and account isolation passed");
     return 0;
   } catch (const std::exception& error) {
