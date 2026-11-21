@@ -11,7 +11,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <fcntl.h>
-#include <fstream>
 #include <ranges>
 #include <sstream>
 #include <string_view>
@@ -1193,14 +1192,14 @@ namespace greeter::config {
     out << '\n';
     out << formatToml(table);
 
-    std::ofstream file(path, std::ios::binary | std::ios::trunc);
-    if (!file.is_open()) {
-      kLog.warn("failed to open '{}' for write", path.string());
+    // O_NOFOLLOW: root writes here during setup, and the directory is greeter-owned.
+    const int fd = ::open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW | O_CLOEXEC, 0644);
+    if (fd < 0) {
+      kLog.warn("failed to open '{}' for write: {}", path.string(), std::strerror(errno));
       return false;
     }
-    const std::string content = out.str();
-    file.write(content.data(), static_cast<std::streamsize>(content.size()));
-    return file.good();
+    const bool written = writeAll(fd, out.str(), path);
+    return ::close(fd) == 0 && written;
   }
 
   GreeterSyncFile loadSync(const std::filesystem::path& path) {
