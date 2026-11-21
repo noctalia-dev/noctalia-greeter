@@ -2343,6 +2343,15 @@ static void handle_new_toplevel(struct wl_listener* listener, void* data) {
   struct greeter_server* server = wl_container_of(listener, server, new_toplevel);
   struct wlr_xdg_toplevel* toplevel = data;
 
+  // Only the greeter we launched may own an output; any other local client could fake the login UI.
+  pid_t client_pid = 0;
+  wl_client_get_credentials(toplevel->base->client->client, &client_pid, NULL, NULL);
+  if (client_pid != server->child_pid) {
+    wlr_log(WLR_INFO, "closing toplevel from foreign client pid %d", (int)client_pid);
+    wlr_xdg_toplevel_send_close(toplevel);
+    return;
+  }
+
   struct greeter_output* output = output_for_next_view(server);
   if (output == NULL) {
     wlr_log(WLR_INFO, "closing unassigned toplevel (no free output)");
