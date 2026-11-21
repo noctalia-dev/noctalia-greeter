@@ -121,6 +121,10 @@ _greeter_sources = files(
   'src/greeter/widgets/analog_clock_widget.cpp',
   'src/greeter/widgets/widget_image_source.cpp',
   'src/greeter/widgets/sticker_widget.cpp',
+  'src/greeter/widgets/sysmon_snapshot.cpp',
+  'src/greeter/widgets/sysmon_graph_widget.cpp',
+  'src/greeter/render/sysmon_graph_plot.cpp',
+  'src/greeter/render/sysmon_graph_program.cpp',
   'src/greeter/greeter_preferences.cpp',
   'src/greeter/greeter_sessions.cpp',
   'src/greeter/greeter_model.cpp',
@@ -668,6 +672,20 @@ widget_image_source_test = executable(
   build_by_default: false,
 )
 test('widget-image-source', widget_image_source_test)
+
+sysmon_snapshot_test = executable(
+  'sysmon-snapshot-test',
+  sources: files(
+    'tests/sysmon_snapshot_test.cpp',
+    'src/greeter/widgets/sysmon_snapshot.cpp',
+    'src/greeter/widgets/widget_settings.cpp',
+    'src/greeter/widgets/widget_catalog.cpp',
+  ),
+  include_directories: include_directories('src'),
+  cpp_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow'],
+  build_by_default: false,
+)
+test('sysmon-snapshot', sysmon_snapshot_test)
 
 greeter_auth_controller_test = executable(
   'greeter-auth-controller-test',

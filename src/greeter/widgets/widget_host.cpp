@@ -5,6 +5,7 @@
 #include "greeter/widgets/digital_clock_widget.h"
 #include "greeter/widgets/label_widget.h"
 #include "greeter/widgets/sticker_widget.h"
+#include "greeter/widgets/sysmon_graph_widget.h"
 #include "greeter/widgets/widget_settings.h"
 
 #include <algorithm>
@@ -37,13 +38,13 @@ namespace greeter {
   } // namespace
 
   std::expected<std::unique_ptr<WidgetHost>, std::vector<WidgetModelIssue>>
-  WidgetHost::create(const WidgetInstance& instance, const WidgetImageContext& images) {
+  WidgetHost::create(const WidgetInstance& instance, const WidgetImageContext& images, const SysmonSnapshot* metrics) {
     auto issues = validateWidgetStructure({std::vector{instance}});
     const auto settingIssues = validateWidgetSettings(instance);
     issues.insert(issues.end(), settingIssues.begin(), settingIssues.end());
     if (!issues.empty())
       return std::unexpected(std::move(issues));
-    if (instance.type != "label" && instance.type != "clock" && instance.type != "sticker")
+    if (instance.type != "label" && instance.type != "clock" && instance.type != "sticker" && instance.type != "sysmon")
       return std::unexpected(
           std::vector<WidgetModelIssue>{
               {"widgets.widget." + instance.id + ".type", "presentation is not implemented for this widget type"}
@@ -55,7 +56,26 @@ namespace greeter {
       settings.try_emplace(std::string(field.key), field.defaultValue);
     const auto text = [&](const char* key) -> const std::string& { return std::get<std::string>(settings.at(key)); };
     std::unique_ptr<WidgetContent> content;
-    if (instance.type == "sticker") {
+    if (instance.type == "sysmon") {
+      if (text("display") != "graph")
+        return std::unexpected(
+            std::vector<WidgetModelIssue>{
+                {"widgets.widget." + instance.id + ".settings.display", "gauge presentation is not implemented"}
+            }
+        );
+      content = std::make_unique<SysmonGraphWidget>(SysmonGraphWidget::Options{
+          .primary = findSysmonMetric(text("stat"))->metric,
+          .secondary =
+              text("stat2").empty() ? std::nullopt : std::make_optional(findSysmonMetric(text("stat2"))->metric),
+          .color = colorSpec(text("color")),
+          .color2 = colorSpec(text("color2")),
+          .fontFamily = text("font_family"),
+          .showLabel = std::get<bool>(settings.at("show_label")),
+          .shadow = std::get<bool>(settings.at("shadow")),
+      });
+      if (metrics != nullptr)
+        content->updateMetrics(*metrics);
+    } else if (instance.type == "sticker") {
       const WidgetImageAsset* asset = nullptr;
       const auto imageIssue = [&](std::string message) {
         return std::vector<WidgetModelIssue>{
@@ -162,6 +182,12 @@ namespace greeter {
       scheduleTick();
       refreshTime();
     }
+  }
+
+  void WidgetHost::setMetrics(const SysmonSnapshot& snapshot) {
+    uiAssertNotRendering("WidgetHost::setMetrics");
+    if (m_content->updateMetrics(snapshot))
+      markLayoutDirty();
   }
 
   void WidgetHost::scheduleTick() {
