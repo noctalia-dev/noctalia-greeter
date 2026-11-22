@@ -135,9 +135,10 @@ namespace greeter {
     for (unsigned i = 0; i < 6; i++) {
       auto& rect = result.components[i];
       const auto& settings = config.components[i];
+      const float padding = i != 0 && (settings.anchor || settings.x || settings.y) ? 0 : margin;
       rect.x += settings.x.value_or(0);
       rect.y += settings.y.value_or(0);
-      contain(rect, width, height, margin);
+      contain(rect, width, height, padding);
       auto& transform = result.transforms[i];
       transform = {
           static_cast<float>(settings.rotation.value_or(0)), static_cast<float>(settings.scale.value_or(1)),
@@ -147,18 +148,20 @@ namespace greeter {
       const auto requested = result.bounds(id);
       // Fit the visual bounds without changing control measurements or hit geometry.
       transform.scale *= std::min(
-          {1.0F, (width - 2 * margin) / std::max(1.0F, requested.width),
-           (height - 2 * margin) / std::max(1.0F, requested.height)}
+          {1.0F, (width - 2 * padding) / std::max(1.0F, requested.width),
+           (height - 2 * padding) / std::max(1.0F, requested.height)}
       );
       const auto fitted = result.bounds(id);
-      rect.x += std::clamp(fitted.x, margin, std::max(margin, width - margin - fitted.width)) - fitted.x;
-      rect.y += std::clamp(fitted.y, margin, std::max(margin, height - margin - fitted.height)) - fitted.y;
+      rect.x += std::clamp(fitted.x, padding, std::max(padding, width - padding - fitted.width)) - fitted.x;
+      rect.y += std::clamp(fitted.y, padding, std::max(padding, height - padding - fitted.height)) - fitted.y;
     }
     // Login is mandatory and cannot be hidden/pinned away through component settings.
     result.components[0].visible = true;
     for (unsigned i = 1; i < 6; i++) {
       auto& rect = result.components[i];
-      if (!rect.visible)
+      const auto& settings = config.components[i];
+      // Explicit placements belong to the editor; only automatic placement avoids collisions.
+      if (!rect.visible || settings.anchor || settings.x || settings.y)
         continue;
       auto collides = [&] {
         for (unsigned previous = 0; previous < i; previous++)

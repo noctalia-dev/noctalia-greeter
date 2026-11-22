@@ -61,8 +61,8 @@ namespace greeter {
       const LayoutRect& anchor, float popupWidth, float popupHeight, float width, float height, bool upward,
       bool rightAlign = true
   );
-  // Required login always stays on every active view. Optional components yield
-  // to it and stack inward or disappear if there is no usable space.
+  // Required login stays on every active view. Automatic placements avoid
+  // collisions; explicit anchors/offsets retain their positions within the output.
   GreeterLayout resolveGreeterLayout(
       const GreeterLayoutConfig& config, float width, float height, float panelHeight, bool minimal,
       std::string_view connector, std::string_view stableIdentifier, float clockHeight = 202, float keyboardWidth = 148

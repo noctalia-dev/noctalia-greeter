@@ -20,7 +20,7 @@ namespace {
     if (!condition)
       throw std::runtime_error(message);
   }
-  void check(const greeter::GreeterLayout& layout, float w, float h) {
+  void check(const greeter::GreeterLayout& layout, float w, float h, bool allowOverlap = false) {
     require(layout.components[0].visible, "login disappeared");
     for (unsigned i = 0; i < 6; i++) {
       const auto r = layout.bounds(static_cast<greeter::GreeterComponent>(i));
@@ -30,11 +30,54 @@ namespace {
       require(
           r.x >= 0 && r.y >= 0 && r.x + r.width <= w + 1 && r.y + r.height <= h + 1, "component escaped the output"
       );
-      for (unsigned j = 0; j < i; j++)
+      for (unsigned j = 0; !allowOverlap && j < i; j++)
         require(
             !greeter::rectanglesOverlap(r, layout.bounds(static_cast<greeter::GreeterComponent>(j))),
             "visible components overlap"
         );
+    }
+  }
+  void checkExplicitPlacements() {
+    using Id = greeter::GreeterComponent;
+    greeter::GreeterLayoutConfig config;
+    auto& keyboard = config.components[static_cast<unsigned>(Id::Keyboard)];
+    keyboard.anchor = "bottom-right";
+    keyboard.width = 148;
+    keyboard.x = -208;
+    keyboard.y = 18.3515625F;
+    auto& appearance = config.components[static_cast<unsigned>(Id::Appearance)];
+    appearance.x = 2;
+    appearance.y = keyboard.y;
+    auto& power = config.components[static_cast<unsigned>(Id::Power)];
+    power.x = 16.55078125F;
+    power.y = 18;
+    for (const auto [w, h] : {std::pair{2560.0F, 1440.0F}, std::pair{1920.0F, 1080.0F}, std::pair{864.0F, 1536.0F}}) {
+      const auto layout = greeter::resolveGreeterLayout(config, w, h, 468, false, "DP-1", "monitor-id");
+      check(layout, w, h, true);
+      const auto& rect = layout[Id::Keyboard];
+      const float margin = layout.narrow ? 24 : 48;
+      require(rect.visible, "explicitly placed keyboard disappeared");
+      require(
+          rect.x == std::round(w - margin - 148 - 208) && rect.y == std::round(h - margin - 36 + *keyboard.y),
+          "explicit keyboard moved away from its saved anchor and offsets"
+      );
+      require(
+          greeter::rectanglesOverlap(rect, layout[Id::Appearance]),
+          "footer fixture no longer exercises overlapping control boxes"
+      );
+    }
+    for (unsigned i = 1; i < 6; i++) {
+      config.components[i].anchor = "center";
+      config.components[i].x = 0;
+      config.components[i].y = 0;
+    }
+    const auto centered = greeter::resolveGreeterLayout(config, 2560, 1440, 468, false, "DP-1", "monitor-id");
+    for (unsigned i = 1; i < 6; i++) {
+      const auto& rect = centered.components[i];
+      require(
+          rect.visible && rect.x + rect.width / 2 == 1280 && rect.y + rect.height / 2 == 720,
+          "explicitly overlapping components moved or disappeared"
+      );
     }
   }
   void checkTransforms() {
@@ -126,6 +169,7 @@ int main() {
   std::filesystem::path directory;
   try {
     checkTransforms();
+    checkExplicitPlacements();
     greeter::GreeterLayoutConfig defaults;
     const greeter::LayoutRect bottomTrigger{1150, 650, 88, 36, true};
     auto popup = greeter::placeGreeterPopup(bottomTrigger, 280, 260, 1280, 720, true);
@@ -160,7 +204,7 @@ int main() {
       settings.components[i].width = 1600;
     }
     auto overlap = greeter::resolveGreeterLayout(settings, 1280, 720, 468, false, "DP-1", "monitor-id");
-    check(overlap, 1280, 720);
+    check(overlap, 1280, 720, true);
     settings = defaults;
     settings.components[1].output = "missing";
     require(
