@@ -127,6 +127,7 @@ _greeter_sources = files(
   'src/greeter/widgets/label_widget.cpp',
   'src/greeter/widgets/clock_widget.cpp',
   'src/greeter/widgets/widget_image_source.cpp',
+  'src/greeter/widgets/widget_image_loader.cpp',
   'src/greeter/widgets/sticker_widget.cpp',
   'src/greeter/widgets/sysmon_snapshot.cpp',
   'src/greeter/widgets/cpu_ram_provider.cpp',
@@ -702,6 +703,17 @@ widget_image_source_test = executable(
 )
 test('widget-image-source', widget_image_source_test)
 
+widget_image_loader_test = executable(
+  'widget-image-loader-test',
+  sources: files('tests/widget_image_loader_test.cpp'),
+  objects: noctalia_greeter_executable.extract_objects(_greeter_sources),
+  dependencies: _greeter_dependencies,
+  include_directories: _greeter_inc,
+  cpp_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow'],
+  build_by_default: false,
+)
+test('widget-image-loader', widget_image_loader_test)
+
 sysmon_snapshot_test = executable(
   'sysmon-snapshot-test',
   sources: files(
@@ -772,6 +784,27 @@ test(
     meson.project_source_root() / 'tests/greeter_widget_runtime_test.sh',
     noctalia_greeter_compositor_executable,
     greeter_widget_runtime_test,
+  ],
+  timeout: 60,
+)
+
+greeter_widget_images_test = executable(
+  'greeter-widget-images-test',
+  sources: files('tests/greeter_widget_images_test.cpp'),
+  objects: noctalia_greeter_executable.extract_objects(_greeter_sources),
+  dependencies: _greeter_dependencies,
+  include_directories: _greeter_inc,
+  cpp_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow'],
+  build_by_default: false,
+)
+
+test(
+  'greeter-widget-images',
+  find_program('sh'),
+  args: [
+    meson.project_source_root() / 'tests/greeter_widget_images_test.sh',
+    noctalia_greeter_compositor_executable,
+    greeter_widget_images_test,
   ],
   timeout: 60,
 )

@@ -3,6 +3,7 @@
 #include "core/deferred_call.h"
 #include "core/log.h"
 #include "greeter/appearance_config.h"
+#include "greeter/appearance_sync.h"
 #include "greeter/greeter_config_store.h"
 #include "greeter/greeter_preferences.h"
 #include "greeter/greeter_surface.h"
@@ -10,6 +11,7 @@
 #include "greeter/library_runtime.h"
 #include "greeter/logind_resume.h"
 #include "greeter/resources.h"
+#include "render/core/shared_texture_cache.h"
 #include "render/render_context.h"
 #include "render/text/glyph_registry.h"
 #include "ui/controls/input.h"
@@ -94,6 +96,21 @@ bool Greeter::initialize(WaylandClient& client) {
   m_renderContext->initialize(m_glSharedContext);
   if (const auto synced = loadGreeterSyncedAppearance(); synced.has_value() && !synced->fontFamily.empty()) {
     m_renderContext->setTextFontFamily(synced->fontFamily);
+  }
+
+  auto images = greeter::WidgetImageSource::loadInstalled(
+      greeter::appearance::syncedDataDirectory(), prefs.widgets.value_or(greeter::WidgetCollection{})
+  );
+  if (images) {
+    m_widgetImages = std::move(*images);
+    if (!m_widgetImages->empty()) {
+      m_widgetTextureCache = std::make_unique<SharedTextureCache>();
+      m_widgetTextureCache->initialize(&m_glSharedContext);
+    }
+  } else {
+    const auto& issue = images.error().front();
+    m_widgetImageError = issue.path + ": " + issue.message;
+    kLog.warn("{}", m_widgetImageError);
   }
 
   connectGreetd();
@@ -201,34 +218,25 @@ int Greeter::run(WaylandClient& client, const std::atomic<bool>& shutdownRequest
       resumeMonitor.prepareDispatch(glibPriority, glibPoll, pollTimeout);
     }
 
-    pollfd pfds[4]{};
-    pfds[0].fd = wl_display_get_fd(display);
-    pfds[0].events = POLLIN;
-    int pollCount = 1;
-
-    pfds[pollCount].fd = DeferredCall::wakeFd();
-    pfds[pollCount].events = POLLIN;
-    ++pollCount;
-
+    std::vector<pollfd> pfds{
+        {.fd = wl_display_get_fd(display), .events = POLLIN, .revents = 0},
+        {.fd = DeferredCall::wakeFd(), .events = POLLIN, .revents = 0},
+    };
     int glibIndex = -1;
     if (glibPoll.fd >= 0) {
-      glibIndex = pollCount;
-      pfds[pollCount].fd = glibPoll.fd;
-      pfds[pollCount].events = static_cast<short>(glibPoll.events);
+      glibIndex = static_cast<int>(pfds.size());
+      pfds.push_back({.fd = glibPoll.fd, .events = static_cast<short>(glibPoll.events), .revents = 0});
       glibPoll.revents = 0;
-      ++pollCount;
     }
-
     int greetdIndex = -1;
     const int greetdFd = m_greetdClient.fd();
     if (greetdFd >= 0) {
-      greetdIndex = pollCount;
-      pfds[pollCount].fd = greetdFd;
-      pfds[pollCount].events = POLLIN;
-      ++pollCount;
+      greetdIndex = static_cast<int>(pfds.size());
+      pfds.push_back({.fd = greetdFd, .events = POLLIN, .revents = 0});
     }
+    const auto textureIndex = m_widgetTextureCache ? m_widgetTextureCache->addPollFds(pfds) : pfds.size();
 
-    const int pollResult = poll(pfds, static_cast<nfds_t>(pollCount), pollTimeout);
+    const int pollResult = poll(pfds.data(), static_cast<nfds_t>(pfds.size()), pollTimeout);
     if (pollResult > 0) {
       if (glibIndex >= 0 && pfds[glibIndex].revents != 0) {
         glibPoll.revents = pfds[glibIndex].revents;
@@ -245,6 +253,9 @@ int Greeter::run(WaylandClient& client, const std::atomic<bool>& shutdownRequest
     } else {
       wl_display_cancel_read(display);
     }
+
+    if (m_widgetTextureCache)
+      m_widgetTextureCache->dispatch(pfds, textureIndex);
 
     // A readable reply at the deadline wins because it was drained above and
     // disarmed the watchdog before this check.
@@ -356,6 +367,12 @@ void Greeter::syncOutputWindows() {
 
     View view;
     view.surface = std::make_unique<GreeterSurface>(m_model, m_authController, m_nextViewId++);
+    view.surface->setWidgetImages(
+        {.source = m_widgetImages ? &*m_widgetImages : nullptr,
+         .cache = m_widgetTextureCache.get(),
+         .backend = &m_renderContext->backend()},
+        m_widgetImageError
+    );
     view.surface->initialize(m_renderContext.get());
 
     view.window = std::make_unique<GreeterWindow>(*m_client, m_glSharedContext, *m_renderContext, *view.surface);

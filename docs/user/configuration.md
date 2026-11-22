@@ -76,10 +76,25 @@ preserve both stored collections.
 
 Widgets load when the greeter starts. Eligible types are `label`, `clock`
 (digital or analog), `sysmon` (graph or gauge), `button`, and `sticker`.
-Managed image installation is still pending: an empty Sticker can render its
-placeholder, but an unavailable image reference prevents the collection from
-mounting and shows a profile error while login remains available. The appearance
-helper does not yet install staged widget profiles from Noctalia.
+Sticker images load from the managed `widget-assets/` directory inside the
+state directory. Use `image_path = "widget-assets/<lowercase-sha256>.png"` or
+that file's exact installed absolute path. The hash is the SHA-256 of the PNG's
+encoded bytes; names, hashes and content are checked before publication.
+Multiple instances and outputs share decoded pixels and one texture upload,
+including when one reference is relative and another is absolute.
+
+Only PNG files with dimensions from 1 to 4096 on each axis are accepted, at most
+16 MiB encoded per file and 32 distinct images. Aggregate limits are 64 MiB
+encoded and 128 MiB decoded. Directories and files must be owned by root or the
+running greeter user and must not be group/world writable. Symlink traversal,
+hard-linked files, arbitrary paths, home expansion and URLs are rejected.
+Images must already be installed: the appearance helper does not yet install
+staged images or widget profiles from Noctalia.
+
+An empty Sticker retains its placeholder. Missing, corrupt or invalid managed
+images prevent the collection from mounting and show a profile error while
+native login remains available. Assets load once at startup; restart the greeter
+after changing the profile or installed files.
 
 An absent table, a default request, or an empty collection adds no custom widgets
 in this integration stage. The existing native clock remains separate until the

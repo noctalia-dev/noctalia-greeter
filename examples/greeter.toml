@@ -136,7 +136,9 @@ login_mode = "auto"
 # [widgets.widget.welcome.settings]
 # title = "Welcome home"
 # background = false
-# Image assets and applying widget profiles from Noctalia are not installed by the helper yet.
+# Sticker image_path accepts widget-assets/<lowercase-sha256>.png in the state directory
+# or its exact installed absolute path. PNGs are bounded and hash-checked; no links/URLs.
+# Helper installation of images and applying profiles from Noctalia are not enabled yet.
 
 [output]
 # Use layout, transforms, and scales from sync.toml when not declared here (default true).

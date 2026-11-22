@@ -9,6 +9,7 @@
 #include "greeter/render/wallpaper_types.h"
 #include "greeter/widgets/cpu_ram_provider.h"
 #include "greeter/widgets/widget_actions.h"
+#include "greeter/widgets/widget_image_source.h"
 #include "greeter/widgets/widget_model.h"
 #include "render/animation/animation_manager.h"
 #include "render/core/color.h"
@@ -87,6 +88,7 @@ public:
   // Hosts using these callbacks must be destroyed before this view.
   [[nodiscard]] greeter::WidgetActions widgetActions();
   void setWidgetsActive(bool active);
+  void setWidgetImages(greeter::WidgetImageContext images, std::string error = {});
   greeter::CpuRamDemand widgetMetricDemand() const;
   void setWidgetMetrics(const greeter::SysmonSnapshot& snapshot);
 
@@ -190,6 +192,8 @@ private:
   greeter::GreeterLayoutConfig m_layoutConfig;
   std::optional<greeter::WidgetCollection> m_widgets;
   greeter::WidgetLayer* m_widgetLayer = nullptr;
+  greeter::WidgetImageContext m_widgetImages;
+  std::string m_widgetImageError;
   bool m_widgetsDirty = true;
   bool m_widgetsActive = false;
   std::string m_configDiagnosticText;

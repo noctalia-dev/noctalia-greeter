@@ -46,7 +46,8 @@ namespace greeter {
   }
 
   const WidgetImageAsset* WidgetImageSource::find(std::string_view reference) const {
-    const auto entry = m_assets.find(std::string(reference));
+    const auto alias = m_aliases.find(std::string(reference));
+    const auto entry = m_assets.find(alias == m_aliases.end() ? std::string(reference) : alias->second);
     return entry == m_assets.end() ? nullptr : &entry->second;
   }
 

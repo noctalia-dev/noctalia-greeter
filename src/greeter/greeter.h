@@ -4,6 +4,7 @@
 #include "greeter/greeter_auth_controller.h"
 #include "greeter/greeter_model.h"
 #include "greeter/widgets/cpu_ram_provider.h"
+#include "greeter/widgets/widget_image_source.h"
 #include "render/gl_shared_context.h"
 
 #include <atomic>
@@ -15,6 +16,7 @@
 #include <string_view>
 #include <vector>
 
+class SharedTextureCache;
 class GreeterSurface;
 class GreeterWindow;
 class RenderContext;
@@ -58,6 +60,9 @@ private:
   WaylandClient* m_client = nullptr;
   GlSharedContext m_glSharedContext;
   std::unique_ptr<RenderContext> m_renderContext;
+  std::optional<greeter::WidgetImageSource> m_widgetImages;
+  std::unique_ptr<SharedTextureCache> m_widgetTextureCache;
+  std::string m_widgetImageError;
   GreeterModel m_model;
   GreetdClient m_greetdClient;
   GreeterAuthController m_authController;

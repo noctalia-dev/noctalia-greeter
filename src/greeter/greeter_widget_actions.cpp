@@ -166,6 +166,13 @@ void GreeterSurface::setOutputIdentifier(std::string id) {
   requestLayout();
 }
 
+void GreeterSurface::setWidgetImages(greeter::WidgetImageContext images, std::string error) {
+  m_widgetImages = images;
+  m_widgetImageError = std::move(error);
+  m_widgetsDirty = true;
+  requestLayout();
+}
+
 void GreeterSurface::setWidgetsActive(bool active) {
   m_widgetsActive = active;
   if (m_widgetLayer)
@@ -196,18 +203,22 @@ void GreeterSurface::syncWidgetLayer() {
   std::string error;
   // Default requests keep the native clock until the coordinated Clock-widget cutover.
   if (m_widgets && m_widgets->instances) {
-    auto layer = greeter::WidgetLayer::create(
-        *m_widgets->instances, m_boundOutputName, m_outputIdentifier, {}, nullptr, widgetActions()
-    );
-    if (layer) {
-      m_widgetLayer = layer->get();
-      // Custom back-to-front order stays below login, chrome, errors and menus.
-      m_widgetLayer->setZIndex(3);
-      m_root.addChild(std::move(*layer));
+    if (!m_widgetImageError.empty()) {
+      error = "Widget profile: " + m_widgetImageError;
     } else {
-      const auto& issue = layer.error().front();
-      error = "Widget profile: " + issue.path + ": " + issue.message;
-      kLog.warn("{}", error);
+      auto layer = greeter::WidgetLayer::create(
+          *m_widgets->instances, m_boundOutputName, m_outputIdentifier, m_widgetImages, nullptr, widgetActions()
+      );
+      if (layer) {
+        m_widgetLayer = layer->get();
+        // Custom back-to-front order stays below login, chrome, errors and menus.
+        m_widgetLayer->setZIndex(3);
+        m_root.addChild(std::move(*layer));
+      } else {
+        const auto& issue = layer.error().front();
+        error = "Widget profile: " + issue.path + ": " + issue.message;
+        kLog.warn("{}", error);
+      }
     }
   }
   const auto message = m_configDiagnosticText + (m_configDiagnosticText.empty() || error.empty() ? "" : "\n") + error;
