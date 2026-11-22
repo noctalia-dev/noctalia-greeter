@@ -8,6 +8,13 @@ configure:
 build: configure
   meson compile -C build
 
+# Mirror shared sources from the sibling Noctalia working tree.
+sync-lib:
+  ./tools/sync-lib.sh
+
+sync-desktopwidgets:
+  ./tools/sync-desktopwidgets.sh
+
 # Configure release build dir
 configure-release:
   meson setup build-release --buildtype=release -Dnative_optimizations=true --reconfigure -Dcpp_std=c++23

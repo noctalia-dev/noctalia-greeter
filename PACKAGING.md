@@ -40,7 +40,7 @@ the target distribution's package names and build dependency conventions.
 
 Install with the prefix you intend to ship. Greetd `command` must point at the installed `noctalia-greeter-session` path (often `/usr/bin/...`, not `/usr/local/bin/...`).
 
-### Versions and the shared library
+### Versions and shared libraries
 
 Bump the single line in [`VERSION`](VERSION) before tagging `v<VERSION>`.
 Meson, Nix, `--version`/`-v`, and startup logs read that release version.
@@ -54,21 +54,31 @@ Pushing a matching `v<VERSION>` tag runs the GitHub Release workflow, following
 Noctalia's release process. It generates commit-based release notes and attaches
 two source archives: `noctalia-greeter-v<VERSION>.tar.gz` and
 `noctalia-greeter-latest.tar.gz`. Both contain the same source tree under
-`noctalia-greeter-release/`, including `VERSION`, the vendored `lib/`, assets,
+`noctalia-greeter-release/`, including `VERSION`, the vendored `lib/` and `desktop-widgets/`, assets,
 licenses and Nix definitions. Git metadata, GitHub workflow files and Nix build
 result links are excluded. These are source archives, not prebuilt binaries.
 Rerunning the workflow for an existing release refreshes its assets and preserves
 its release notes. The existing AUR update workflow continues to run separately
 on version tags. Existing tags are not automatically backfilled with releases.
 
-[`lib/UPSTREAM`](lib/UPSTREAM) pins the unmodified Noctalia `lib/` snapshot.
-It is vendored, so building does not fetch a library or require a sibling
-checkout. To refresh it, replace the snapshot with `lib/` from the chosen
-Noctalia commit, retain its third-party notices, copy the upstream project
-license to `lib/LICENSE`, and update `lib/UPSTREAM`. Adapt consumer code outside
-`lib/` and run the greeter suite before shipping. Include `lib/`, `VERSION`, and
-the library assets in source packages. The imported revision is independent of
-the greeter's own release and Git revision.
+The Noctalia UI core (`lib/`) and desktop-widget library (`desktop-widgets/`)
+are local source mirrors. Builds never fetch either library or require a sibling
+checkout. Generic changes belong in Noctalia first; then resync the corresponding
+subtree unmodified and run the greeter suite. Mirroring can use Noctalia's current
+working tree; an upstream commit is not a prerequisite.
+
+With Git and rsync installed, use `just sync-lib` or `just sync-desktopwidgets`
+to mirror from the sibling `../noctalia` checkout. For another location, run
+`tools/sync-lib.sh /path/to/noctalia` or
+`tools/sync-desktopwidgets.sh /path/to/noctalia`. Both helpers refuse to overwrite
+uncommitted changes in their destination subtree. The UI sync includes
+`third_party/` because the greeter uses its codec pack.
+
+Copy Noctalia's root LICENSE into each mirror and preserve library assets and
+third-party notices. Include both subtrees in source archives and Nix inputs.
+The widget library consumes the greeter's existing `noctalia_ui_dep`, so there is
+one UI core per binary and no separately installed widget shared library.
+Greeter adapters, configuration validation and providers stay outside the mirrors.
 
 ### Installed layout
 
@@ -133,7 +143,8 @@ Notes packagers hit often:
 
 ### Vendored (no system package)
 
-The shared library lives under `lib/` (MIT; see `lib/LICENSE`). Wuffs image
+The shared UI and widget libraries live under `lib/` and `desktop-widgets/`
+(MIT; see their LICENSE files). Wuffs image
 decoding is bundled under `lib/third_party/wuffs/` (`Apache-2.0 OR MIT`), including
 both license texts. Packages should preserve these notices alongside the
 project's [LICENSE](LICENSE). The required assets include

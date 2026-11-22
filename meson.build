@@ -74,6 +74,9 @@ libjxl_threads_dep = dependency('libjxl_threads', required: true)
 noctalia_ui_build_codecs = true
 subdir('lib')
 
+# Unmodified desktop-widget mirror, sharing the UI core configured above.
+subdir('desktop-widgets')
+
 # Optional build provenance; source archives and builders without Git remain supported.
 _git_program = find_program('git', required: false)
 _git_revision_header_name = 'greeter_git_revision.h'
@@ -157,6 +160,7 @@ _greeter_inc = [
 ]
 
 _greeter_dependencies = [
+  noctalia_desktop_widgets_dep,
   noctalia_ui_codecs_dep,
   wayland_client_dep,
   egl_dep,

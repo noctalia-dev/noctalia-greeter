@@ -46,7 +46,7 @@ Pair it with **[Noctalia v5](https://github.com/noctalia-dev/noctalia)** if you 
 Follow the **[installation guide](docs/user/installation.md)** for distribution
 packages, NixOS, greetd configuration, and a safe handoff from another display
 manager. If no package is available, use the separate
-**[source-build guide](docs/user/building-from-source.md)** (C++23, Meson >= 1.1; shared UI library bundled in `lib/`), then return to the
+**[source-build guide](docs/user/building-from-source.md)** (C++23, Meson >= 1.1; shared UI and widget libraries bundled in `lib/` and `desktop-widgets/`), then return to the
 main installation flow.
 
 After installation:

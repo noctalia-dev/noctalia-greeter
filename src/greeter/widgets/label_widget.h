@@ -5,7 +5,7 @@
 
 #include <string>
 
-class Label;
+class LabelWidget;
 
 namespace greeter {
 
@@ -24,10 +24,7 @@ namespace greeter {
     void layoutAtScale(Renderer& renderer, float scale) override;
 
   private:
-    Label* m_title = nullptr;
-    Label* m_description = nullptr;
-    float m_opacity;
-    bool m_shadow;
+    ::LabelWidget* m_label = nullptr;
   };
 
 } // namespace greeter
