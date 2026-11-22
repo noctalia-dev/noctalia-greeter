@@ -3,6 +3,7 @@
 #include "greetd/greetd_client.h"
 #include "greeter/greeter_auth_controller.h"
 #include "greeter/greeter_model.h"
+#include "greeter/widgets/cpu_ram_provider.h"
 #include "render/gl_shared_context.h"
 
 #include <atomic>
@@ -45,6 +46,8 @@ private:
   };
 
   void connectGreetd();
+  void updateWidgetMetrics();
+  int widgetMetricsPollTimeoutMs() const;
   void setupInputCallbacks(WaylandClient& client);
   void syncOutputWindows();
   void syncModel(GreeterViewId source, bool selection);
@@ -59,6 +62,9 @@ private:
   GreetdClient m_greetdClient;
   GreeterAuthController m_authController;
   std::vector<View> m_views;
+  greeter::CpuRamProvider m_widgetMetrics;
+  greeter::CpuRamDemand m_widgetMetricDemand;
+  std::optional<std::chrono::steady_clock::time_point> m_nextWidgetMetrics;
   GreeterViewId m_nextViewId = 1;
   GreeterSurface* m_activeSurface = nullptr;
 

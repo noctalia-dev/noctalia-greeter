@@ -31,6 +31,8 @@ Noctalia Greeter is the screen you see before your desktop session starts. It le
 
 The default UI pairs a large clock with a right-side login card and Noctalia’s current default palette. Configuring both a default user and session enables a compact card without pickers; **Esc** returns to account selection. [Component layout](docs/user/configuration.md#component-layout) supports per-component placement, visibility, rotation, scaling, and flips in `greeter.toml`, with unset fields inherited from `sync.toml`.
 
+[Widget profiles](docs/user/configuration.md#desktop-widgets) can add shared desktop widgets beneath the native login UI. Sysmon samples visible CPU, RAM, and swap requests once per second across outputs; managed image installation and Noctalia customization Apply are still being integrated.
+
 The default date format matches Noctalia (`%A, %x`). When no time locale is inherited, the greeter reads the system locale configuration, then falls back to an installed English locale. See [Clock](docs/user/configuration.md#clock) for locale precedence and overrides.
 
 Long session and color scheme menus fit within the screen and show a scrollbar.

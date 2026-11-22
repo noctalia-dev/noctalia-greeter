@@ -161,6 +161,7 @@ int Greeter::run(WaylandClient& client, const std::atomic<bool>& shutdownRequest
   while (!m_exitRequested && !shutdownRequested.load(std::memory_order_relaxed)) {
     drainGreeterUiWork();
     client.repeatTick();
+    updateWidgetMetrics();
 
     for (auto& view : m_views) {
       if (view.surface->updateClock()) {
@@ -194,6 +195,8 @@ int Greeter::run(WaylandClient& client, const std::atomic<bool>& shutdownRequest
     int glibPriority = 0;
     const int uiTimeout = greeterUiPollTimeoutMs();
     int pollTimeout = uiTimeout < 0 ? timeoutMs : std::min(timeoutMs, uiTimeout);
+    if (const int metricsTimeout = widgetMetricsPollTimeoutMs(); metricsTimeout >= 0)
+      pollTimeout = std::min(pollTimeout, metricsTimeout);
     if (resumeMonitor.active()) {
       resumeMonitor.prepareDispatch(glibPriority, glibPoll, pollTimeout);
     }
@@ -257,6 +260,36 @@ int Greeter::run(WaylandClient& client, const std::atomic<bool>& shutdownRequest
   }
 
   return 0;
+}
+
+void Greeter::updateWidgetMetrics() {
+  greeter::CpuRamDemand demand;
+  for (const auto& view : m_views)
+    demand.merge(view.surface->widgetMetricDemand());
+  const auto now = std::chrono::steady_clock::now();
+  if (demand != m_widgetMetricDemand) {
+    m_widgetMetricDemand = demand;
+    m_widgetMetrics.setDemand(demand);
+    m_nextWidgetMetrics = demand == greeter::CpuRamDemand{} ? std::nullopt : std::make_optional(now);
+  }
+  if (!m_nextWidgetMetrics || now < *m_nextWidgetMetrics)
+    return;
+  const auto& snapshot = m_widgetMetrics.sample();
+  m_nextWidgetMetrics = now + std::chrono::seconds(1);
+  for (const auto& view : m_views)
+    view.surface->setWidgetMetrics(snapshot);
+}
+
+int Greeter::widgetMetricsPollTimeoutMs() const {
+  if (!m_nextWidgetMetrics)
+    return -1;
+  return static_cast<int>(
+      std::max(
+          std::chrono::milliseconds::zero(),
+          std::chrono::ceil<std::chrono::milliseconds>(*m_nextWidgetMetrics - std::chrono::steady_clock::now())
+      )
+          .count()
+  );
 }
 
 void Greeter::syncOutputWindows() {

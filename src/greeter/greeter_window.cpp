@@ -41,6 +41,7 @@ bool GreeterWindow::createSurface() {
 void GreeterWindow::bindOutput(wl_output* output) { m_boundOutput = output; }
 void GreeterWindow::setSceneReady(bool ready) {
   m_sceneReady = ready;
+  m_greeterSurface.setWidgetsActive(ready);
   if (ready)
     requestLayout();
 }

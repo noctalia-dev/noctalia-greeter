@@ -7,7 +7,9 @@
 #include "greeter/greeter_model.h"
 #include "greeter/greeter_sessions.h"
 #include "greeter/render/wallpaper_types.h"
+#include "greeter/widgets/cpu_ram_provider.h"
 #include "greeter/widgets/widget_actions.h"
+#include "greeter/widgets/widget_model.h"
 #include "render/animation/animation_manager.h"
 #include "render/core/color.h"
 #include "render/core/texture_handle.h"
@@ -23,6 +25,10 @@
 #include <string>
 #include <string_view>
 #include <vector>
+
+namespace greeter {
+  class WidgetLayer;
+}
 
 class Box;
 class Button;
@@ -64,7 +70,7 @@ public:
 
   void onThemeChanged();
   void setKeyboardLayoutName(std::string name);
-  void setOutputIdentifier(std::string id) { m_outputIdentifier = std::move(id); }
+  void setOutputIdentifier(std::string id);
   [[nodiscard]] bool handleNavigationKey(std::uint32_t sym, std::uint32_t utf32, std::uint32_t modifiers);
   void requestLayout();
   void requestRedraw();
@@ -80,6 +86,9 @@ public:
 
   // Hosts using these callbacks must be destroyed before this view.
   [[nodiscard]] greeter::WidgetActions widgetActions();
+  void setWidgetsActive(bool active);
+  greeter::CpuRamDemand widgetMetricDemand() const;
+  void setWidgetMetrics(const greeter::SysmonSnapshot& snapshot);
 
 private:
   void layoutScene(std::uint32_t width, std::uint32_t height);
@@ -149,6 +158,7 @@ private:
   void enterPasswordStep(std::size_t userIndex);
   [[nodiscard]] bool handleUserMenuSearchKey(std::uint32_t sym, bool preedit);
   void loadPreferences();
+  void syncWidgetLayer();
   void reconcileKeyboardFocus();
   [[nodiscard]] bool ownsInputArea(const InputArea* area) const;
   [[nodiscard]] bool showsUserDropdown() const noexcept;
@@ -178,6 +188,11 @@ private:
   std::unique_ptr<GreeterChrome> m_chromeComponent;
   float m_sceneScale = 1.0F;
   greeter::GreeterLayoutConfig m_layoutConfig;
+  std::optional<greeter::WidgetCollection> m_widgets;
+  greeter::WidgetLayer* m_widgetLayer = nullptr;
+  bool m_widgetsDirty = true;
+  bool m_widgetsActive = false;
+  std::string m_configDiagnosticText;
   bool m_minimalLogin = false;
   std::string m_keyboardLayout;
   std::string m_outputIdentifier;

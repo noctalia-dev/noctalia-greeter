@@ -24,12 +24,14 @@ namespace greeter {
 
     void setActive(bool active);
     void setMetrics(const SysmonSnapshot& snapshot);
+    CpuRamDemand metricDemand() const;
 
   private:
     WidgetLayer();
     void doLayout(Renderer& renderer) override;
     bool containsLocalPoint(float x, float y, bool includeHitOutset) const override;
     void syncActive();
+    bool effectivelyActive() const;
 
     struct Entry {
       std::variant<WidgetAnchorPlacement, WidgetRelativePlacement> placement;

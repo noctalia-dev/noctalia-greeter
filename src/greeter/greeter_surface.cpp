@@ -16,6 +16,7 @@
 #include "greeter/ui/greeter_components.h"
 #include "greeter/ui/greeter_metrics.h"
 #include "greeter/ui/search_field.h"
+#include "greeter/widgets/widget_layer.h"
 #include "render/core/renderer.h"
 #include "render/core/texture_manager.h"
 #include "render/render_context.h"
@@ -142,6 +143,8 @@ GreeterSurface::GreeterSurface(GreeterModel& model, GreeterAuthController& auth,
 
 GreeterSurface::~GreeterSurface() {
   m_widgetInputLifetime.reset();
+  if (m_widgetLayer)
+    m_widgetLayer->setActive(false);
   if (m_renderContext != nullptr) {
     if (m_brandLogoTexture.id != 0) {
       m_renderContext->textureManager().unload(m_brandLogoTexture);
@@ -179,7 +182,7 @@ void GreeterSurface::initialize(RenderContext* context) {
   auto bottomLogo = std::make_unique<ImageNode>();
   bottomLogo->setFitMode(ImageFitMode::Contain);
   bottomLogo->setHitTestVisible(false);
-  bottomLogo->setZIndex(2);
+  bottomLogo->setZIndex(4);
   m_brandLogo = bottomLogo.get();
   m_root.addChild(std::move(bottomLogo));
 
@@ -543,7 +546,8 @@ void GreeterSurface::initialize(RenderContext* context) {
     if (diagnostics.size() > 1) {
       message << " (+" << diagnostics.size() - 1 << " more)";
     }
-    m_configErrorLabel->setText(message.str());
+    m_configDiagnosticText = message.str();
+    m_configErrorLabel->setText(m_configDiagnosticText);
     m_configErrorLabel->setVisible(true);
     m_configErrorHeading->setVisible(true);
     m_configErrorBanner->setVisible(true);
@@ -615,6 +619,8 @@ void GreeterSurface::reconcileKeyboardFocus() {
 
 void GreeterSurface::setWindow(GreeterWindow* window) {
   m_window = window;
+  if (!window)
+    setWidgetsActive(false);
   m_renderer = window ? &window->renderTarget().renderer() : nullptr;
 }
 
@@ -906,6 +912,7 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
   m_root.setTranslate(-fullW * (1 - m_sceneScale) / 2, -fullH * (1 - m_sceneScale) / 2);
   const float sw = fullW, sh = fullH;
   m_root.setSize(fullW, fullH);
+  syncWidgetLayer();
   m_wallpaper->setPosition(0, 0);
   m_wallpaper->setSize(sw, sh);
   m_wallpaper->setFillMode(m_wallpaperFillMode);
@@ -1051,6 +1058,12 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
   transformNodes(Id::Power, std::array<Node*, 1>{m_powerMenuButton});
   transformNodes(Id::Appearance, std::array<Node*, 1>{m_schemeSelectButton});
   m_chromeComponent->applyKeyboardTransform(layout[Id::Keyboard], layout.transforms[5]);
+  if (m_widgetLayer) {
+    m_widgetLayer->setSize(sw, sh);
+    m_widgetLayer->layout(renderer);
+    m_widgetLayer->setActive(m_widgetsActive);
+    reconcileWidgetInput();
+  }
   layoutPowerMenu(sw, sh);
   rebuildUserMenu();
   rebuildSessionMenu();
@@ -1207,6 +1220,7 @@ void GreeterSurface::setBoundOutputName(std::string outputName) {
     return;
   }
   m_boundOutputName = std::move(outputName);
+  m_widgetsDirty = true;
   applyConfiguredWallpaper();
   requestLayout();
 }
@@ -1406,6 +1420,8 @@ void GreeterSurface::syncWallpaperTexture() {
 void GreeterSurface::loadPreferences() {
   const auto prefs = greeter::loadGreeterPreferences();
   m_layoutConfig = greeter::effectiveGreeterLayout(prefs);
+  m_widgets = prefs.widgets;
+  m_widgetsDirty = true;
   m_clockEnabled = m_layoutConfig.components[1].visible.value_or(prefs.clockEnabled);
   m_clockTimeFormat = prefs.clockTimeFormat;
   m_clockDateFormat = prefs.clockDateFormat;

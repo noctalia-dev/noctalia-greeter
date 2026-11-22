@@ -95,12 +95,25 @@ namespace greeter {
     syncActive();
   }
 
-  void WidgetLayer::syncActive() {
+  bool WidgetLayer::effectivelyActive() const {
     bool active = m_active && validSize(width(), height());
     for (const Node* node = this; node != nullptr && active; node = node->parent())
       active = node->visible();
+    return active;
+  }
+
+  void WidgetLayer::syncActive() {
+    const bool active = effectivelyActive();
     for (const auto& entry : m_entries)
       entry.host->setActive(active && entry.host->visible());
+  }
+
+  CpuRamDemand WidgetLayer::metricDemand() const {
+    CpuRamDemand demand;
+    if (effectivelyActive())
+      for (const auto& entry : m_entries)
+        demand.merge(entry.host->metricDemand());
+    return demand;
   }
 
   bool WidgetLayer::containsLocalPoint(float x, float y, bool includeHitOutset) const {
@@ -120,8 +133,11 @@ namespace greeter {
   }
 
   void WidgetLayer::setMetrics(const SysmonSnapshot& snapshot) {
+    if (!effectivelyActive())
+      return;
     for (const auto& entry : m_entries)
-      entry.host->setMetrics(snapshot);
+      if (entry.host->metricDemand() != CpuRamDemand{})
+        entry.host->setMetrics(snapshot);
   }
 
 } // namespace greeter

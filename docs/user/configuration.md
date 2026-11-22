@@ -9,6 +9,7 @@ Administrator-controlled settings live in `/var/lib/noctalia-greeter/greeter.tom
 
 - [Configuration files](#configuration-files)
 - [Keys the greeter remembers](#keys-the-greeter-remembers)
+- [Desktop widgets](#desktop-widgets)
 - [Configuration reference](#configuration-reference)
 - [Default session](#default-session)
 - [Default user](#default-user)
@@ -57,11 +58,12 @@ The next read refreshes that file's diagnostics, so a repaired file can be saved
 without restarting the greeter; errors in other configuration files remain
 reported.
 
-Both files also retain validated `[widgets]` profile metadata for the upcoming
-greeter editor integration. An absent table leaves widgets unmanaged, an empty
+## Desktop widgets
+
+Both files accept validated `[widgets]` profiles for the greeter. An absent table leaves widgets unmanaged, an empty
 table requests defaults, and `widget_order = []` explicitly stores an empty
-collection. Profiles are stored and preserved by preference and appearance updates;
-rendering saved widget profiles is not enabled yet. Invalid widget metadata is
+collection. Explicit collections render as desktop widgets beneath the native login card,
+chrome, error banner and menus. Preference and appearance updates preserve them. Invalid widget metadata is
 reported with its field path and blocks writes to that file until repaired.
 
 An explicit administrator `[widgets]` table owns the entire effective collection,
@@ -71,6 +73,65 @@ administrator collection or TOML is invalid, its diagnostic remains visible and
 the greeter does not select Sync's collection instead. Repairing or removing the
 administrator override takes effect on the next load. Session and scheme saves
 preserve both stored collections.
+
+Widgets load when the greeter starts. Eligible types are `label`, `clock`
+(digital or analog), `sysmon` (graph or gauge), `button`, and `sticker`.
+Managed image installation is still pending: an empty Sticker can render its
+placeholder, but an unavailable image reference prevents the collection from
+mounting and shows a profile error while login remains available. The appearance
+helper does not yet install staged widget profiles from Noctalia.
+
+An absent table, a default request, or an empty collection adds no custom widgets
+in this integration stage. The existing native clock remains separate until the
+planned Clock-widget cutover; use `[clock].enabled = false` to hide it when
+configuring your own clocks.
+
+```toml
+[widgets]
+widget_order = ["welcome", "load"]
+
+[widgets.widget.welcome]
+type = "label"
+placement = "anchor"
+anchor = "top-left"
+y = 100
+box_width = 500
+box_height = 100
+[widgets.widget.welcome.settings]
+title = "Welcome home"
+background = false
+
+[widgets.widget.load]
+type = "sysmon"
+placement = "anchor"
+anchor = "bottom-left"
+y = -64
+box_width = 320
+box_height = 120
+[widgets.widget.load.settings]
+stat = "cpu_usage"
+stat2 = "ram_pct"
+```
+
+Widget order runs from back to front within the widget layer. Disabled widgets
+and unmatched `output` connector/stable IDs are not mounted. Widgets outside the
+view stop ticking and requesting metrics. Relative placement uses `cx`, `cy`,
+`placement_width`, and `placement_height` instead of anchor/offset fields.
+Rotation and axis flips use `rotation`, `flip_x`, and `flip_y`; zero
+`box_width`/`box_height` requests natural size.
+
+Sysmon supports CPU usage, CPU frequency, CPU temperature, RAM usage and swap
+usage (`cpu_usage`, `cpu_freq`, `cpu_temp`, `ram_pct`, `swap_pct`). The application
+samples the union of visible requests once per second and shares each snapshot
+across outputs. A gauge requests only its primary metric. Unavailable readings
+show `--`; validated zero-capacity swap shows `No swap`. No GPU metrics are
+available. Unused metrics are not polled, and inactive views stop widget ticks
+and demand.
+
+Buttons use the bounded `action` setting (`none`, `power`, `appearance`,
+`sessions`, `suspend`, `reboot`, `shutdown`, or `firmware`) through the existing
+native greeter handlers; arbitrary commands are not accepted. Hidden,
+inactive, or removed widgets cannot retain an action or its menu focus.
 
 ## Configuration reference
 

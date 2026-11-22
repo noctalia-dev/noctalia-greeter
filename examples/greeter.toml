@@ -121,6 +121,23 @@ login_mode = "auto"
 # The whole component and its input transform together; popups stay upright.
 # Oversized transformed components scale down to fit the output.
 
+# Optional additional desktop widgets. Administrator [widgets] owns the whole collection.
+# See docs/user/configuration.md for a complete example and supported settings.
+# An empty widget_order creates no custom widgets; the native clock remains separate.
+# [widgets]
+# widget_order = ["welcome"]
+# [widgets.widget.welcome]
+# type = "label"
+# placement = "anchor"
+# anchor = "top-left"
+# y = 100
+# box_width = 500
+# box_height = 100
+# [widgets.widget.welcome.settings]
+# title = "Welcome home"
+# background = false
+# Image assets and applying widget profiles from Noctalia are not installed by the helper yet.
+
 [output]
 # Use layout, transforms, and scales from sync.toml when not declared here (default true).
 # Set false to use independent display settings while keeping appearance sync.

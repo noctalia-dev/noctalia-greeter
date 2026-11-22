@@ -75,6 +75,7 @@ namespace greeter {
       settings.try_emplace(std::string(field.key), field.defaultValue);
     const auto text = [&](const char* key) -> const std::string& { return std::get<std::string>(settings.at(key)); };
     std::unique_ptr<WidgetContent> content;
+    CpuRamDemand demand;
     if (instance.type == "button") {
       content = std::make_unique<ButtonWidget>(
           ButtonWidget::Options{
@@ -95,10 +96,33 @@ namespace greeter {
     if (instance.type == "sysmon") {
       const auto primary = findSysmonMetric(text("stat"))->metric;
       const bool gauge = text("display") == "gauge";
+      const auto secondary =
+          !gauge && !text("stat2").empty() ? std::make_optional(findSysmonMetric(text("stat2"))->metric) : std::nullopt;
+      const auto request = [&](SysmonMetric metric) {
+        switch (metric) {
+        case SysmonMetric::CpuUsage:
+          demand.cpu = true;
+          break;
+        case SysmonMetric::CpuTemp:
+          demand.temperature = true;
+          break;
+        case SysmonMetric::CpuFreq:
+          demand.frequency = true;
+          break;
+        case SysmonMetric::RamPct:
+          demand.ram = true;
+          break;
+        case SysmonMetric::SwapPct:
+          demand.swap = true;
+          break;
+        }
+      };
+      request(primary);
+      if (secondary)
+        request(*secondary);
       content = std::make_unique<SysmonWidget>(SysmonWidget::Options{
           .primary = primary,
-          .secondary = !gauge && !text("stat2").empty() ? std::make_optional(findSysmonMetric(text("stat2"))->metric)
-                                                        : std::nullopt,
+          .secondary = secondary,
           .gauge = gauge,
           .color = colorSpec(text("color")),
           .color2 = colorSpec(text("color2")),
@@ -148,11 +172,13 @@ namespace greeter {
           .shadow = std::get<bool>(settings.at("shadow")),
       });
     }
-    return std::unique_ptr<WidgetHost>(new WidgetHost(
+    auto host = std::unique_ptr<WidgetHost>(new WidgetHost(
         instance, std::move(content), std::get<bool>(settings.at("background")),
         scaleAlpha(colorSpec(text("background_color")), number(settings.at("background_opacity"))),
         number(settings.at("background_radius")), number(settings.at("background_padding"))
     ));
+    host->m_metricDemand = demand;
+    return host;
   }
 
   WidgetHost::WidgetHost(

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/timer_manager.h"
+#include "greeter/widgets/cpu_ram_provider.h"
 #include "greeter/widgets/widget_actions.h"
 #include "greeter/widgets/widget_image_source.h"
 #include "greeter/widgets/widget_model.h"
@@ -31,6 +32,7 @@ namespace greeter {
     // The view owner activates mounted, effectively visible instances and deactivates
     // them before hiding/detaching. Destruction cancels pending ticks automatically.
     void setActive(bool active);
+    CpuRamDemand metricDemand() const { return m_active && visible() ? m_metricDemand : CpuRamDemand{}; }
 
   private:
     WidgetHost(
@@ -46,6 +48,7 @@ namespace greeter {
     float m_boxHeight;
     float m_padding;
     bool m_active = false;
+    CpuRamDemand m_metricDemand;
     Timer m_tickTimer;
   };
 

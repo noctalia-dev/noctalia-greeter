@@ -17,6 +17,14 @@ namespace greeter {
     bool swap = false;
     bool frequency = false;
     bool temperature = false;
+    bool operator==(const CpuRamDemand&) const = default;
+    void merge(const CpuRamDemand& other) {
+      cpu |= other.cpu;
+      ram |= other.ram;
+      swap |= other.swap;
+      frequency |= other.frequency;
+      temperature |= other.temperature;
+    }
   };
 
   // One owner shares sampled snapshots across views. No timer, thread, callback or

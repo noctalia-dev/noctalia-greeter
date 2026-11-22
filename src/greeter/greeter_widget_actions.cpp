@@ -1,12 +1,19 @@
 #include "core/deferred_call.h"
 #include "core/input/key_symbols.h"
+#include "core/log.h"
 #include "greeter/greeter_surface.h"
 #include "greeter/power_actions.h"
 #include "greeter/widgets/widget_layer.h"
 #include "render/scene/input_area.h"
+#include "render/scene/rect_node.h"
 #include "ui/controls/button.h"
+#include "ui/controls/label.h"
 
 #include <algorithm>
+
+namespace {
+  constexpr Logger kLog("greeter-widgets");
+}
 
 greeter::WidgetActions GreeterSurface::widgetActions() {
   return {
@@ -55,6 +62,13 @@ void GreeterSurface::clearWidgetMenuTrigger() {
 }
 
 void GreeterSurface::reconcileWidgetInput() {
+  if (auto* focused = m_inputDispatcher.focusedArea(); focused && !liveWidgetInput(focused)) {
+    for (const Node* node = focused; node != nullptr; node = node->parent())
+      if (dynamic_cast<const greeter::WidgetLayer*>(node)) {
+        m_widgetFocusRecovery = true;
+        break;
+      }
+  }
   if (m_widgetMenuTrigger != nullptr && !liveWidgetInput(m_widgetMenuTrigger)) {
     closeMenus();
     m_widgetFocusRecovery = true;
@@ -142,4 +156,63 @@ void GreeterSurface::activateWidgetAction(greeter::WidgetAction action, Node& so
   });
   m_widgetMenuTrigger = trigger;
   m_widgetMenuAction = action;
+}
+
+void GreeterSurface::setOutputIdentifier(std::string id) {
+  if (m_outputIdentifier == id)
+    return;
+  m_outputIdentifier = std::move(id);
+  m_widgetsDirty = true;
+  requestLayout();
+}
+
+void GreeterSurface::setWidgetsActive(bool active) {
+  m_widgetsActive = active;
+  if (m_widgetLayer)
+    m_widgetLayer->setActive(active);
+  if (!active)
+    reconcileWidgetInput();
+}
+
+greeter::CpuRamDemand GreeterSurface::widgetMetricDemand() const {
+  return m_widgetLayer ? m_widgetLayer->metricDemand() : greeter::CpuRamDemand{};
+}
+
+void GreeterSurface::setWidgetMetrics(const greeter::SysmonSnapshot& snapshot) {
+  if (m_widgetLayer)
+    m_widgetLayer->setMetrics(snapshot);
+}
+
+void GreeterSurface::syncWidgetLayer() {
+  if (!m_widgetsDirty)
+    return;
+  m_widgetsDirty = false;
+  if (m_widgetLayer) {
+    m_widgetLayer->setActive(false);
+    reconcileWidgetInput();
+    m_root.removeChild(m_widgetLayer).reset();
+    m_widgetLayer = nullptr;
+  }
+  std::string error;
+  // Default requests keep the native clock until the coordinated Clock-widget cutover.
+  if (m_widgets && m_widgets->instances) {
+    auto layer = greeter::WidgetLayer::create(
+        *m_widgets->instances, m_boundOutputName, m_outputIdentifier, {}, nullptr, widgetActions()
+    );
+    if (layer) {
+      m_widgetLayer = layer->get();
+      // Custom back-to-front order stays below login, chrome, errors and menus.
+      m_widgetLayer->setZIndex(3);
+      m_root.addChild(std::move(*layer));
+    } else {
+      const auto& issue = layer.error().front();
+      error = "Widget profile: " + issue.path + ": " + issue.message;
+      kLog.warn("{}", error);
+    }
+  }
+  const auto message = m_configDiagnosticText + (m_configDiagnosticText.empty() || error.empty() ? "" : "\n") + error;
+  m_configErrorLabel->setText(message);
+  m_configErrorLabel->setVisible(!message.empty());
+  m_configErrorHeading->setVisible(!message.empty());
+  m_configErrorBanner->setVisible(!message.empty());
 }

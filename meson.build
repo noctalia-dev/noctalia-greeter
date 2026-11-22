@@ -754,6 +754,28 @@ test(
   timeout: 30,
 )
 
+greeter_widget_runtime_test = executable(
+  'greeter-widget-runtime-test',
+  sources: files('tests/greeter_widget_runtime_test.cpp'),
+  objects: noctalia_greeter_executable.extract_objects(_greeter_sources),
+  dependencies: _greeter_dependencies,
+  include_directories: _greeter_inc,
+  cpp_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow'],
+  link_args: ['-Wl,--wrap=_ZN7greeter14CpuRamProvider6sampleEv'],
+  build_by_default: false,
+)
+
+test(
+  'greeter-widget-runtime',
+  find_program('sh'),
+  args: [
+    meson.project_source_root() / 'tests/greeter_widget_runtime_test.sh',
+    noctalia_greeter_compositor_executable,
+    greeter_widget_runtime_test,
+  ],
+  timeout: 60,
+)
+
 greeter_user_switch_test = executable(
   'greeter-user-switch-test',
   sources: files('tests/greeter_user_switch_test.cpp'),
