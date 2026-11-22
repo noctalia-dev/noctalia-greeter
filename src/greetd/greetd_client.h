@@ -91,6 +91,9 @@ public:
   // Socket fd for integration into a poll()/epoll loop, or -1 when disconnected.
   [[nodiscard]] int fd() const noexcept { return m_socketFd; }
 
+  // True while a request has been written and its reply has not been read yet.
+  [[nodiscard]] bool requestInFlight() const noexcept { return m_pendingRequest.has_value(); }
+
   // Write a request without waiting for its reply. False on write failure.
   bool requestCreateSession(const std::string& username);
   // nullopt acknowledges an informational message; an empty string answers a prompt.

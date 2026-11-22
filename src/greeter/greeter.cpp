@@ -141,6 +141,11 @@ bool Greeter::initialize(WaylandClient& client) {
   }
 
   kLog.info("greeter initialized ({} view(s))", m_views.size());
+
+  if (!m_views.empty()) {
+    GreeterSurface* surface = m_activeSurface != nullptr ? m_activeSurface : m_views.front().surface.get();
+    surface->startFingerprintAuth();
+  }
   return true;
 }
 
@@ -403,6 +408,12 @@ void Greeter::syncOutputWindows() {
   }
   setActiveSurface(keyboardSurface);
 
+  // Late outputs: initialize's auto-start ran with no views. Retry once a
+  // password-step surface exists; the guards inside make this idempotent.
+  if (!m_initializing && m_activeSurface != nullptr) {
+    m_activeSurface->startFingerprintAuth();
+  }
+
   m_syncingOutputWindows = false;
   if (m_pendingOutputSync) {
     syncOutputWindows();
@@ -521,6 +532,11 @@ void Greeter::onGreetdReadable() {
   }
   if (target != nullptr) {
     target->onGreetdReadable();
+    for (const auto& view : m_views) {
+      if (view.surface.get() != target) {
+        view.surface->mirrorAuthStatusFrom(*target);
+      }
+    }
   }
 }
 

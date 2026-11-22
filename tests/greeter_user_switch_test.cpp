@@ -1,4 +1,5 @@
 #include "greeter/greeter.h"
+#include "greeter/greeter_surface.h"
 #include "greeter/greeter_window.h"
 #include "wayland/wayland_client.h"
 #include "wayland/wayland_seat.h"
@@ -70,12 +71,13 @@ namespace {
 
   class FakeGreetd {
   public:
-    FakeGreetd() {
+    explicit FakeGreetd(bool autoStartPam) {
       char pattern[] = "/tmp/noctalia-user-switch-XXXXXX";
       const char* created = ::mkdtemp(pattern);
       require(created != nullptr, "mkdtemp failed");
       directory = created;
-      std::ofstream(directory / "greeter.toml") << R"toml(
+      std::ofstream(directory / "greeter.toml")
+          << R"toml(
 [appearance]
 hide_logo = true
 [clock]
@@ -84,7 +86,10 @@ enabled = false
 default = "user-switch-test"
 [auth]
 allow_empty_password = true
-)toml";
+)toml"
+        << "auto_start_pam = "
+        << (autoStartPam ? "true" : "false")
+        << '\n';
       require(::setenv("NOCTALIA_GREETER_STATE_DIR", directory.c_str(), 1) == 0, "setenv failed");
       require(::setenv("NOCTALIA_GREETER_DUMMY_USERS", "2", 1) == 0, "setenv failed");
       const std::string path = (directory / "greetd.sock").string();
@@ -217,7 +222,7 @@ allow_empty_password = true
   }
 
   void testSwitch(std::string_view stage) {
-    FakeGreetd server;
+    FakeGreetd server(stage == "scan-retry" || stage == "mirror-prompt");
     WaylandClient client;
     require(client.connect(), "Wayland connection failed");
     Greeter greeter;
@@ -228,6 +233,31 @@ allow_empty_password = true
     require(windows.size() == 2, "test requires two rendered outputs");
     server.acceptPeer();
     focusOutput(0);
+    if (stage == "scan-retry") {
+      server.request("create_session");
+      server.prompt(greeter, client, "info");
+      server.request("post_auth_message_response");
+      type(greeter, "first");
+      server.prompt(greeter, client, "error");
+      server.request("post_auth_message_response");
+      server.prompt(greeter, client, "secret");
+      submit(greeter, "-second");
+      require(server.request("post_auth_message_response").at("response") == "first-second",
+          "fingerprint retry erased the unfinished password");
+      finish(server, greeter, client);
+      return;
+    }
+    if (stage == "mirror-prompt") {
+      // Auto-start owns the conversation on one output; every PAM prompt must
+      // also surface on the other output's status line.
+      server.request("create_session");
+      server.prompt(greeter, client, "info");
+      require(windows[0]->greeterSurface().statusText() == "Test prompt", "prompt did not reach the first display");
+      require(windows[1]->greeterSurface().statusText() == "Test prompt", "prompt did not reach the second display");
+      server.request("post_auth_message_response");
+      finish(server, greeter, client);
+      return;
+    }
     if (stage == "idle-switch") {
       type(greeter, "must-not-leak");
       selectUser(greeter, 1, "dummy-user-01");
@@ -251,7 +281,7 @@ allow_empty_password = true
           server.request("post_auth_message_response").at("response") == "old-account-token", "wrong initial credential"
       );
     }
-    if (stage == "prompt-waiting" || stage == "cancel-reselect") {
+    if (stage == "prompt-waiting" || stage == "cancel-reselect" || stage == "reselect-before-ack") {
       server.prompt(greeter, client, "secret");
       server.noRequest();
     }
@@ -266,7 +296,7 @@ allow_empty_password = true
       server.request("cancel_session");
     }
 
-    selectUser(greeter, stage == "same-output" ? 0 : 1, "dummy-user-01");
+    selectUser(greeter, (stage == "same-output" || stage == "reselect-before-ack") ? 0 : 1, "dummy-user-01");
     if (stage == "handoff") {
       server.noRequest();
       server.reply(greeter, client, {{"type", "success"}});
@@ -275,7 +305,11 @@ allow_empty_password = true
       require(pollCount.load() == before, "account change swallowed the terminal handoff");
       return;
     }
-    if (stage != "prompt-waiting" && stage != "cancel-reselect" && stage != "error-cancel-pending") {
+    if (stage != "prompt-waiting" && stage != "cancel-reselect" && stage != "error-cancel-pending"
+        && stage != "reselect-before-ack") {
+      server.noRequest();
+      focusOutput(0);
+      submit(greeter, "queued-account-token");
       server.noRequest();
       if (stage == "create-pending") {
         server.prompt(greeter, client, "secret");
@@ -296,12 +330,35 @@ allow_empty_password = true
       selectUser(greeter, 0, "dummy-user-02");
       server.noRequest();
     }
-    // Credentials cannot be submitted to either account until cancellation ends.
-    focusOutput(0);
-    submit(greeter, "must-not-be-queued");
-    server.noRequest();
+    if (stage == "reselect-before-ack") {
+      // Reselecting while the cancel ack is outstanding keeps authentication
+      // ownership here: the other output cannot begin authentication and the
+      // shared client must not disconnect.
+      focusOutput(1);
+      submit(greeter, "must-not-begin-auth");
+      server.noRequest();
+      server.reply(greeter, client, {{"type", "success"}});
+      server.noRequest();
+      focusOutput(0);
+      submit(greeter, "fresh-account-token");
+      const auto create = server.request("create_session");
+      require(create.at("username") == "dummy-user-01", "reselection before the cancel ack lost the account");
+      server.prompt(greeter, client, "secret");
+      require(server.request("post_auth_message_response").at("response") == "fresh-account-token",
+          "the fresh credential did not reach the restarted conversation");
+      finish(server, greeter, client);
+      return;
+    }
+    // Stages that skipped the pre-drain submit arm their credential here;
+    // deferred stages already hold it from before the stale reply. The other
+    // output cannot begin authentication while the owner owns the connection.
+    if (stage == "prompt-waiting" || stage == "cancel-reselect" || stage == "error-cancel-pending") {
+      focusOutput(0);
+      submit(greeter, "queued-account-token");
+      server.noRequest();
+    }
     focusOutput(1);
-    submit(greeter, "must-not-be-queued-either");
+    submit(greeter, "must-not-cross-surface");
     server.noRequest();
     if (stage == "cancel-error") {
       server.reply(
@@ -312,8 +369,6 @@ allow_empty_password = true
     }
     server.reply(greeter, client, {{"type", "success"}});
 
-    focusOutput(stage == "credential-pending" ? 1 : 0);
-    submit(greeter, "new-account-token");
     const auto create = server.request("create_session");
     require(
         create.at("username") == (stage == "cancel-reselect" ? "dummy-user-02" : "dummy-user-01"),
@@ -321,8 +376,8 @@ allow_empty_password = true
     );
     server.prompt(greeter, client, "secret");
     require(
-        server.request("post_auth_message_response").at("response") == "new-account-token",
-        "old or cancelled credentials leaked into the new login"
+        server.request("post_auth_message_response").at("response") == "queued-account-token",
+        "the submission queued during cancellation did not reach the new login"
     );
     finish(server, greeter, client);
   }
