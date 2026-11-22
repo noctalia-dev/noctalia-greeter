@@ -11,18 +11,8 @@
 
 namespace greeter {
 
-  enum class SysmonMetric : std::uint8_t {
-    CpuUsage,
-    CpuTemp,
-    CpuFreq,
-    GpuTemp,
-    GpuUsage,
-    GpuVram,
-    GpuVramUsed,
-    RamPct,
-    SwapPct
-  };
-  enum class SysmonUnit : std::uint8_t { Percent, Celsius, Megahertz, Bytes };
+  enum class SysmonMetric : std::uint8_t { CpuUsage, CpuTemp, CpuFreq, RamPct, SwapPct };
+  enum class SysmonUnit : std::uint8_t { Percent, Celsius, Megahertz };
   struct SysmonMetricDefinition {
     std::string_view name;
     SysmonMetric metric;
@@ -60,7 +50,7 @@ namespace greeter {
     const SysmonReading& reading(SysmonMetric metric) const;
 
   private:
-    std::array<SysmonReading, 9> m_readings;
+    std::array<SysmonReading, 5> m_readings;
   };
   std::string formatSysmonValue(const SysmonMetricDefinition& metric, const SysmonReading& reading);
 

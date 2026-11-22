@@ -7,14 +7,10 @@
 
 namespace greeter {
   namespace {
-    constexpr std::array<SysmonMetricDefinition, 9> kMetrics{{
+    constexpr std::array<SysmonMetricDefinition, 5> kMetrics{{
         {"cpu_usage", SysmonMetric::CpuUsage, "cpu-usage", SysmonUnit::Percent},
         {"cpu_temp", SysmonMetric::CpuTemp, "cpu-temperature", SysmonUnit::Celsius},
         {"cpu_freq", SysmonMetric::CpuFreq, "performance", SysmonUnit::Megahertz},
-        {"gpu_temp", SysmonMetric::GpuTemp, "temperature", SysmonUnit::Celsius},
-        {"gpu_usage", SysmonMetric::GpuUsage, "gpu-usage", SysmonUnit::Percent},
-        {"gpu_vram", SysmonMetric::GpuVram, "memory", SysmonUnit::Percent},
-        {"gpu_vram_used", SysmonMetric::GpuVramUsed, "memory", SysmonUnit::Bytes},
         {"ram_pct", SysmonMetric::RamPct, "memory", SysmonUnit::Percent},
         {"swap_pct", SysmonMetric::SwapPct, "storage", SysmonUnit::Percent},
     }};
@@ -85,8 +81,6 @@ namespace greeter {
       return std::format("{:.0F}°C", value);
     case SysmonUnit::Megahertz:
       return std::format("{:.1f} GHz", value / 1000.0);
-    case SysmonUnit::Bytes:
-      return std::format("{:.1F} GiB", value / (1024.0 * 1024.0 * 1024.0));
     }
     return "--";
   }

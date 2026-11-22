@@ -17,7 +17,6 @@ namespace greeter {
     bool swap = false;
     bool frequency = false;
     bool temperature = false;
-    bool gpuTemperature = false;
   };
 
   // One owner shares sampled snapshots across views. No timer, thread, callback or
@@ -55,7 +54,6 @@ namespace greeter {
     SysmonReading m_swap;
     SysmonReading m_frequency;
     TemperatureState m_temperature;
-    TemperatureState m_gpuTemperature;
     SysmonSnapshot m_snapshot;
   };
 

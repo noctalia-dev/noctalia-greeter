@@ -1,7 +1,6 @@
 #include "greeter/widgets/cpu_ram_provider.h"
 
 #include "greeter/widgets/cpu_frequency_source.h"
-#include "greeter/widgets/gpu_temperature_source.h"
 
 #include <algorithm>
 #include <charconv>
@@ -223,8 +222,6 @@ namespace greeter {
       m_frequency = {};
     if (!demand.temperature)
       m_temperature = {};
-    if (!demand.gpuTemperature)
-      m_gpuTemperature = {};
     m_demand = demand;
     publish();
   }
@@ -249,8 +246,6 @@ namespace greeter {
       recordFrequency(m_frequency, readCpuFrequency(m_cpuRoot));
     if (m_demand.temperature)
       recordTemperature(m_temperature, readCpuTemperature(m_hwmonRoot, m_thermalRoot));
-    if (m_demand.gpuTemperature)
-      recordTemperature(m_gpuTemperature, readGpuTemperature(m_hwmonRoot));
     publish();
     return m_snapshot;
   }
@@ -260,8 +255,7 @@ namespace greeter {
         std::array{
             SysmonMetricReading{SysmonMetric::CpuUsage, m_cpu}, SysmonMetricReading{SysmonMetric::RamPct, m_ram},
             SysmonMetricReading{SysmonMetric::SwapPct, m_swap}, SysmonMetricReading{SysmonMetric::CpuFreq, m_frequency},
-            SysmonMetricReading{SysmonMetric::CpuTemp, m_temperature.reading},
-            SysmonMetricReading{SysmonMetric::GpuTemp, m_gpuTemperature.reading}
+            SysmonMetricReading{SysmonMetric::CpuTemp, m_temperature.reading}
         }
     );
     if (!snapshot)

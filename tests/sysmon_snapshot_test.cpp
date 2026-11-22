@@ -35,8 +35,10 @@ int main() {
     );
     for (const auto name : stat->enumValues)
       require(findSysmonMetric(name) != nullptr, "supported metric has no presentation definition");
-    for (const auto name :
-         std::array<std::string_view, 6>{"net_rx", "net_tx", "cpu", "CPU_USAGE", " cpu_usage", "cpu_usage "})
+    for (const auto name : std::array<std::string_view, 10>{
+             "gpu_temp", "gpu_usage", "gpu_vram", "gpu_vram_used", "net_rx", "net_tx", "cpu", "CPU_USAGE", " cpu_usage",
+             "cpu_usage "
+         })
       require(findSysmonMetric(name) == nullptr, "unsupported metric acquired an alias");
     SysmonSnapshot empty;
     require(!empty.reading(SysmonMetric::CpuUsage).current, "missing reading fabricated zero");
@@ -45,7 +47,7 @@ int main() {
     require(
         snapshot.has_value() && snapshot->reading(SysmonMetric::CpuUsage).current == 0.0, "real zero not preserved"
     );
-    require(!snapshot->reading(SysmonMetric::GpuTemp).current, "missing GPU reading fabricated");
+    require(!snapshot->reading(SysmonMetric::RamPct).current, "missing reading fabricated");
     const auto duplicate = SysmonMetricReading{SysmonMetric::CpuUsage, {}};
     require(!SysmonSnapshot::create(std::array{duplicate, duplicate}), "duplicate metric accepted");
     rejects(static_cast<SysmonMetric>(255), {});
@@ -54,7 +56,6 @@ int main() {
       rejects(SysmonMetric::CpuUsage, {value, {}});
     rejects(SysmonMetric::CpuTemp, {-273.16, {}});
     rejects(SysmonMetric::CpuFreq, {-1, {}});
-    rejects(SysmonMetric::GpuVramUsed, {-1, {}});
     for (const float value :
          {-0.1F, 1.1F, std::numeric_limits<float>::infinity(), std::numeric_limits<float>::quiet_NaN()})
       rejects(SysmonMetric::CpuUsage, {50, {value}});
@@ -99,10 +100,6 @@ int main() {
     require(formatSysmonValue(*findSysmonMetric("cpu_usage"), {42, {}}) == "42%", "percent unit incorrect");
     require(formatSysmonValue(*findSysmonMetric("cpu_temp"), {-10, {}}) == "-10°C", "temperature unit incorrect");
     require(formatSysmonValue(*findSysmonMetric("cpu_freq"), {2400, {}}) == "2.4 GHz", "frequency unit incorrect");
-    require(
-        formatSysmonValue(*findSysmonMetric("gpu_vram_used"), {3.0 * 1024 * 1024 * 1024, {}}) == "3.0 GiB",
-        "memory unit incorrect"
-    );
     return 0;
   } catch (const std::exception& error) {
     std::println(stderr, "sysmon-snapshot-test: {}", error.what());

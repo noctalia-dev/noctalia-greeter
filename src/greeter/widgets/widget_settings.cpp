@@ -20,10 +20,8 @@ namespace greeter {
     constexpr std::array<std::string_view, 2> kClockStyles{"digital", "analog"};
     constexpr std::array<std::string_view, 6> kButtonVariants{"default", "primary", "secondary",
                                                               "outline", "ghost",   "destructive"};
-    constexpr std::array<std::string_view, 10> kSysmonStatsWithNone{"",         "cpu_usage",     "cpu_temp",
-                                                                    "cpu_freq", "gpu_temp",      "gpu_usage",
-                                                                    "gpu_vram", "gpu_vram_used", "ram_pct",
-                                                                    "swap_pct"};
+    constexpr std::array<std::string_view, 6> kSysmonStatsWithNone{"",         "cpu_usage", "cpu_temp",
+                                                                   "cpu_freq", "ram_pct",   "swap_pct"};
     constexpr std::array<std::string_view, 2> kSysmonDisplays{"graph", "gauge"};
     constexpr std::array<std::string_view, 2> kSysmonGaugeLayouts{"horizontal", "vertical"};
     const std::array<WidgetSettingDefinition, 5> kCommonSettings{{

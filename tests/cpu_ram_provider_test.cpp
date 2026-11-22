@@ -64,14 +64,6 @@ namespace {
       write((base / "type").string(), type);
       write((base / "temp").string(), raw);
     }
-    void
-    gpu(std::string_view directory, std::string_view driver, std::string_view label, std::string_view raw,
-        std::string_view status = "active", unsigned index = 1) const {
-      sensor(directory, driver, label, raw, index);
-      const auto power = std::filesystem::path("hwmon") / directory / "device/power";
-      std::filesystem::create_directories(root / power);
-      write((power / "runtime_status").string(), status);
-    }
   };
 
   void near(double value, double expected, const char* message) {
@@ -431,136 +423,6 @@ namespace {
     );
   }
 
-  void checkGpuTemperature(const Fixture& fixture) {
-    using namespace greeter;
-    const auto hwmon = fixture.root / "hwmon";
-    CpuRamProvider provider(fixture.root, fixture.root / "cpus", hwmon, fixture.root / "thermal");
-    provider.setDemand({.gpuTemperature = true});
-    provider.sample();
-    unavailable(provider.snapshot().reading(SysmonMetric::GpuTemp));
-    fixture.gpu("hwmon1", "nvme", "GPU", "99000");
-    provider.sample();
-    unavailable(provider.snapshot().reading(SysmonMetric::GpuTemp));
-    fixture.gpu("hwmon2", "amdgpu", "edge", "55000");
-    provider.sample();
-    const auto retained = provider.snapshot();
-    near(*retained.reading(SysmonMetric::GpuTemp).current, 55, "GPU edge reading incorrect");
-    near(retained.reading(SysmonMetric::GpuTemp).gauge->normalized, 0.5, "GPU default normalization incorrect");
-    unavailable(retained.reading(SysmonMetric::CpuTemp));
-    provider.setDemand({.gpuTemperature = true});
-    provider.sample();
-    require(provider.snapshot().reading(SysmonMetric::GpuTemp).history.size() == 2, "same GPU demand reset history");
-    fixture.gpu("hwmon2", "amdgpu", "junction", "75000", "active", 2);
-    fixture.gpu("hwmon2", "amdgpu", "mem", "99000", "active", 3);
-    provider.sample();
-    near(
-        *provider.snapshot().reading(SysmonMetric::GpuTemp).current, 75, "GPU sensor scoring differs from desktop hwmon"
-    );
-    require(
-        provider.snapshot().reading(SysmonMetric::GpuTemp).history.size() == 1,
-        "GPU channel switch retained old history"
-    );
-    fixture.gpu("hwmon3", "amdgpu", "edge", "80000");
-    provider.sample();
-    near(*provider.snapshot().reading(SysmonMetric::GpuTemp).current, 80, "hottest equally ranked GPU not selected");
-    fixture.gpu("hwmon2", "amdgpu", "junction", "80000", "active", 2);
-    provider.sample();
-    provider.sample();
-    require(
-        provider.snapshot().reading(SysmonMetric::GpuTemp).history.size() == 2,
-        "equal GPU candidates did not select deterministically"
-    );
-    fixture.gpu("hwmon4", "nouveau", "junction", "100000");
-    provider.sample();
-    near(*provider.snapshot().reading(SysmonMetric::GpuTemp).current, 80, "GPU driver scoring changed");
-    std::filesystem::remove_all(hwmon);
-    for (const auto* driver : {"amdgpu", "nvidia", "nouveau", "i915", "xe"}) {
-      fixture.gpu("hwmon0", driver, "GPU", "55000");
-      provider.sample();
-      near(*provider.snapshot().reading(SysmonMetric::GpuTemp).current, 55, "known GPU hwmon driver not supported");
-    }
-    fixture.gpu("hwmon0", "amdgpu", "edge", "55000");
-    for (const auto* status : {"suspended", "suspending", "resuming", "error", "unknown", ""}) {
-      fixture.gpu("hwmon0", "amdgpu", "edge", "55000", status);
-      provider.sample();
-      unavailable(provider.snapshot().reading(SysmonMetric::GpuTemp));
-    }
-    std::filesystem::remove(hwmon / "hwmon0/device/power/runtime_status");
-    provider.sample();
-    unavailable(provider.snapshot().reading(SysmonMetric::GpuTemp));
-    fixture.gpu("hwmon0", "amdgpu", "edge", "55000", "unsupported");
-    provider.sample();
-    near(*provider.snapshot().reading(SysmonMetric::GpuTemp).current, 55, "runtime-PM-disabled GPU was excluded");
-    for (const auto* raw : {"", "broken", "50000x", "50000 60000", "NaN", "-273151", "9223372036854775808"}) {
-      fixture.gpu("hwmon0", "amdgpu", "edge", raw);
-      provider.sample();
-      unavailable(provider.snapshot().reading(SysmonMetric::GpuTemp));
-    }
-    fixture.gpu("hwmon0", "amdgpu", "edge", std::string(257, '1'));
-    provider.sample();
-    unavailable(provider.snapshot().reading(SysmonMetric::GpuTemp));
-    for (const auto raw : {0, -500, 500, 60000, 72500, 85000}) {
-      fixture.gpu("hwmon0", "amdgpu", "edge", std::to_string(raw));
-      provider.sample();
-      near(
-          *provider.snapshot().reading(SysmonMetric::GpuTemp).current, static_cast<double>(raw) / 1000,
-          "GPU Celsius zero/signed/boundary value incorrect"
-      );
-      near(
-          provider.snapshot().reading(SysmonMetric::GpuTemp).gauge->highlight,
-          raw <= 60000       ? 0
-              : raw == 72500 ? 0.625
-                             : 1,
-          "GPU highlight thresholds incorrect"
-      );
-    }
-    fixture.write("hwmon/hwmon0/temp1_fault", "1");
-    provider.sample();
-    unavailable(provider.snapshot().reading(SysmonMetric::GpuTemp));
-    fixture.write("hwmon/hwmon0/temp1_fault", "0");
-    fixture.write("hwmon/hwmon0/temp1_enable", "0");
-    provider.sample();
-    unavailable(provider.snapshot().reading(SysmonMetric::GpuTemp));
-    fixture.write("hwmon/hwmon0/temp1_enable", "1");
-    provider.sample();
-    require(
-        provider.snapshot().reading(SysmonMetric::GpuTemp).history.size() == 1, "GPU recovery retained prior history"
-    );
-    provider.setDemand({});
-    unavailable(provider.snapshot().reading(SysmonMetric::GpuTemp));
-    provider.setDemand({.gpuTemperature = true});
-    for (int i = 0; i <= 125; ++i) {
-      fixture.gpu("hwmon0", "amdgpu", "edge", std::to_string(40000 + i * 100));
-      provider.sample();
-    }
-    const auto& history = provider.snapshot().reading(SysmonMetric::GpuTemp).history;
-    require(history.size() == 120, "GPU temperature history exceeded bound");
-    near(history.front(), 0.212, "oldest GPU temperature sample incorrect");
-    near(history.back(), 0.45, "latest GPU temperature sample incorrect");
-    fixture.gpu("hwmon0", "amdgpu", "edge", "100000");
-    provider.sample();
-    near(
-        provider.snapshot().reading(SysmonMetric::GpuTemp).history.front(), 10.7 / 70,
-        "GPU range expansion left mixed normalization"
-    );
-    fixture.sensor("hwmon5", "k10temp", "Tctl", "50000");
-    provider.setDemand({true, true, true, true, true, true});
-    fixture.cpu(0, 0);
-    provider.sample();
-    provider.setDemand({true, true, true, true, true, false});
-    unavailable(provider.snapshot().reading(SysmonMetric::GpuTemp));
-    fixture.cpu(1, 1);
-    provider.sample();
-    near(*provider.snapshot().reading(SysmonMetric::CpuUsage).current, 50, "dropping GPU reset CPU baseline");
-    near(*provider.snapshot().reading(SysmonMetric::CpuTemp).current, 50, "dropping GPU reset CPU temperature");
-    require(provider.snapshot().reading(SysmonMetric::CpuFreq).current.has_value(), "dropping GPU reset frequency");
-    provider.setDemand({.gpuTemperature = true});
-    fixture.gpu("hwmon0", "amdgpu", "edge", "55000");
-    provider.sample();
-    require(provider.snapshot().reading(SysmonMetric::GpuTemp).history.size() == 1, "resuming GPU retained history");
-    near(provider.snapshot().reading(SysmonMetric::GpuTemp).gauge->normalized, 0.5, "resuming GPU retained range");
-    near(*retained.reading(SysmonMetric::GpuTemp).current, 55, "published GPU snapshot mutated later");
-  }
 } // namespace
 
 int main() {
@@ -582,9 +444,7 @@ int main() {
     near(retained.reading(SysmonMetric::CpuUsage).gauge->normalized, 0.25, "CPU gauge normalization incorrect");
     near(retained.reading(SysmonMetric::CpuUsage).gauge->highlight, 0, "low CPU value highlighted");
     require(retained.reading(SysmonMetric::CpuUsage).history.size() == 1, "warmup invented a history sample");
-    for (const auto metric :
-         {SysmonMetric::CpuTemp, SysmonMetric::CpuFreq, SysmonMetric::GpuTemp, SysmonMetric::GpuUsage,
-          SysmonMetric::GpuVram, SysmonMetric::GpuVramUsed, SysmonMetric::SwapPct})
+    for (const auto metric : {SysmonMetric::CpuTemp, SysmonMetric::CpuFreq, SysmonMetric::SwapPct})
       unavailable(retained.reading(metric));
     provider.setDemand({true, true});
     fixture.cpu(195, 1005);
@@ -695,7 +555,6 @@ int main() {
     checkSwap(fixture);
     checkFrequency(fixture);
     checkTemperature(fixture);
-    checkGpuTemperature(fixture);
     return 0;
   } catch (const std::exception& error) {
     std::println(stderr, "cpu-ram-provider-test: {}", error.what());

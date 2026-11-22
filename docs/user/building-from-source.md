@@ -17,6 +17,9 @@ wlroots 0.20. The shared Noctalia UI and desktop-widget libraries are included
 in `lib/` and `desktop-widgets/`; no separate shell checkout, submodule download,
 or network fetch is needed to build them.
 
+The greeter excludes GPU metrics from its Sysmon widget settings. The bundled
+desktop-widget library retains those features for desktop consumers.
+
 
 ### Arch Linux
 

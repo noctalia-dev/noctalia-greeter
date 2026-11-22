@@ -68,13 +68,13 @@ int main() {
         "omitted Sysmon settings rejected or materialized"
     );
     for (const auto key : std::array<std::string_view, 2>{"stat", "stat2"}) {
-      for (const auto stat : std::array<std::string_view, 9>{
-               "cpu_usage", "cpu_temp", "cpu_freq", "gpu_temp", "gpu_usage", "gpu_vram", "gpu_vram_used", "ram_pct",
-               "swap_pct"
-           })
-        accepts(key, std::string(stat));
       for (const auto stat :
-           std::array<std::string_view, 7>{"net_rx", "net_tx", "cpu", "CPU_USAGE", " cpu_usage", "cpu_usage ", "other"})
+           std::array<std::string_view, 5>{"cpu_usage", "cpu_temp", "cpu_freq", "ram_pct", "swap_pct"})
+        accepts(key, std::string(stat));
+      for (const auto stat : std::array<std::string_view, 11>{
+               "gpu_temp", "gpu_usage", "gpu_vram", "gpu_vram_used", "net_rx", "net_tx", "cpu", "CPU_USAGE",
+               " cpu_usage", "cpu_usage ", "other"
+           })
         rejects(key, std::string(stat));
     }
     accepts("stat2", std::string{});
@@ -125,6 +125,17 @@ int main() {
     rejects("background_radius", 12.0);
     rejects("background_padding", std::int64_t{-1});
 
+    for (const auto* metric : {"gpu_temp", "gpu_usage", "gpu_vram", "gpu_vram_used"}) {
+      for (const auto* display : {"graph", "gauge"}) {
+        widget.settings = {
+            {"display", std::string(display)},
+            {"stat", std::string("cpu_usage")},
+            {"stat2", std::string(metric)},
+            {"show_label", false}
+        };
+        require(!greeter::validateWidgetSettings(widget).empty(), "hidden unsupported GPU metric admitted");
+      }
+    }
     widget.settings = {{"display", std::string("gauge")}, {"stat2", std::string("net_rx")}};
     require(!greeter::validateWidgetSettings(widget).empty(), "hidden secondary network stat admitted");
     widget.settings = {{"display", std::string("graph")}, {"show_label", false}, {"label_min_width", 12.0}};
