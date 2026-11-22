@@ -290,6 +290,42 @@ visible = true
     GreeterModel missing;
     missing.initialize();
     require(!missing.hasConfiguredDefaults(), "missing default session did not restore full login");
+    std::ofstream(path) << "[layout.login]\nwidth=500\n[layout.outputs.DP-2.login]\ny=12\n";
+    std::ofstream(directory / "sync.toml") << "[layout.login]\nanchor='center'\nx=10\n[layout.outputs.DP-1.login]\nx="
+                                              "99\nwidth=400\n[layout.outputs.DP-2]\nlogin_mode='minimal'\n";
+    greeter::GreeterPreferences clockPrefs;
+    greeter::WidgetInstance scopedClock;
+    scopedClock.id = "greeter-default-clock-0123456789abcdef0123456789abcdef";
+    scopedClock.type = "clock";
+    scopedClock.output = "DP-1";
+    clockPrefs.widgets = greeter::WidgetCollection{std::vector{scopedClock}};
+    clockPrefs.defaultClockOverrides.emplace();
+    clockPrefs.defaultClockOverrides->placement.visible = true;
+    const auto localClocks = greeter::resolveGreeterWidgetProfile(clockPrefs, "DP-1");
+    require(
+        localClocks.instances.size() == 2 && localClocks.instances[0].id == greeter::kDefaultTimeWidget,
+        "output clock lost its default identity or duplicated the administrator-required clock"
+    );
+    const auto scopedPrefs = greeter::loadGreeterPreferences();
+    const auto firstOutput = greeter::effectiveGreeterLayout(scopedPrefs, "DP-1");
+    const auto secondOutput = greeter::effectiveGreeterLayout(scopedPrefs, "DP-2");
+    require(
+        firstOutput.components[0].x == 99 && firstOutput.components[0].width == 500,
+        "scoped Sync/admin precedence failed"
+    );
+    require(
+        secondOutput.components[0].x == 10 && secondOutput.components[0].y == 12,
+        "output layouts leaked between monitors"
+    );
+    require(secondOutput.loginPresentation == greeter::LoginPresentation::Minimal, "per-output login mode lost");
+    const auto disconnected = greeter::effectiveGreeterLayout(scopedPrefs, "other");
+    require(disconnected.components[0].x == 10, "unmatched output inherited another monitor's layout");
+    auto scopedFile = greeter::config::loadConfig(path);
+    require(greeter::config::writeConfig(path, scopedFile), "scoped layout round trip failed");
+    require(
+        greeter::config::loadConfig(path).layout->outputs.at("DP-2").components[0].y == 12,
+        "scoped layout lost on write"
+    );
     std::filesystem::remove_all(directory);
     std::puts("layout: bounds, overlap, output matching, invalid-field fallback, round trip and precedence passed");
     return 0;

@@ -232,9 +232,25 @@ namespace {
     return std::ranges::any_of(g_diagnostics, [&](const auto& diagnostic) { return diagnostic.path == path; });
   }
 
-  greeter::GreeterLayoutConfig parseLayout(const toml::table& table, const std::filesystem::path& path) {
+  greeter::GreeterLayoutConfig
+  parseLayout(const toml::table& table, const std::filesystem::path& path, bool scoped = false) {
     greeter::GreeterLayoutConfig result;
     for (const auto& [key, node] : table) {
+      if (key.str() == "outputs") {
+        const auto* outputs = node.as_table();
+        if (scoped || !outputs || outputs->size() > 32) {
+          layoutDiagnostic(path, node, "layout.outputs must contain at most 32 non-nested output layouts");
+          continue;
+        }
+        for (const auto& [name, value] : *outputs) {
+          if (name.str().empty() || name.str().size() > 512 || !value.is_table()) {
+            layoutDiagnostic(path, value, "invalid layout output selector or table");
+            continue;
+          }
+          result.outputs.emplace(name.str(), parseLayout(*value.as_table(), path, true));
+        }
+        continue;
+      }
       if (key.str() == "login_mode") {
         const auto value = node.value<std::string>();
         if (value && *value == "full")
@@ -706,6 +722,12 @@ namespace {
         component.insert("flip_y", *p.flipY);
       if (!component.empty())
         layout.insert(greeter::kGreeterComponentIds[i], std::move(component));
+    }
+    if (!config.outputs.empty()) {
+      toml::table outputs;
+      for (const auto& [name, local] : config.outputs)
+        outputs.insert(name, buildLayoutTable(local));
+      layout.insert("outputs", std::move(outputs));
     }
     return layout;
   }

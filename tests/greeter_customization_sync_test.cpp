@@ -115,11 +115,17 @@ namespace {
     const auto hash = fixture.image();
     const auto payload = fixture.appearance()
         + "[layout]\nlogin_mode='auto'\n[layout.login]\nwidth=400\nrotation=0.2\nflip_x=false\n"
+        + "[layout.outputs.DP-1.login]\nx=100\n[layout.outputs.DP-2.login]\nx=-100\n"
         + fixture.widgets(hash);
     write(fixture.staging / "sync.toml", payload);
     std::string error;
     require(fixture.apply(error), "install failed: " + error);
     auto sync = greeter::config::loadSync(fixture.state / "sync.toml");
+    require(
+        sync.layout->outputs.at("DP-1").components[0].x == 100
+            && sync.layout->outputs.at("DP-2").components[0].x == -100,
+        "output layouts were not installed independently"
+    );
     const auto installed = fixture.state / "widget-assets" / (hash + ".png");
     require(
         sync.layout
@@ -290,6 +296,8 @@ namespace {
     for (const auto* suffix :
          {"[session]\nlast='injected'\n", "[session.power]\nshutdown='injected'\n", "[user]\ndefault='root'\n",
           "[clock]\nenabled=false\n", "[layout.clock]\nvisible=false\n", "[layout.login]\nvisible=false\n",
+          "[layout.outputs.DP-1.login]\nvisible=false\n", "[layout.outputs.DP-1.login]\nwidth=20\n",
+          "[layout.outputs.DP-1.outputs.DP-2.login]\nx=0\n", "[layout.outputs.DP-1.clock]\nvisible=true\n",
           "[layout.login]\noutput='DP-1'\n", "[layout.login]\nwidth=32\n", "[layout.login]\nscale=5\n",
           "[layout.branding]\nflip_x=1\n", "[widgets]\nwidget_order='bad'\n", "[assets]\nimages=['../image.png']\n",
           "[widgets]\nwidget_order=['button']\n[widgets.widget.button]\ntype='button'\nplacement='anchor'\nanchor='"

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -28,8 +29,9 @@ namespace greeter {
     // Unset follows the runtime Auto default, but does not override a synced mode.
     std::optional<LoginPresentation> loginPresentation;
     std::array<ComponentPlacement, 6> components;
+    std::map<std::string, GreeterLayoutConfig> outputs;
     bool empty() const {
-      if (loginPresentation)
+      if (loginPresentation || !outputs.empty())
         return false;
       for (const auto& p : components)
         if (p.visible || p.anchor || p.x || p.y || p.width || p.output || p.rotation || p.scale || p.flipX || p.flipY)

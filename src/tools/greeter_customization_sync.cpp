@@ -294,10 +294,20 @@ namespace greeter::secure_sync {
       return fail("invalid staged customization: " + config::configDiagnostics().front().message, error);
     update.layout = sync.layout;
     update.widgets = sync.widgets;
-    if (update.layout
-        && update.layout->components[0].width
-        && (*update.layout->components[0].width < 280 || *update.layout->components[0].width > 640))
-      return fail("staged login width must be within 280..640", error);
+    if (update.layout) {
+      const auto validate = [&](const greeter::GreeterLayoutConfig& layout) {
+        greeter::GreeterLayoutConfig legacyClock;
+        legacyClock.components[1] = layout.components[1];
+        return legacyClock.empty()
+            && (!layout.components[0].width
+                || (*layout.components[0].width >= 280 && *layout.components[0].width <= 640));
+      };
+      if (!validate(*update.layout))
+        return fail("invalid staged core layout", error);
+      for (const auto& [name, local] : update.layout->outputs)
+        if (!validate(local))
+          return fail("invalid staged output layout", error);
+    }
     std::unordered_set<std::string> referenced;
     if (update.widgets && update.widgets->instances)
       for (const auto& widget : *update.widgets->instances) {

@@ -66,8 +66,12 @@ namespace greeter {
   [[nodiscard]] std::filesystem::path greeterSyncPath();
 
   [[nodiscard]] GreeterPreferences loadGreeterPreferences();
-  GreeterWidgetProfile resolveGreeterWidgetProfile(const GreeterPreferences& prefs);
-  [[nodiscard]] GreeterLayoutConfig effectiveGreeterLayout(const GreeterPreferences& prefs);
+  GreeterWidgetProfile resolveGreeterWidgetProfile(
+      const GreeterPreferences& prefs, std::string_view connector = {}, std::string_view identifier = {}
+  );
+  [[nodiscard]] GreeterLayoutConfig effectiveGreeterLayout(
+      const GreeterPreferences& prefs, std::string_view connector = {}, std::string_view identifier = {}
+  );
   // Persists [session].last and [appearance].scheme to sync.toml only.
   [[nodiscard]] bool saveGreeterPreferences(const GreeterPreferences& prefs);
 

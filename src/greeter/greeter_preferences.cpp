@@ -17,6 +17,7 @@
 #include <optional>
 #include <pwd.h>
 #include <ranges>
+#include <set>
 #include <string>
 #include <string_view>
 #include <sys/stat.h>
@@ -47,6 +48,31 @@ namespace {
   }
 
   greeter::GreeterLayoutConfig
+  overlayLayout(greeter::GreeterLayoutConfig base, const greeter::GreeterLayoutConfig& preferred) {
+    base.outputs.clear();
+    if (preferred.loginPresentation)
+      base.loginPresentation = preferred.loginPresentation;
+    for (std::size_t i = 0; i < base.components.size(); ++i) {
+      auto& target = base.components[i];
+      const auto& source = preferred.components[i];
+      const auto prefer = [](auto& destination, const auto& value) {
+        if (value)
+          destination = value;
+      };
+      prefer(target.visible, source.visible);
+      prefer(target.anchor, source.anchor);
+      prefer(target.x, source.x);
+      prefer(target.y, source.y);
+      prefer(target.width, source.width);
+      prefer(target.output, source.output);
+      prefer(target.rotation, source.rotation);
+      prefer(target.scale, source.scale);
+      prefer(target.flipX, source.flipX);
+      prefer(target.flipY, source.flipY);
+    }
+    return base;
+  }
+  greeter::GreeterLayoutConfig
   resolveStoredLayout(const greeter::config::GreeterConfigFile& file, const greeter::config::GreeterSyncFile& sync) {
     auto result = file.layout.value_or(greeter::GreeterLayoutConfig{});
     // Explicit legacy administrator keys also outrank Sync; their defaults do not.
@@ -61,28 +87,25 @@ namespace {
     mapLegacyCorner(result.components[3], file.appearancePowerButtonsPosition);
     mapLegacyCorner(result.components[4], file.appearanceSchemeSelectorPosition);
 
-    // Keep valid administrator siblings, but do not fill invalid intent from Sync.
-    if (!file.layoutValid || !sync.layout)
-      return result;
-    if (!result.loginPresentation)
-      result.loginPresentation = sync.layout->loginPresentation;
-    for (std::size_t i = 0; i < result.components.size(); ++i) {
-      auto& preferred = result.components[i];
-      const auto& fallback = sync.layout->components[i];
-      const auto inherit = [](auto& target, const auto& source) {
-        if (!target)
-          target = source;
-      };
-      inherit(preferred.visible, fallback.visible);
-      inherit(preferred.anchor, fallback.anchor);
-      inherit(preferred.x, fallback.x);
-      inherit(preferred.y, fallback.y);
-      inherit(preferred.width, fallback.width);
-      inherit(preferred.output, fallback.output);
-      inherit(preferred.rotation, fallback.rotation);
-      inherit(preferred.scale, fallback.scale);
-      inherit(preferred.flipX, fallback.flipX);
-      inherit(preferred.flipY, fallback.flipY);
+    const auto admin = result;
+    const auto synced =
+        file.layoutValid ? sync.layout.value_or(greeter::GreeterLayoutConfig{}) : greeter::GreeterLayoutConfig{};
+    result = overlayLayout(synced, admin);
+    std::set<std::string> outputs;
+    for (const auto& [name, unused] : synced.outputs)
+      outputs.insert(name);
+    for (const auto& [name, unused] : admin.outputs)
+      outputs.insert(name);
+    for (const auto& name : outputs) {
+      auto localSync = synced;
+      localSync.outputs.clear();
+      if (const auto local = synced.outputs.find(name); local != synced.outputs.end())
+        localSync = overlayLayout(localSync, local->second);
+      auto localAdmin = admin;
+      localAdmin.outputs.clear();
+      if (const auto local = admin.outputs.find(name); local != admin.outputs.end())
+        localAdmin = overlayLayout(localAdmin, local->second);
+      result.outputs.emplace(name, overlayLayout(localSync, localAdmin));
     }
     return result;
   }
@@ -459,8 +482,16 @@ namespace greeter {
     return config::writeSync(syncPath, sync);
   }
 
-  GreeterLayoutConfig effectiveGreeterLayout(const GreeterPreferences& prefs) {
+  GreeterLayoutConfig
+  effectiveGreeterLayout(const GreeterPreferences& prefs, std::string_view connector, std::string_view identifier) {
     auto layout = prefs.layout;
+    const auto local = prefs.layout.outputs.find(std::string(identifier));
+    const auto named = prefs.layout.outputs.find(std::string(connector));
+    if (local != prefs.layout.outputs.end())
+      layout = local->second;
+    if (named != prefs.layout.outputs.end())
+      layout = named->second;
+    layout.outputs.clear();
     auto& clock = layout.components[1];
     if (!clock.visible)
       clock.visible = prefs.clockEnabled;
@@ -548,7 +579,9 @@ namespace greeter {
     return prefs;
   }
 
-  GreeterWidgetProfile resolveGreeterWidgetProfile(const GreeterPreferences& prefs) {
+  GreeterWidgetProfile resolveGreeterWidgetProfile(
+      const GreeterPreferences& prefs, std::string_view connector, std::string_view identifier
+  ) {
     const bool builtin = !prefs.widgets || !prefs.widgets->instances;
     GreeterWidgetProfile profile;
     profile.placeDefaultClocks = builtin;
@@ -572,6 +605,20 @@ namespace greeter {
       profile.instances = {makeClock(kDefaultTimeWidget, false), makeClock(kDefaultDateWidget, true)};
     else
       profile.instances = *prefs.widgets->instances;
+    for (auto& widget : profile.instances) {
+      if (!widget.output || (*widget.output != connector && *widget.output != identifier))
+        continue;
+      for (const auto id : {kDefaultTimeWidget, kDefaultDateWidget}) {
+        const auto prefix = std::string(id) + "-";
+        if (widget.id.starts_with(prefix)
+            && widget.id.size() == prefix.size() + 32
+            && std::ranges::all_of(std::string_view(widget.id).substr(prefix.size()), [](char c) {
+                 return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+               })) {
+          widget.id = id;
+        }
+      }
+    }
     if (!prefs.defaultClockOverrides || prefs.administratorWidgets)
       return profile;
     const auto& overrides = *prefs.defaultClockOverrides;

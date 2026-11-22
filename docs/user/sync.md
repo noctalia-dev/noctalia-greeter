@@ -402,3 +402,13 @@ The legacy path may also use `run0` or a configured administrator privilege
 command. It always requires authentication. When `privilege_command` is used
 with constrained sync, it must ultimately invoke `pkexec`; with a recognized
 older greeter it retains the previous escalator behavior.
+
+### Independent output layouts
+
+Noctalia's greeter editor keeps separate login/chrome and desktop-widget items for each output, like its lockscreen editor. Done saves the dedicated local state profile and applies it through the existing authorized helper; it does not require Auto-Sync. Draft cancellation never applies.
+
+The visual payload accepts `[layout.outputs."<connector or stable identifier>"]` with optional `login_mode` and the usual `login`, `branding`, `keyboard`, `appearance` and `power` component tables. Each output inherits unspecified fields from root `[layout]`. Output tables cannot nest and are limited to 32. Widgets use the existing output-bound instances. A usable login remains on every active output, and disconnected output settings remain stored.
+
+Global administrator fields still beat synced per-output fields. Administrator per-output fields beat administrator globals on that output. Connector-specific entries take precedence when both connector and stable-identifier entries match. UI and Sync never write administrator `greeter.toml`. Appearance-only sync preserves these layouts.
+
+Per-output customization requires updated Noctalia, greeter and apply-helper builds that understand `layout.outputs`; older helpers reject the unfamiliar table without installing it. No alternate privilege launcher or authorization policy is added.

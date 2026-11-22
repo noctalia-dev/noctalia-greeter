@@ -363,6 +363,8 @@ void Greeter::syncOutputWindows() {
          .backend = &m_renderContext->backend()},
         m_widgetImageError
     );
+    view.surface->setBoundOutputName(targets[index].name);
+    view.surface->setOutputIdentifier(targets[index].identifier);
     view.surface->initialize(m_renderContext.get());
 
     view.window = std::make_unique<GreeterWindow>(*m_client, m_glSharedContext, *m_renderContext, *view.surface);

@@ -264,8 +264,14 @@ void GreeterChrome::layout(
         m_keyboard, renderer, keyboardName, keyboard.x + 36, keyboard.y, 13, colorForRole(ColorRole::OnSurfaceVariant),
         std::max(1.0F, keyboard.width - 48)
     );
-    m_keyboard->setPosition(keyboard.x + 36, keyboard.y + (keyboard.height - m_keyboard->height()) / 2);
-    placeGlyph(m_keyboardGlyph, "keyboard", keyboard.x + 12, keyboard.y, 16);
-    m_keyboardGlyph->setPosition(keyboard.x + 12, keyboard.y + (keyboard.height - m_keyboardGlyph->height()) / 2);
+    m_keyboard->setBaselineMode(LabelBaselineMode::InkCentered);
+    m_keyboard->measure(renderer);
+    placeGlyph(m_keyboardGlyph, "keyboard", keyboard.x, keyboard.y, 16);
+    const float groupWidth = m_keyboardGlyph->width() + 8 + m_keyboard->width();
+    const float left = keyboard.x + (keyboard.width - groupWidth) / 2;
+    m_keyboard->setPosition(
+        left + m_keyboardGlyph->width() + 8, keyboard.y + (keyboard.height - m_keyboard->height()) / 2
+    );
+    m_keyboardGlyph->setPosition(left, keyboard.y + (keyboard.height - m_keyboardGlyph->height()) / 2);
   }
 }

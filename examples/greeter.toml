@@ -205,3 +205,11 @@ allow_empty_password = false
 # Seconds to wait for each greetd reply (0-3600). Keep this longer than any
 # fingerprint timeout; 0 disables the watchdog.
 request_timeout = 60
+
+# Optional per-output visual overrides, inheriting the shared [layout] fields.
+# [layout.outputs."DP-1".login]
+# anchor = "center"
+# x = 0
+# y = 0
+# [layout.outputs."DP-2".keyboard]
+# anchor = "top-right"

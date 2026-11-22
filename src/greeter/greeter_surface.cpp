@@ -1172,6 +1172,8 @@ void GreeterSurface::setBoundOutputName(std::string outputName) {
     return;
   }
   m_boundOutputName = std::move(outputName);
+  if (m_renderContext)
+    loadPreferences();
   m_widgetsDirty = true;
   applyConfiguredWallpaper();
   requestLayout();
@@ -1371,8 +1373,8 @@ void GreeterSurface::syncWallpaperTexture() {
 
 void GreeterSurface::loadPreferences() {
   const auto prefs = greeter::loadGreeterPreferences();
-  m_layoutConfig = greeter::effectiveGreeterLayout(prefs);
-  auto profile = greeter::resolveGreeterWidgetProfile(prefs);
+  m_layoutConfig = greeter::effectiveGreeterLayout(prefs, m_boundOutputName, m_outputIdentifier);
+  auto profile = greeter::resolveGreeterWidgetProfile(prefs, m_boundOutputName, m_outputIdentifier);
   m_widgets = greeter::WidgetCollection{std::move(profile.instances)};
   m_placeDefaultClocks = profile.placeDefaultClocks;
   if (prefs.administratorWidgets)

@@ -166,6 +166,8 @@ void GreeterSurface::setOutputIdentifier(std::string id) {
   if (m_outputIdentifier == id)
     return;
   m_outputIdentifier = std::move(id);
+  if (m_renderContext)
+    loadPreferences();
   m_widgetsDirty = true;
   requestLayout();
 }
