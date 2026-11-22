@@ -98,6 +98,14 @@ else
   )
 endif
 
+_widget_config_sources = files(
+  'src/greeter/widgets/widget_model.cpp',
+  'src/greeter/widgets/widget_config.cpp',
+  'src/greeter/widgets/widget_catalog.cpp',
+  'src/greeter/widgets/widget_settings.cpp',
+  'src/greeter/widgets/widget_settings_validation.cpp',
+)
+
 _greeter_sources = files(
   'src/config/output_identity.c',
   'src/time/time_format.cpp',
@@ -114,11 +122,6 @@ _greeter_sources = files(
   'src/greeter/privileged_state_paths.cpp',
   'src/greeter/greeter_config_io.cpp',
   'src/greeter/greeter_layout.cpp',
-  'src/greeter/widgets/widget_model.cpp',
-  'src/greeter/widgets/widget_config.cpp',
-  'src/greeter/widgets/widget_catalog.cpp',
-  'src/greeter/widgets/widget_settings.cpp',
-  'src/greeter/widgets/widget_settings_validation.cpp',
   'src/greeter/widgets/widget_host.cpp',
   'src/greeter/widgets/widget_layer.cpp',
   'src/greeter/widgets/label_widget.cpp',
@@ -151,7 +154,7 @@ _greeter_sources = files(
   'src/greeter/ui/greeter_components.cpp',
   'src/greeter/render/wallpaper_program.cpp',
   'src/greeter/render/wallpaper_node.cpp',
-) + [_git_revision_h]
+) + _widget_config_sources + [_git_revision_h]
 
 _greeter_inc = [
   include_directories('src', 'lib'),
@@ -247,7 +250,7 @@ _apply_appearance_support_sources = files(
     'src/greeter/greeter_layout.cpp',
   'src/greeter/greeter_preferences.cpp',
   'src/tools/secure_appearance_sync.cpp',
-)
+) + _widget_config_sources
 
 _apply_appearance_sources = _apply_appearance_support_sources + files('src/tools/apply_appearance_main.cpp')
 
@@ -291,13 +294,14 @@ noctalia_greeter_compositor_executable = executable('noctalia-greeter-compositor
     'src/greeter/logging.cpp',
     'src/greeter/greeter_config_io.cpp',
     'src/greeter/greeter_layout.cpp',
-  ),
+  ) + _widget_config_sources,
   dependencies: [
     wlroots_dep,
     libinput_dep,
     wayland_server_dep,
     xkbcommon_dep,
     tomlplusplus_dep,
+    noctalia_ui_dep,
   ],
   include_directories: include_directories('src', 'lib'),
   c_args: [
@@ -316,8 +320,8 @@ pointer_config_test = executable(
     'src/greeter/greeter_config_io.cpp',
     'src/greeter/greeter_layout.cpp',
     'src/greeter/logging.cpp',
-  ),
-  dependencies: [libinput_dep, wlroots_dep, tomlplusplus_dep],
+  ) + _widget_config_sources,
+  dependencies: [libinput_dep, wlroots_dep, tomlplusplus_dep, noctalia_ui_dep],
   include_directories: include_directories('src', 'lib'),
   c_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-DWLR_USE_UNSTABLE'],
   cpp_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow'],
@@ -492,8 +496,8 @@ compositor_lifecycle_test = executable(
     'src/greeter/logging.cpp',
     'src/greeter/greeter_config_io.cpp',
     'src/greeter/greeter_layout.cpp',
-  )),
-  dependencies: [wlroots_dep, libinput_dep, wayland_server_dep, xkbcommon_dep, tomlplusplus_dep],
+  ) + _widget_config_sources),
+  dependencies: [wlroots_dep, libinput_dep, wayland_server_dep, xkbcommon_dep, tomlplusplus_dep, noctalia_ui_dep],
   include_directories: include_directories('src', 'lib'),
   c_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-DWLR_USE_UNSTABLE'],
   link_args: ['-Wl,--wrap=wlr_backend_start', '-Wl,--wrap=wl_display_run'],

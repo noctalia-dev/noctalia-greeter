@@ -15,6 +15,7 @@
 #include <string>
 #include <string_view>
 #include <sys/stat.h>
+#include <toml++/toml.hpp>
 #include <unistd.h>
 
 namespace {
@@ -87,6 +88,16 @@ login_mode = "full"
 anchor = "bottom-left"
 x = 24
 visible = false
+[widgets]
+widget_order = ['caption']
+[widgets.widget.caption]
+type = 'label'
+placement = 'anchor'
+anchor = 'center-left'
+rotation = -0.25
+flip_x = true
+[widgets.widget.caption.settings]
+title = 'Saved widget'
 )toml";
 
   constexpr std::string_view kSync = R"toml([session]
@@ -108,9 +119,33 @@ font_family = "Test Sans"
 primary = "#123456"
 [appearance.wallpaper]
 path = "color:#102030"
+[widgets]
+widget_order = ['caption']
+[widgets.widget.caption]
+type = 'label'
+placement = 'anchor'
+anchor = 'center-left'
+rotation = -0.25
+flip_x = true
+[widgets.widget.caption.settings]
+title = 'Saved widget'
 )toml";
 
+  void requireWidgets(const std::optional<greeter::WidgetCollection>& widgets) {
+    require(widgets && widgets->instances && widgets->instances->size() == 1, "widget collection lost");
+    const auto& widget = widgets->instances->front();
+    require(
+        widget.id == "caption"
+            && widget.type == "label"
+            && widget.transform.rotation == -0.25
+            && widget.transform.flipX
+            && std::get<std::string>(widget.settings.at("title")) == "Saved widget",
+        "stored widget data changed"
+    );
+  }
+
   void requireSettings(const greeter::config::GreeterConfigFile& config) {
+    requireWidgets(config.widgets);
     require(config.sessionDefault == "Niri" && config.userDefault == "test-user", "configured defaults lost");
     require(config.keyboardLayout == "de", "keyboard setting lost");
     require(config.layout.loginPresentation == greeter::LoginPresentation::Full, "login mode lost");
@@ -161,6 +196,7 @@ path = "color:#102030"
     require(greeter::saveGreeterPreferences(prefs), "save did not recover after sync repair");
     require(!hasDiagnostic(sync), "repaired sync still has a diagnostic");
     const auto saved = greeter::config::loadSync(sync);
+    requireWidgets(saved.widgets);
     require(saved.sessionLast == prefs.session && saved.appearanceScheme == prefs.scheme, "new choices not saved");
     require(
         saved.outputLayout == "DP-1:0,0; DP-2:1280,0"
@@ -201,6 +237,7 @@ path = "color:#102030"
     writeFile(sync, kSync);
     require(loadGreeterSyncedAppearance().has_value(), "legacy appearance did not recover after repair");
     const auto migrated = greeter::config::loadSync(sync);
+    requireWidgets(migrated.widgets);
     require(migrated.appearance.hasCompletePalette(), "legacy migration blocked by stale diagnostic");
     require(
         migrated.sessionLast == "Old Session"
@@ -242,12 +279,113 @@ path = "color:#102030"
     require(!hasDiagnostic(sync), "removed sync kept a stale diagnostic");
   }
 
+  void testWidgetFiles() {
+    for (const bool mutableFile : {false, true}) {
+      Fixture fixture;
+      const auto path = fixture.directory / (mutableFile ? "sync.toml" : "greeter.toml");
+      for (const auto content :
+           {std::string_view{}, std::string_view("[widgets]\n"), std::string_view("[widgets]\nwidget_order=[]\n"),
+            mutableFile ? kSync : kConfig}) {
+        writeFile(path, content);
+        const auto before =
+            mutableFile ? greeter::config::loadSync(path).widgets : greeter::config::loadConfig(path).widgets;
+        require(!hasDiagnostic(path), "valid widget file diagnosed");
+        const bool written = mutableFile ? greeter::config::writeSync(path, greeter::config::loadSync(path))
+                                         : greeter::config::writeConfig(path, greeter::config::loadConfig(path));
+        require(written, "widget file roundtrip failed");
+        const auto after =
+            mutableFile ? greeter::config::loadSync(path).widgets : greeter::config::loadConfig(path).widgets;
+        require(after == before, "file write changed widget collection intent/data");
+      }
+      for (const auto content :
+           {std::string_view("[widgets\n"), std::string_view("widgets = false\n"),
+            std::string_view("[widgets]\nwidget_order = 'invalid'\n"),
+            std::string_view("[widgets]\nwidget_order = ['missing']\n")}) {
+        writeFile(path, content);
+        require(::chmod(path.c_str(), 0640) == 0, "fixture chmod failed");
+        const bool written =
+            mutableFile ? greeter::config::writeSync(path, {}) : greeter::config::writeConfig(path, {});
+        require(!written && hasDiagnostic(path), "writer accepted invalid widget file");
+        struct stat metadata{};
+        require(
+            ::stat(path.c_str(), &metadata) == 0 && (metadata.st_mode & 0777) == 0640, "refused write changed mode"
+        );
+        require(readFile(path) == content, "refused widget write changed file bytes");
+      }
+      writeFile(path, mutableFile ? kSync : kConfig);
+      if (mutableFile) {
+        auto model = greeter::config::loadSync(path);
+        model.widgets->instances->front().settings["title"] = std::int64_t{42};
+        require(!greeter::config::writeSync(path, model), "invalid widget model written");
+      } else {
+        auto model = greeter::config::loadConfig(path);
+        model.widgets->instances->front().settings["title"] = std::int64_t{42};
+        require(!greeter::config::writeConfig(path, model), "invalid widget model written");
+      }
+      require(readFile(path) == (mutableFile ? kSync : kConfig), "invalid model changed existing file");
+      const auto diagnostic = std::ranges::find_if(greeter::config::configDiagnostics(), [&](const auto& item) {
+        return item.path == path && item.message.find("widgets.widget.caption.settings.title") != std::string::npos;
+      });
+      require(diagnostic != greeter::config::configDiagnostics().end(), "widget field diagnostic missing");
+      const bool repaired = mutableFile ? greeter::config::writeSync(path, greeter::config::loadSync(path))
+                                        : greeter::config::writeConfig(path, greeter::config::loadConfig(path));
+      require(repaired && !hasDiagnostic(path), "widget diagnostic did not recover after repair");
+    }
+  }
+
+  void testWidgetUpdates() {
+    Fixture fixture;
+    const auto config = fixture.directory / "greeter.toml";
+    const auto sync = fixture.directory / "sync.toml";
+    writeFile(config, kConfig);
+    writeFile(sync, kSync);
+    greeter::GreeterSyncAppearanceUpdate update;
+    update.replaceSession = false;
+    update.appearance.fontFamily = "Updated Sans";
+    require(
+        greeter::applyAppearanceSyncGreeterConf(std::nullopt, std::nullopt, std::nullopt, update),
+        "appearance update failed"
+    );
+    const auto updated = greeter::config::loadSync(sync);
+    requireWidgets(updated.widgets);
+    require(
+        updated.sessionLast == "Old Session"
+            && updated.sessionPowerSuspend == "test-suspend"
+            && updated.sessionActions.size() == 1
+            && updated.appearance.fontFamily == "Updated Sans",
+        "appearance update changed unrelated state or failed to apply"
+    );
+    require(readFile(config) == kConfig, "appearance update rewrote administrator file");
+
+    const auto invalid = std::string(kSync) + "\nunknown_widget_setting = true\n";
+    writeFile(sync, invalid);
+    greeter::GreeterPreferences preferences;
+    preferences.session = "Other Session";
+    require(!greeter::saveGreeterPreferences(preferences), "preferences overwrote invalid widget settings");
+    require(
+        !greeter::applyAppearanceSyncGreeterConf(std::nullopt, std::nullopt, std::nullopt, update),
+        "appearance update overwrote invalid widget settings"
+    );
+    require(readFile(sync) == invalid, "invalid widget settings were rewritten");
+    const auto diagnostic = std::ranges::find_if(greeter::config::configDiagnostics(), [&](const auto& item) {
+      return item.path == sync
+          && item.line > 0
+          && item.column > 0
+          && item.message.find("widgets.widget.caption.settings.unknown_widget_setting") != std::string::npos;
+    });
+    require(diagnostic != greeter::config::configDiagnostics().end(), "widget source location missing");
+    // An error retained for sync must not block an independent declarative write.
+    const auto model = greeter::config::loadConfig(config);
+    require(greeter::config::writeConfig(config, model) && hasDiagnostic(sync), "writer mixed file diagnostics");
+  }
+
   void testSetup() {
     require(::geteuid() == 0, "setup test requires root in a private user namespace");
     for (const bool symlink : {false, true}) {
       for (const auto content :
            {kConfig, std::string_view("[session\n"), std::string_view("[layout.clock]\nanchor='invalid'\n"),
-            std::string_view("[layout.unknown]\nvisible=true\n")}) {
+            std::string_view("[layout.unknown]\nvisible=true\n"),
+            std::string_view("[widgets]\nwidget_order='invalid'\n")}) {
         Fixture fixture;
         const auto config = fixture.directory / "greeter.toml";
         const auto target = symlink ? fixture.directory / "declarative.toml" : config;
@@ -300,7 +438,9 @@ int main(int argc, char** argv) {
     }
   }
   bool passed = true;
-  for (const auto test : {testConfigWriter, testPreferenceSave, testLegacyAppearance, testDiagnosticRecovery}) {
+  for (const auto test :
+       {testConfigWriter, testPreferenceSave, testLegacyAppearance, testDiagnosticRecovery, testWidgetFiles,
+        testWidgetUpdates}) {
     try {
       test();
     } catch (const std::exception& error) {

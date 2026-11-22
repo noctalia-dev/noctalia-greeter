@@ -57,6 +57,13 @@ The next read refreshes that file's diagnostics, so a repaired file can be saved
 without restarting the greeter; errors in other configuration files remain
 reported.
 
+Both files also retain validated `[widgets]` profile metadata for the upcoming
+greeter editor integration. An absent table leaves widgets unmanaged, an empty
+table requests defaults, and `widget_order = []` explicitly stores an empty
+collection. Profiles are stored and preserved by preference and appearance updates;
+rendering saved widget profiles is not enabled yet. Invalid widget metadata is
+reported with its field path and blocks writes to that file until repaired.
+
 ## Configuration reference
 
 Set these keys in `greeter.toml`. A command-line `--session` or `--user` value takes precedence over the corresponding default.

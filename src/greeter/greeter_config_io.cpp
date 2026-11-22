@@ -3,6 +3,7 @@
 #include "core/log.h"
 #include "greeter/appearance_sync.h"
 #include "greeter/greeter_config_store.h"
+#include "greeter/widgets/widget_config.h"
 
 #include <algorithm>
 #include <cerrno>
@@ -53,7 +54,8 @@ namespace {
         || key == "auth"
         || key == "idle"
         || key == "clock"
-        || key == "layout";
+        || key == "layout"
+        || key == "widgets";
   }
 
   [[nodiscard]] bool isKnownSessionKey(std::string_view key) {
@@ -214,6 +216,21 @@ namespace {
       kLog.warn("{}: {}", path.string(), g_diagnostics.back().message);
     }
   }
+  void widgetDiagnostics(
+      const std::filesystem::path& path, const toml::table& root, const std::vector<greeter::WidgetModelIssue>& issues
+  ) {
+    for (const auto& issue : issues) {
+      const auto* node = root.at_path(issue.path).node();
+      if (node == nullptr)
+        node = root.get("widgets");
+      layoutDiagnostic(path, node != nullptr ? *node : root, issue.path + ": " + issue.message);
+    }
+  }
+
+  bool hasDiagnostics(const std::filesystem::path& path) {
+    return std::ranges::any_of(g_diagnostics, [&](const auto& diagnostic) { return diagnostic.path == path; });
+  }
+
   greeter::GreeterLayoutConfig parseLayout(const toml::table& table, const std::filesystem::path& path) {
     greeter::GreeterLayoutConfig result;
     for (const auto& [key, node] : table) {
@@ -275,9 +292,15 @@ namespace {
   [[nodiscard]] greeter::config::GreeterConfigFile
   parseConfig(const toml::table& root, const std::filesystem::path& path) {
     greeter::config::GreeterConfigFile config;
+    if (auto widgets = greeter::readWidgetCollection(root))
+      config.widgets = std::move(*widgets);
+    else
+      widgetDiagnostics(path, root, widgets.error());
 
     for (const auto& [key, node] : root) {
       const auto keyView = key.str();
+      if (keyView == "widgets")
+        continue;
       if (!node.is_table()) {
         if (!isKnownTopLevelKey(keyView)) {
           warnUnknownTopLevelKey(path, keyView);
@@ -998,6 +1021,7 @@ namespace {
     // Reuse config parser, then keep only sync keys (including the Sync-owned appearance table).
     const greeter::config::GreeterConfigFile full = parseConfig(root, path);
     greeter::config::GreeterSyncFile sync;
+    sync.widgets = full.widgets;
     sync.sessionLast = full.sessionLast;
     sync.appearanceScheme = full.appearanceScheme;
     sync.outputLayout = full.outputLayout;
@@ -1164,14 +1188,21 @@ namespace greeter::config {
   }
 
   bool writeConfig(const std::filesystem::path& path, const GreeterConfigFile& config) {
-    std::error_code ec;
-    std::filesystem::create_directories(path.parent_path(), ec);
+    (void)loadConfig(path);
+    if (hasDiagnostics(path))
+      return false;
 
     // Declarative file only — the last-used session lives in sync.toml.
     GreeterConfigFile declarative = config;
     declarative.sessionLast.reset();
 
-    const toml::table table = buildTomlTable(declarative);
+    toml::table table = buildTomlTable(declarative);
+    if (const auto result = writeWidgetCollection(table, declarative.widgets); !result) {
+      widgetDiagnostics(path, table, result.error());
+      return false;
+    }
+    std::error_code ec;
+    std::filesystem::create_directories(path.parent_path(), ec);
 
     std::ostringstream out;
     out << "# noctalia-greeter greeter.toml (declarative; Nix-safe; UI and Sync never write this)\n";
@@ -1220,7 +1251,14 @@ namespace greeter::config {
   }
 
   bool writeSync(const std::filesystem::path& path, const GreeterSyncFile& sync) {
-    const toml::table table = buildSyncTomlTable(sync);
+    (void)loadSync(path);
+    if (hasDiagnostics(path))
+      return false;
+    toml::table table = buildSyncTomlTable(sync);
+    if (const auto result = writeWidgetCollection(table, sync.widgets); !result) {
+      widgetDiagnostics(path, table, result.error());
+      return false;
+    }
 
     std::ostringstream out;
     out << "# noctalia-greeter sync.toml (UI + Sync; not managed by Nix)\n";

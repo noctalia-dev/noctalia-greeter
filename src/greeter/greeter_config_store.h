@@ -1,6 +1,7 @@
 #pragma once
 
 #include "greeter/greeter_layout.h"
+#include "greeter/widgets/widget_model.h"
 
 #include <filesystem>
 #include <optional>
@@ -42,6 +43,8 @@ namespace greeter::config {
   // Full declarative greeter.toml. UI and Sync never write this file.
   struct GreeterConfigFile {
     GreeterLayoutConfig layout;
+    // Stored profile metadata; effective collection resolution/activation is separate.
+    std::optional<WidgetCollection> widgets;
     std::optional<std::string> sessionDefault;
     // Legacy only: migrated into sync.toml; stripped on greeter.toml write.
     std::optional<std::string> sessionLast;
@@ -98,6 +101,7 @@ namespace greeter::config {
 
   // Sync + UI mutable file (sync.toml). Never managed by Nix. Loses to greeter.toml.
   struct GreeterSyncFile {
+    std::optional<WidgetCollection> widgets;
     std::optional<std::string> sessionLast;
     std::optional<std::string> appearanceScheme;
     std::optional<std::string> outputLayout;
