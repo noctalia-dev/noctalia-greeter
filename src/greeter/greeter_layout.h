@@ -19,7 +19,6 @@ namespace greeter {
     std::optional<float> y;
     std::optional<float> width;
     std::optional<std::string> output;
-    // Stored for scene-transform integration.
     std::optional<double> rotation;
     std::optional<double> scale;
     std::optional<bool> flipX;
@@ -34,9 +33,15 @@ namespace greeter {
     float x = 0, y = 0, width = 0, height = 0;
     bool visible = false;
   };
+  struct ComponentTransform {
+    float rotation = 0, scale = 1;
+    bool flipX = false, flipY = false;
+  };
   struct GreeterLayout {
     std::array<LayoutRect, 6> components;
+    std::array<ComponentTransform, 6> transforms;
     bool narrow = false;
+    LayoutRect bounds(GreeterComponent id) const;
     const LayoutRect& operator[](GreeterComponent id) const { return components[static_cast<unsigned>(id)]; }
   };
 

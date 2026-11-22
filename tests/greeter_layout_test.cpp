@@ -2,12 +2,17 @@
 #include "greeter/greeter_layout.h"
 #include "greeter/greeter_model.h"
 #include "greeter/greeter_preferences.h"
+#include "greeter/ui/greeter_components.h"
+#include "render/scene/input_area.h"
+#include "render/scene/input_dispatcher.h"
 
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <memory>
+#include <numbers>
 #include <stdexcept>
 
 namespace {
@@ -18,7 +23,7 @@ namespace {
   void check(const greeter::GreeterLayout& layout, float w, float h) {
     require(layout.components[0].visible, "login disappeared");
     for (unsigned i = 0; i < 6; i++) {
-      const auto& r = layout.components[i];
+      const auto r = layout.bounds(static_cast<greeter::GreeterComponent>(i));
       if (!r.visible)
         continue;
       require(std::isfinite(r.x) && std::isfinite(r.y), "non-finite geometry");
@@ -26,13 +31,101 @@ namespace {
           r.x >= 0 && r.y >= 0 && r.x + r.width <= w + 1 && r.y + r.height <= h + 1, "component escaped the output"
       );
       for (unsigned j = 0; j < i; j++)
-        require(!greeter::rectanglesOverlap(r, layout.components[j]), "visible components overlap");
+        require(
+            !greeter::rectanglesOverlap(r, layout.bounds(static_cast<greeter::GreeterComponent>(j))),
+            "visible components overlap"
+        );
+    }
+  }
+  void checkTransforms() {
+    using Id = greeter::GreeterComponent;
+    for (const auto [w, h] :
+         {std::pair{2560.0F, 1440.0F}, std::pair{1280.0F, 720.0F}, std::pair{320.0F, 520.0F},
+          std::pair{720.0F, 1280.0F}}) {
+      for (const auto angle : {0.0, 0.3, std::numbers::pi / 2, -std::numbers::pi}) {
+        for (const auto scale : {0.5, 1.0, 4.0}) {
+          for (const bool flipX : {false, true}) {
+            for (const bool flipY : {false, true}) {
+              greeter::GreeterLayoutConfig config;
+              for (auto& part : config.components) {
+                part.rotation = angle;
+                part.scale = scale;
+                part.flipX = flipX;
+                part.flipY = flipY;
+              }
+              const auto layout = greeter::resolveGreeterLayout(config, w, h, 468, false, "DP-1", "monitor-id");
+              check(layout, w, h);
+              const auto& rect = layout[Id::Login];
+              const auto& transform = layout.transforms[0];
+              Node root;
+              Node& reference = *root.addChild(std::make_unique<Node>());
+              reference.setPosition(rect.x, rect.y);
+              reference.setSize(rect.width, rect.height);
+              reference.setRotation(transform.rotation);
+              reference.setScale(transform.scale * (flipX ? -1.0F : 1.0F), transform.scale * (flipY ? -1.0F : 1.0F));
+              float left, top, right, bottom;
+              Node::transformedBounds(&reference, left, top, right, bottom);
+              const auto bounds = layout.bounds(Id::Login);
+              require(
+                  std::abs(left - bounds.x) < 0.01F
+                      && std::abs(top - bounds.y) < 0.01F
+                      && std::abs(right - bounds.x - bounds.width) < 0.01F
+                      && std::abs(bottom - bounds.y - bounds.height) < 0.01F,
+                  "collision bounds differ from scene transform"
+              );
+              auto local = std::make_unique<Node>();
+              local->setPosition(24, 90);
+              local->setSize(rect.width - 48, 40);
+              auto* expected = reference.addChild(std::move(local));
+              // Match the small-view root scale used by the surface.
+              root.setScale(0.5F);
+              auto actual = std::make_unique<InputArea>();
+              actual->setFocusable(true);
+              actual->setPosition(rect.x + 24, rect.y + 90);
+              actual->setSize(rect.width - 48, 40);
+              auto* area = actual.get();
+              greeter::applyComponentTransform(*area, rect, transform);
+              root.addChild(std::move(actual));
+              // Compare against a real parent/child transform at several control points.
+              for (const auto [px, py] :
+                   {std::pair{0.0F, 0.0F}, std::pair{area->width(), area->height()},
+                    std::pair{area->width() / 2, area->height() / 2}}) {
+                float ex, ey, ax, ay;
+                Node::mapToScene(expected, px, py, ex, ey);
+                Node::mapToScene(area, px, py, ax, ay);
+                require(
+                    std::abs(ex - ax) < 0.01F && std::abs(ey - ay) < 0.01F,
+                    "component children do not share a transform center"
+                );
+              }
+              InputDispatcher input;
+              input.setSceneRoot(&root);
+              float x, y;
+              Node::mapToScene(area, area->width() / 2, area->height() / 2, x, y);
+              require(input.inputAreaAt(x, y) == area, "transformed control missed pointer input");
+              require(
+                  input.cycleTabFocus(false) && input.focusedArea() == area, "transformed control lost keyboard focus"
+              );
+              greeter::applyComponentTransform(*area, rect, {});
+              require(
+                  area->scaleX() == 1
+                      && area->scaleY() == 1
+                      && area->rotation() == 0
+                      && std::abs(area->translateX()) < 0.001F
+                      && std::abs(area->translateY()) < 0.001F,
+                  "removing transform retained scene state"
+              );
+            }
+          }
+        }
+      }
     }
   }
 } // namespace
 int main() {
   std::filesystem::path directory;
   try {
+    checkTransforms();
     greeter::GreeterLayoutConfig defaults;
     const greeter::LayoutRect bottomTrigger{1150, 650, 88, 36, true};
     auto popup = greeter::placeGreeterPopup(bottomTrigger, 280, 260, 1280, 720, true);

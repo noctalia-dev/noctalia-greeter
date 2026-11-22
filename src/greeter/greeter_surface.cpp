@@ -657,13 +657,8 @@ void GreeterSurface::onPointerLeave() {
 
 void GreeterSurface::onPointerEvent(float x, float y, std::uint32_t button, bool pressed) {
   reconcileWidgetInput();
-  const float sceneX = x / m_sceneScale, sceneY = y / m_sceneScale;
   if (m_powerMenuOpen) {
-    const bool hit = m_powerPanel
-        && sceneX >= m_powerPanel->x()
-        && sceneY >= m_powerPanel->y()
-        && sceneX <= m_powerPanel->x() + m_powerPanel->width()
-        && sceneY <= m_powerPanel->y() + m_powerPanel->height();
+    const bool hit = m_powerPanel && m_powerPanel->containsScenePoint(x, y);
     const bool onTrigger = m_widgetMenuTrigger && m_widgetMenuTrigger->containsScenePoint(x, y);
     if (!hit && !onTrigger) {
       if (pressed && button == BTN_LEFT) {
@@ -674,11 +669,8 @@ void GreeterSurface::onPointerEvent(float x, float y, std::uint32_t button, bool
     }
   }
   if (pressed && button == BTN_LEFT && (m_userMenuOpen || m_sessionMenuOpen || m_schemeMenuOpen)) {
-    const auto inRect = [x = sceneX, y = sceneY](const Node* node) {
-      if (node == nullptr) {
-        return false;
-      }
-      return x >= node->x() && y >= node->y() && x <= node->x() + node->width() && y <= node->y() + node->height();
+    const auto inRect = [x, y](const Node* node) {
+      return node != nullptr && node->visible() && node->containsScenePoint(x, y);
     };
 
     const bool onUserAnchor = inRect(m_userSelectBox);
@@ -1038,7 +1030,27 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
     m_powerMenuButton->setSize(powerRect.width, powerRect.height);
     m_powerMenuButton->setControlHeight(powerRect.height);
     m_powerMenuButton->layout(renderer);
+  } else if (m_powerMenuOpen && m_widgetMenuAction != greeter::WidgetAction::Power) {
+    closePowerMenu(false);
   }
+  const auto transformNodes = [&](Id id, const auto& nodes) {
+    for (Node* node : nodes)
+      greeter::applyComponentTransform(*node, layout[id], layout.transforms[static_cast<unsigned>(id)]);
+  };
+  m_loginComponent->applyTransform(layout[Id::Login], layout.transforms[0]);
+  transformNodes(
+      Id::Login,
+      std::array<Node*, 14>{
+          m_userSelectBox, m_userSelectLabel, m_userSelectGlyph, m_userSelectArea, m_userMenuSearchField,
+          m_userSecondaryLabel, m_sessionSelectBox, m_sessionSelectLabel, m_sessionSelectGlyph, m_sessionSelectArea,
+          m_sessionCaptionLabel, m_panelDivider, m_headerUserGlyph, m_headerUserAvatar
+      }
+  );
+  transformNodes(Id::Clock, std::array<Node*, 2>{m_clockTimeLabel, m_clockDateLabel});
+  transformNodes(Id::Branding, std::array<Node*, 1>{m_brandLogo});
+  transformNodes(Id::Power, std::array<Node*, 1>{m_powerMenuButton});
+  transformNodes(Id::Appearance, std::array<Node*, 1>{m_schemeSelectButton});
+  m_chromeComponent->applyKeyboardTransform(layout[Id::Keyboard], layout.transforms[5]);
   layoutPowerMenu(sw, sh);
   rebuildUserMenu();
   rebuildSessionMenu();
@@ -2322,8 +2334,9 @@ void GreeterSurface::refreshUserMenuRows() {
   auto* renderer = m_renderer;
   m_userMenuFilteredIndices = filterUserIndices(m_model.users(), m_userMenuSearchQuery);
 
-  const float anchorX = m_userSelectBox->x();
-  const float anchorW = m_userSelectBox->width();
+  const auto anchor = popupAnchor(m_userSelectBox, greeter::WidgetAction::None);
+  const float anchorX = anchor.x;
+  const float anchorW = anchor.width;
   const float rowH = GreeterMetrics::accountRowHeight;
   const float borderWidth = Style::borderWidth;
   const float panelRadius = Style::scaledRadiusLg();
@@ -2341,8 +2354,8 @@ void GreeterSurface::refreshUserMenuRows() {
   const float panelX = std::clamp(anchorX, Style::spaceLg, std::max(Style::spaceLg, screenW - Style::spaceLg - panelW));
   const float minY = 12;
   const float maxY = m_root.height() - 12;
-  const float below = maxY - (m_userSelectBox->y() + m_userSelectBox->height() + 10);
-  const float above = m_userSelectBox->y() - 10 - minY;
+  const float below = maxY - (anchor.y + anchor.height + 10);
+  const float above = anchor.y - 10 - minY;
   const float desiredH = 2 * (kUserMenuPadding + borderWidth)
       + static_cast<float>(
             std::min(kUserDropdownMaxVisibleRows, std::max(std::size_t{1}, m_userMenuFilteredIndices.size()))
@@ -2358,11 +2371,8 @@ void GreeterSurface::refreshUserMenuRows() {
   const float rows =
       static_cast<float>(std::max(std::size_t{1}, std::min(m_userMenuFilteredIndices.size(), m_userMenuVisibleRows)));
   const float estimatedH = 2 * (kUserMenuPadding + borderWidth) + rows * rowH + (rows - 1) * kUserMenuRowGap;
-  const float panelY = greeter::placeGreeterPopup(
-                           {anchorX, m_userSelectBox->y(), anchorW, m_userSelectBox->height(), true}, panelW,
-                           estimatedH, screenW, m_root.height(), openAbove, false
-  )
-                           .y;
+  const float panelY =
+      greeter::placeGreeterPopup(anchor, panelW, estimatedH, screenW, m_root.height(), openAbove, false).y;
   const float innerX = panelX + borderWidth + kUserMenuPadding;
   const float innerW = panelW - 2.0f * borderWidth - 2.0f * kUserMenuPadding;
   const float listTop = panelY + borderWidth + kUserMenuPadding;

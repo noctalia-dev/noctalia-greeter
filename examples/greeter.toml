@@ -117,8 +117,9 @@ login_mode = "auto"
 # Other optional component IDs: power, appearance, keyboard.
 # Anchors: top-left/center/right, center-left/center/right, bottom-left/center/right.
 # Offsets x/y: -8192..8192; width: 32..1600 (login further bounded to 280..640).
-# Stored for upcoming scene integration: rotation (finite radians), scale (0.5..4),
-# flip_x/flip_y (booleans). These transform fields do not yet affect rendering.
+# Transforms: rotation (finite radians), scale (0.5..4), flip_x/flip_y (booleans).
+# The whole component and its input transform together; popups stay upright.
+# Oversized transformed components scale down to fit the output.
 
 [output]
 # Use layout, transforms, and scales from sync.toml when not declared here (default true).

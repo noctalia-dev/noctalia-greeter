@@ -24,6 +24,15 @@ namespace greeter {
       rect.y = std::round(std::clamp(rect.y, margin, std::max(margin, height - margin - rect.height)));
     }
   } // namespace
+  LayoutRect GreeterLayout::bounds(GreeterComponent id) const {
+    const auto index = static_cast<unsigned>(id);
+    const auto& rect = components[index];
+    const auto& transform = transforms[index];
+    const float cosine = std::abs(std::cos(transform.rotation)), sine = std::abs(std::sin(transform.rotation));
+    const float w = transform.scale * (cosine * rect.width + sine * rect.height);
+    const float h = transform.scale * (sine * rect.width + cosine * rect.height);
+    return {rect.x + (rect.width - w) / 2, rect.y + (rect.height - h) / 2, w, h, rect.visible};
+  }
   bool validLayoutAnchor(std::string_view anchor) {
     constexpr std::array anchors{"top-left",     "top-center",  "top-right",     "center-left", "center",
                                  "center-right", "bottom-left", "bottom-center", "bottom-right"};
@@ -129,6 +138,21 @@ namespace greeter {
       rect.x += settings.x.value_or(0);
       rect.y += settings.y.value_or(0);
       contain(rect, width, height, margin);
+      auto& transform = result.transforms[i];
+      transform = {
+          static_cast<float>(settings.rotation.value_or(0)), static_cast<float>(settings.scale.value_or(1)),
+          settings.flipX.value_or(false), settings.flipY.value_or(false)
+      };
+      const auto id = static_cast<GreeterComponent>(i);
+      const auto requested = result.bounds(id);
+      // Fit the visual bounds without changing control measurements or hit geometry.
+      transform.scale *= std::min(
+          {1.0F, (width - 2 * margin) / std::max(1.0F, requested.width),
+           (height - 2 * margin) / std::max(1.0F, requested.height)}
+      );
+      const auto fitted = result.bounds(id);
+      rect.x += std::clamp(fitted.x, margin, std::max(margin, width - margin - fitted.width)) - fitted.x;
+      rect.y += std::clamp(fitted.y, margin, std::max(margin, height - margin - fitted.height)) - fitted.y;
     }
     // Login is mandatory and cannot be hidden/pinned away through component settings.
     result.components[0].visible = true;
@@ -138,14 +162,19 @@ namespace greeter {
         continue;
       auto collides = [&] {
         for (unsigned previous = 0; previous < i; previous++)
-          if (rectanglesOverlap(rect, result.components[previous]))
+          if (rectanglesOverlap(
+                  result.bounds(static_cast<GreeterComponent>(i)),
+                  result.bounds(static_cast<GreeterComponent>(previous))
+              ))
             return true;
         return false;
       };
-      const bool bottom = rect.y > height / 2;
+      const auto bounds = result.bounds(static_cast<GreeterComponent>(i));
+      const bool bottom = bounds.y > height / 2;
       for (unsigned tries = 0; tries < 6 && collides(); tries++) {
-        rect.y += (bottom ? -1 : 1) * (rect.height + 10);
-        if (rect.y < margin || rect.y + rect.height > height - margin) {
+        rect.y += (bottom ? -1 : 1) * (bounds.height + 10);
+        const auto shifted = result.bounds(static_cast<GreeterComponent>(i));
+        if (shifted.y < margin || shifted.y + shifted.height > height - margin) {
           rect.visible = false;
           break;
         }

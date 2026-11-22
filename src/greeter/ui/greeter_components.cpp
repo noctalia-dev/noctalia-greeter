@@ -68,6 +68,35 @@ namespace {
     );
   }
 } // namespace
+void greeter::applyComponentTransform(Node& node, const LayoutRect& bounds, const ComponentTransform& transform) {
+  const float cx = bounds.x + bounds.width / 2, cy = bounds.y + bounds.height / 2;
+  const float nx = node.x() + node.width() / 2, ny = node.y() + node.height() / 2;
+  const float sx = transform.scale * (transform.flipX ? -1.0F : 1.0F);
+  const float sy = transform.scale * (transform.flipY ? -1.0F : 1.0F);
+  const float dx = (nx - cx) * sx, dy = (ny - cy) * sy;
+  const float cosine = std::cos(transform.rotation), sine = std::sin(transform.rotation);
+  node.setRotation(transform.rotation);
+  node.setScale(sx, sy);
+  node.setTranslate(cx + cosine * dx - sine * dy - nx, cy + sine * dx + cosine * dy - ny);
+}
+
+void GreeterLoginPanel::applyTransform(
+    const greeter::LayoutRect& bounds, const greeter::ComponentTransform& transform
+) {
+  for (Node* node : std::array<Node*, 10>{
+           m_nodes.background, m_nodes.input, m_nodes.submit, m_nodes.feedback, m_nodes.name, m_title, m_subtitle,
+           m_prompt, m_hostGlyph, m_avatar
+       })
+    greeter::applyComponentTransform(*node, bounds, transform);
+}
+
+void GreeterChrome::applyKeyboardTransform(
+    const greeter::LayoutRect& bounds, const greeter::ComponentTransform& transform
+) {
+  greeter::applyComponentTransform(*m_keyboard, bounds, transform);
+  greeter::applyComponentTransform(*m_keyboardGlyph, bounds, transform);
+}
+
 GreeterLoginPanel::GreeterLoginPanel(Node& scene, LoginPanelNodes nodes) : m_nodes(nodes) {
   m_title = create<Label>(scene);
   m_subtitle = create<Label>(scene);

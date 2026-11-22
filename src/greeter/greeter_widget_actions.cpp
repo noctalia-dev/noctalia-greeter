@@ -82,7 +82,7 @@ void GreeterSurface::appendWidgetFocusTargets() {
 }
 
 greeter::LayoutRect GreeterSurface::popupAnchor(const Node* native, greeter::WidgetAction action) const {
-  const Node* anchor = m_widgetMenuAction == action ? m_widgetMenuTrigger : native;
+  const Node* anchor = m_widgetMenuTrigger != nullptr && m_widgetMenuAction == action ? m_widgetMenuTrigger : native;
   if (anchor == nullptr || !anchor->visible())
     return {};
   float left, top, right, bottom;
