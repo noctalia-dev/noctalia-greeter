@@ -119,6 +119,7 @@ _greeter_sources = files(
   'src/greeter/widgets/widget_settings.cpp',
   'src/greeter/widgets/widget_settings_validation.cpp',
   'src/greeter/widgets/widget_host.cpp',
+  'src/greeter/widgets/widget_layer.cpp',
   'src/greeter/widgets/label_widget.cpp',
   'src/greeter/widgets/clock_widget.cpp',
   'src/greeter/widgets/widget_image_source.cpp',
