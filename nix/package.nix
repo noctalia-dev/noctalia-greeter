@@ -1,7 +1,7 @@
 {
   lib,
   stdenv,
-  fetchurl,
+  fetchFromGitHub,
   meson,
   ninja,
   pkg-config,
@@ -34,9 +34,11 @@
   # vendored until nixpkgs updates it.
   stbWithResize2 = stb.overrideAttrs {
     version = "0-unstable-2026-03-13";
-    src = fetchurl {
-      url = "https://github.com/nothings/stb/archive/904aa67e1e2d1dec92959df63e700b166d5c1022.tar.gz";
-      hash = "sha256-h32Bx1qTYIJeLm2Ut5PXqa/+l+Lb7pfIP8hWY8JfDCc=";
+    src = fetchFromGitHub {
+      owner = "nothings";
+      repo = "stb";
+      rev = "904aa67e1e2d1dec92959df63e700b166d5c1022";
+      hash = "sha256-MXKd03wQV55UITAEgMxrQHXjRhbjZGx7XEHdm1EvimI=";
     };
   };
 in
