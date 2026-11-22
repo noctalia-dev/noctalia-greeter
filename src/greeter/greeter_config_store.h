@@ -42,7 +42,9 @@ namespace greeter::config {
 
   // Full declarative greeter.toml. UI and Sync never write this file.
   struct GreeterConfigFile {
-    GreeterLayoutConfig layout;
+    std::optional<GreeterLayoutConfig> layout;
+    // Invalid administrator layout blocks lower-priority Sync inheritance.
+    bool layoutValid = true;
     // Stored profile metadata; rendering is separate.
     std::optional<WidgetCollection> widgets;
     // Parse failures block inheriting a lower-priority widget collection.
@@ -103,6 +105,7 @@ namespace greeter::config {
 
   // Sync + UI mutable file (sync.toml). Never managed by Nix. Loses to greeter.toml.
   struct GreeterSyncFile {
+    std::optional<GreeterLayoutConfig> layout;
     std::optional<WidgetCollection> widgets;
     std::optional<std::string> sessionLast;
     std::optional<std::string> appearanceScheme;

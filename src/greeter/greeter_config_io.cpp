@@ -6,6 +6,7 @@
 #include "greeter/widgets/widget_config.h"
 
 #include <algorithm>
+#include <array>
 #include <cerrno>
 #include <cmath>
 #include <cstdio>
@@ -240,7 +241,9 @@ namespace {
           result.loginPresentation = greeter::LoginPresentation::Full;
         else if (value && *value == "minimal")
           result.loginPresentation = greeter::LoginPresentation::Minimal;
-        else if (!value || *value != "auto")
+        else if (value && *value == "auto")
+          result.loginPresentation = greeter::LoginPresentation::Auto;
+        else
           layoutDiagnostic(path, node, "layout.login_mode must be auto, full, or minimal");
         continue;
       }
@@ -282,6 +285,19 @@ namespace {
           }
           auto& target = name == "x" ? placement.x : name == "y" ? placement.y : placement.width;
           target = static_cast<float>(*number);
+        } else if (name == "flip_x" || name == "flip_y") {
+          if (const auto flag = value.value_exact<bool>())
+            (name == "flip_x" ? placement.flipX : placement.flipY) = flag;
+          else
+            invalid();
+        } else if (name == "rotation" || name == "scale") {
+          const auto number = value.is_number() ? value.value<double>() : std::nullopt;
+          if (!number || !std::isfinite(*number) || (name == "scale" && (*number < 0.5 || *number > 4)))
+            invalid();
+          else if (name == "rotation")
+            placement.rotation = greeter::normalizeWidgetRotation(*number);
+          else
+            placement.scale = number;
         } else
           invalid();
       }
@@ -303,6 +319,17 @@ namespace {
       const auto keyView = key.str();
       if (keyView == "widgets")
         continue;
+      if (keyView == "layout") {
+        if (const auto* table = node.as_table()) {
+          const auto diagnosticsBefore = g_diagnostics.size();
+          config.layout = parseLayout(*table, path);
+          config.layoutValid = g_diagnostics.size() == diagnosticsBefore;
+        } else {
+          layoutDiagnostic(path, node, "layout must be a table");
+          config.layoutValid = false;
+        }
+        continue;
+      }
       if (!node.is_table()) {
         if (!isKnownTopLevelKey(keyView)) {
           warnUnknownTopLevelKey(path, keyView);
@@ -317,10 +344,6 @@ namespace {
       }
 
       const toml::table& section = *node.as_table();
-      if (keyView == "layout") {
-        config.layout = parseLayout(section, path);
-        continue;
-      }
       for (const auto& [entryKey, entryNode] : section) {
         const auto entryView = entryKey.str();
         if (keyView == "session") {
@@ -651,15 +674,15 @@ namespace {
     return table;
   }
 
-  [[nodiscard]] toml::table buildTomlTable(const greeter::config::GreeterConfigFile& config) {
-    toml::table root;
+  [[nodiscard]] toml::table buildLayoutTable(const greeter::GreeterLayoutConfig& config) {
     toml::table layout;
-    if (config.layout.loginPresentation != greeter::LoginPresentation::Auto)
-      layout.insert(
-          "login_mode", config.layout.loginPresentation == greeter::LoginPresentation::Full ? "full" : "minimal"
-      );
+    if (config.loginPresentation) {
+      constexpr std::array modes{"auto", "full", "minimal"};
+      const auto index = static_cast<std::size_t>(*config.loginPresentation);
+      layout.insert("login_mode", index < modes.size() ? modes[index] : "");
+    }
     for (unsigned i = 0; i < greeter::kGreeterComponentIds.size(); i++) {
-      const auto& p = config.layout.components[i];
+      const auto& p = config.components[i];
       toml::table component;
       if (p.visible)
         component.insert("visible", *p.visible);
@@ -673,11 +696,24 @@ namespace {
         component.insert("y", static_cast<double>(*p.y));
       if (p.width)
         component.insert("width", static_cast<double>(*p.width));
+      if (p.rotation)
+        component.insert("rotation", greeter::normalizeWidgetRotation(*p.rotation).value_or(*p.rotation));
+      if (p.scale)
+        component.insert("scale", *p.scale);
+      if (p.flipX)
+        component.insert("flip_x", *p.flipX);
+      if (p.flipY)
+        component.insert("flip_y", *p.flipY);
       if (!component.empty())
         layout.insert(greeter::kGreeterComponentIds[i], std::move(component));
     }
-    if (!layout.empty())
-      root.insert("layout", std::move(layout));
+    return layout;
+  }
+
+  [[nodiscard]] toml::table buildTomlTable(const greeter::config::GreeterConfigFile& config) {
+    toml::table root;
+    if (config.layout)
+      root.insert("layout", buildLayoutTable(*config.layout));
 
     toml::table session;
     insertString(
@@ -891,6 +927,8 @@ namespace {
 
   [[nodiscard]] toml::table buildSyncTomlTable(const greeter::config::GreeterSyncFile& sync) {
     toml::table root;
+    if (sync.layout)
+      root.insert("layout", buildLayoutTable(*sync.layout));
 
     toml::table session;
     insertString(
@@ -1023,6 +1061,8 @@ namespace {
     // Reuse config parser, then keep only sync keys (including the Sync-owned appearance table).
     const greeter::config::GreeterConfigFile full = parseConfig(root, path);
     greeter::config::GreeterSyncFile sync;
+    if (full.layoutValid)
+      sync.layout = full.layout;
     sync.widgets = full.widgets;
     sync.sessionLast = full.sessionLast;
     sync.appearanceScheme = full.appearanceScheme;
@@ -1187,6 +1227,7 @@ namespace greeter::config {
       recordParseError(path, e);
       GreeterConfigFile invalid;
       invalid.widgetsValid = false;
+      invalid.layoutValid = false;
       return invalid;
     }
   }
@@ -1195,6 +1236,10 @@ namespace greeter::config {
     (void)loadConfig(path);
     if (hasDiagnostics(path))
       return false;
+    if (!config.layoutValid) {
+      layoutDiagnostic(path, toml::table{}, "layout: reload the invalid administrator layout after repair");
+      return false;
+    }
     if (!config.widgetsValid) {
       widgetDiagnostics(path, {}, {{"widgets", "reload the invalid administrator collection after repair"}});
       return false;
@@ -1208,6 +1253,11 @@ namespace greeter::config {
     if (const auto result = writeWidgetCollection(table, declarative.widgets); !result) {
       widgetDiagnostics(path, table, result.error());
       return false;
+    }
+    if (const auto* layout = table["layout"].as_table()) {
+      (void)parseLayout(*layout, path);
+      if (hasDiagnostics(path))
+        return false;
     }
     std::error_code ec;
     std::filesystem::create_directories(path.parent_path(), ec);
@@ -1229,6 +1279,7 @@ namespace greeter::config {
     out << "# [keyboard] layout/variant/options/numlock, [pointer] accel_profile/accel_speed\n";
     out << "# [auth] allow_empty_password (bool), request_timeout (0-3600 seconds; default 60, 0 disables)\n";
     out << "# [clock] enabled/position/time_format/date_format/time_font_size/date_font_size\n";
+    out << "# [layout] login_mode, [layout.<component>] placement/visibility and stored transforms\n";
     out << '\n';
     out << formatToml(table);
 
@@ -1268,6 +1319,11 @@ namespace greeter::config {
       return false;
     }
 
+    if (const auto* layout = table["layout"].as_table()) {
+      (void)parseLayout(*layout, path);
+      if (hasDiagnostics(path))
+        return false;
+    }
     std::ostringstream out;
     out << "# noctalia-greeter sync.toml (UI + Sync; not managed by Nix)\n";
     out << "# [session] last, [session.power] suspend/reboot/shutdown, [[session.actions]] "
@@ -1275,6 +1331,7 @@ namespace greeter::config {
     out << "# [appearance] scheme, theme_mode, corner_radius_scale, font_family\n";
     out << "# [appearance.palette] full color role table, [appearance.wallpaper]/[appearance.wallpapers.<connector>]\n";
     out << "# [output] layout/transforms/scales\n";
+    out << "# [layout] login_mode, [layout.<component>] overrides (administrator fields win)\n";
     out << '\n';
     out << formatToml(table);
 

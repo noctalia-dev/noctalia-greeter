@@ -10,7 +10,9 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <limits>
 #include <nlohmann/json.hpp>
+#include <numbers>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -149,8 +151,8 @@ title = 'Saved widget'
     requireWidgets(config.widgets);
     require(config.sessionDefault == "Niri" && config.userDefault == "test-user", "configured defaults lost");
     require(config.keyboardLayout == "de", "keyboard setting lost");
-    require(config.layout.loginPresentation == greeter::LoginPresentation::Full, "login mode lost");
-    const auto& clock = config.layout.components[1];
+    require(config.layout->loginPresentation == greeter::LoginPresentation::Full, "login mode lost");
+    const auto& clock = config.layout->components[1];
     require(clock.anchor == "bottom-left" && clock.x == 24 && clock.visible == false, "clock overrides lost");
   }
 
@@ -263,7 +265,7 @@ title = 'Saved widget'
     const auto fallback = greeter::config::loadConfig(config);
     (void)greeter::config::loadSync(sync);
     require(
-        !fallback.layout.components[1].anchor && fallback.layout.components[1].y == -32,
+        !fallback.layout->components[1].anchor && fallback.layout->components[1].y == -32,
         "runtime lost valid sibling field during fallback"
     );
     require(hasDiagnostic(config) && hasDiagnostic(sync), "fixture diagnostics missing");
@@ -505,6 +507,315 @@ title = 'Saved widget'
     );
   }
 
+  constexpr std::string_view kCoreLayout = R"toml([layout]
+login_mode = 'auto'
+[layout.login]
+anchor = 'center-left'
+width = 400
+[layout.branding]
+visible = false
+anchor = 'bottom-right'
+x = 0
+y = -4
+width = 96
+output = 'DP-1'
+rotation = 0.25
+scale = 0.5
+flip_x = false
+flip_y = true
+)toml";
+
+  void requireCoreLayout(const std::optional<greeter::GreeterLayoutConfig>& layout) {
+    require(layout && layout->loginPresentation == greeter::LoginPresentation::Auto, "explicit Auto mode lost");
+    require(layout->components[0].anchor == "center-left" && layout->components[0].width == 400, "login layout lost");
+    const auto& part = layout->components[2];
+    require(
+        part.visible == false
+            && part.anchor == "bottom-right"
+            && part.x == 0
+            && part.y == -4
+            && part.width == 96
+            && part.output == "DP-1"
+            && part.rotation == 0.25
+            && part.scale == 0.5
+            && part.flipX == false
+            && part.flipY == true,
+        "core component fields changed"
+    );
+  }
+
+  void testCoreLayoutFiles() {
+    for (const bool mutableFile : {false, true}) {
+      Fixture fixture;
+      const auto path = fixture.directory / (mutableFile ? "sync.toml" : "greeter.toml");
+      for (const auto content : {std::string_view{}, std::string_view("[layout]\n"), kCoreLayout}) {
+        writeFile(path, content);
+        const auto config = greeter::config::loadConfig(path);
+        const auto sync = greeter::config::loadSync(path);
+        const bool present = !content.empty();
+        require(config.layout.has_value() == present && sync.layout.has_value() == present, "layout presence changed");
+        require(config.layoutValid && !hasDiagnostic(path), "valid layout rejected");
+        require(
+            mutableFile ? greeter::config::writeSync(path, sync) : greeter::config::writeConfig(path, config),
+            "core layout write failed"
+        );
+        const auto saved = greeter::config::loadConfig(path);
+        require(saved.layout.has_value() == present, "write materialized or removed layout");
+        if (content == kCoreLayout)
+          requireCoreLayout(saved.layout);
+        else if (saved.layout)
+          require(!saved.layout->loginPresentation, "empty layout materialized Auto mode");
+      }
+      for (const auto* mode : {"auto", "full", "minimal"}) {
+        writeFile(path, std::string("[layout]\nlogin_mode='") + mode + "'\n");
+        const auto original = greeter::config::loadConfig(path);
+        require(
+            mutableFile ? greeter::config::writeSync(path, greeter::config::loadSync(path))
+                        : greeter::config::writeConfig(path, original),
+            "explicit mode write failed"
+        );
+        require(
+            greeter::config::loadConfig(path).layout->loginPresentation == original.layout->loginPresentation,
+            "explicit mode changed on write"
+        );
+      }
+      writeFile(path, kCoreLayout);
+      auto config = greeter::config::loadConfig(path);
+      auto sync = greeter::config::loadSync(path);
+      config.layout->components[2].rotation = sync.layout->components[2].rotation = 7;
+      config.layout->components[2].scale = sync.layout->components[2].scale = 4;
+      require(
+          mutableFile ? greeter::config::writeSync(path, sync) : greeter::config::writeConfig(path, config),
+          "transform bounds write failed"
+      );
+      const auto normalized = greeter::config::loadConfig(path).layout->components[2];
+      require(
+          normalized.rotation == 7 - 2 * std::numbers::pi && normalized.scale == 4, "rotation normalization failed"
+      );
+
+      for (const auto* invalid :
+           {"layout=1\n", "[layout]\nlogin_mode='invalid'\n", "[layout.login]\nvisible=false\n",
+            "[layout.login]\noutput='DP-1'\n", "[layout.branding]\nscale=0.49\n", "[layout.branding]\nscale=4.01\n",
+            "[layout.branding]\nscale=nan\n", "[layout.branding]\nscale=true\n", "[layout.branding]\nrotation=inf\n",
+            "[layout.branding]\nrotation='0.5'\n", "[layout.branding]\nflip_x=1\n",
+            "[layout.branding]\nflip_y='true'\n"}) {
+        writeFile(path, invalid);
+        const auto badConfig = greeter::config::loadConfig(path);
+        const auto badSync = greeter::config::loadSync(path);
+        require(!badConfig.layoutValid && !badSync.layout && hasDiagnostic(path), "invalid core layout accepted");
+        require(
+            !(mutableFile ? greeter::config::writeSync(path, sync) : greeter::config::writeConfig(path, config)),
+            "writer replaced invalid layout source"
+        );
+        require(readFile(path) == invalid, "refused layout write changed bytes");
+        writeFile(path, kCoreLayout);
+        if (!mutableFile)
+          require(!greeter::config::writeConfig(path, badConfig), "stale invalid administrator model was saved");
+        (void)greeter::config::loadConfig(path);
+        require(!hasDiagnostic(path), "layout diagnostic survived repair");
+      }
+      for (const auto invalid :
+           {0.0, 4.01, std::numeric_limits<double>::infinity(), std::numeric_limits<double>::quiet_NaN()}) {
+        writeFile(path, kCoreLayout);
+        config = greeter::config::loadConfig(path);
+        sync = greeter::config::loadSync(path);
+        config.layout->components[2].scale = sync.layout->components[2].scale = invalid;
+        require(
+            !(mutableFile ? greeter::config::writeSync(path, sync) : greeter::config::writeConfig(path, config)),
+            "writer accepted invalid in-memory scale"
+        );
+        require(readFile(path) == kCoreLayout, "invalid in-memory scale changed file");
+      }
+      writeFile(path, kCoreLayout);
+      config = greeter::config::loadConfig(path);
+      sync = greeter::config::loadSync(path);
+      config.layout->components[2].rotation = sync.layout->components[2].rotation =
+          std::numeric_limits<double>::infinity();
+      require(
+          !(mutableFile ? greeter::config::writeSync(path, sync) : greeter::config::writeConfig(path, config)),
+          "writer accepted infinite rotation"
+      );
+      require(readFile(path) == kCoreLayout, "infinite in-memory rotation changed file");
+    }
+  }
+
+  void testCoreLayoutPrecedence() {
+    Fixture fixture;
+    const auto config = fixture.directory / "greeter.toml";
+    const auto sync = fixture.directory / "sync.toml";
+    writeFile(sync, kCoreLayout);
+    for (const auto* admin : {"", "[layout]\n", "[layout.branding]\n"}) {
+      writeFile(config, admin);
+      requireCoreLayout(greeter::loadGreeterPreferences().layout);
+    }
+    std::filesystem::remove(config);
+    requireCoreLayout(greeter::loadGreeterPreferences().layout);
+    writeFile(sync, R"([layout]
+login_mode='full'
+[layout.branding]
+visible=false
+anchor='bottom-right'
+x=17
+y=18
+width=96
+output='DP-2'
+rotation=0.5
+scale=2
+flip_x=true
+flip_y=false
+)");
+    writeFile(config, kCoreLayout);
+    requireCoreLayout(greeter::loadGreeterPreferences().layout);
+    writeFile(config, "[layout.branding]\nx=0\nflip_x=false\n");
+    const auto partial = greeter::loadGreeterPreferences().layout;
+    const auto& part = partial.components[2];
+    require(
+        partial.loginPresentation == greeter::LoginPresentation::Full
+            && part.visible == false
+            && part.anchor == "bottom-right"
+            && part.x == 0
+            && part.y == 18
+            && part.width == 96
+            && part.output == "DP-2"
+            && part.rotation == 0.5
+            && part.scale == 2
+            && part.flipX == false
+            && part.flipY == false,
+        "per-field core layout priority failed"
+    );
+
+    writeFile(sync, R"([layout.clock]
+visible=false
+anchor='bottom-right'
+[layout.branding]
+visible=false
+[layout.power]
+visible=true
+anchor='top-left'
+[layout.appearance]
+visible=false
+anchor='bottom-left'
+)");
+    writeFile(config, R"([clock]
+enabled=true
+position='center-left'
+[appearance]
+hide_logo=false
+power_buttons_position='hidden'
+scheme_selector_position='top-right'
+)");
+    auto effective = greeter::effectiveGreeterLayout(greeter::loadGreeterPreferences());
+    require(
+        effective.components[1].visible == true
+            && effective.components[1].anchor == "center-left"
+            && effective.components[2].visible == true
+            && effective.components[3].visible == false
+            && effective.components[3].anchor == "top-left"
+            && effective.components[4].anchor == "top-right"
+            && effective.components[4].visible == false,
+        "explicit legacy administrator keys lost to Sync"
+    );
+    writeFile(config, R"([clock]
+enabled=false
+position='above-panel'
+[appearance]
+hide_logo=true
+power_buttons_position='top-right'
+scheme_selector_position='hidden'
+[layout.clock]
+visible=true
+anchor='top-center'
+[layout.branding]
+visible=true
+[layout.power]
+anchor='bottom-left'
+[layout.appearance]
+visible=true
+)");
+    effective = greeter::effectiveGreeterLayout(greeter::loadGreeterPreferences());
+    require(
+        effective.components[1].visible == true
+            && effective.components[1].anchor == "top-center"
+            && effective.components[2].visible == true
+            && effective.components[3].anchor == "bottom-left"
+            && effective.components[4].visible == true,
+        "modern administrator fields lost to legacy keys"
+    );
+    writeFile(config, "[clock]\nposition='above-panel'\n");
+    require(greeter::loadGreeterPreferences().layout.components[1].anchor == "above-panel", "legacy above-panel lost");
+    writeFile(config, "");
+    effective = greeter::effectiveGreeterLayout(greeter::loadGreeterPreferences());
+    require(
+        effective.components[1].visible == false
+            && effective.components[1].anchor == "bottom-right"
+            && effective.components[2].visible == false
+            && effective.components[3].anchor == "top-left",
+        "legacy defaults masked explicit synced settings"
+    );
+    std::filesystem::remove(sync);
+    const auto defaults = greeter::loadGreeterPreferences().layout;
+    require(!defaults.loginPresentation && !defaults.components[0].anchor, "missing layout created overrides");
+  }
+
+  void testCoreLayoutRecoveryAndSaves() {
+    Fixture fixture;
+    const auto config = fixture.directory / "greeter.toml";
+    const auto target = fixture.directory / "declarative.toml";
+    const auto sync = fixture.directory / "sync.toml";
+    writeFile(sync, kCoreLayout);
+    for (const bool symlink : {false, true}) {
+      for (const auto* invalid : {"[layout\n", "[layout.branding]\nscale=0\nx=12\n", "layout=1\n"}) {
+        std::filesystem::remove(config);
+        writeFile(symlink ? target : config, invalid);
+        if (symlink)
+          std::filesystem::create_symlink(target, config);
+        const auto blocked = greeter::loadGreeterPreferences().layout;
+        require(
+            !blocked.loginPresentation && !blocked.components[0].anchor && !blocked.components[2].scale,
+            "invalid administrator intent inherited Sync layout"
+        );
+        if (std::string_view(invalid).contains("x=12"))
+          require(blocked.components[2].x == 12, "valid administrator sibling was discarded");
+        require(hasDiagnostic(config) && readFile(config) == invalid, "resolution changed invalid administrator file");
+        writeFile(symlink ? target : config, "[layout]\n");
+        requireCoreLayout(greeter::loadGreeterPreferences().layout);
+        require(!hasDiagnostic(config), "repaired layout stayed blocked");
+      }
+    }
+    std::filesystem::remove(config);
+    writeFile(config, "[widgets]\nwidget_order='invalid'\n");
+    requireCoreLayout(greeter::loadGreeterPreferences().layout);
+    require(hasDiagnostic(config), "unrelated widget diagnostic disappeared");
+    writeFile(config, kConfig);
+    writeFile(sync, std::string(kSync) + std::string(kCoreLayout));
+    require(greeter::config::writeSync(sync, greeter::config::loadSync(sync)), "canonical Sync fixture write failed");
+    const auto before = *toml::parse_file(sync.string())["layout"].as_table();
+    auto prefs = greeter::loadGreeterPreferences();
+    prefs.layout = {};
+    prefs.session = "New Session";
+    require(greeter::saveGreeterPreferences(prefs), "preference save lost layout");
+    requireCoreLayout(greeter::config::loadSync(sync).layout);
+    require(*toml::parse_file(sync.string())["layout"].as_table() == before, "UI persisted effective layout");
+    greeter::GreeterSyncAppearanceUpdate update;
+    update.appearance.fontFamily = "Updated Font";
+    require(greeter::applyAppearanceSyncGreeterConf({}, {}, {}, update), "appearance update failed with layout");
+    requireCoreLayout(greeter::config::loadSync(sync).layout);
+    requireWidgets(greeter::config::loadSync(sync).widgets);
+    require(readFile(config) == kConfig, "mutable saves changed administrator layout");
+    writeFile(sync, "[layout.branding]\nscale=0\nx=12\n");
+    const auto admin = greeter::loadGreeterPreferences().layout;
+    require(
+        admin.loginPresentation == greeter::LoginPresentation::Full && !admin.components[2].x,
+        "invalid Sync leaked partial layout or replaced valid administrator mode"
+    );
+    require(hasDiagnostic(sync), "invalid lower-priority layout diagnostic hidden");
+    std::filesystem::remove(config);
+    require(!greeter::loadGreeterPreferences().layout.loginPresentation, "invalid Sync created layout overrides");
+    writeFile(sync, kCoreLayout);
+    requireCoreLayout(greeter::loadGreeterPreferences().layout);
+    require(!hasDiagnostic(sync), "repaired Sync diagnostic persisted");
+  }
+
   void testSetup() {
     require(::geteuid() == 0, "setup test requires root in a private user namespace");
     for (const bool symlink : {false, true}) {
@@ -566,7 +877,8 @@ int main(int argc, char** argv) {
   bool passed = true;
   for (const auto test :
        {testConfigWriter, testPreferenceSave, testLegacyAppearance, testDiagnosticRecovery, testWidgetFiles,
-        testWidgetUpdates, testWidgetPreferences, testWidgetPreferenceRecovery}) {
+        testWidgetUpdates, testWidgetPreferences, testWidgetPreferenceRecovery, testCoreLayoutFiles,
+        testCoreLayoutPrecedence, testCoreLayoutRecoveryAndSaves}) {
     try {
       test();
     } catch (const std::exception& error) {

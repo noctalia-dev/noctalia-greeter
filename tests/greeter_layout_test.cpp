@@ -124,28 +124,34 @@ visible = true
 )";
     greeter::config::clearConfigDiagnostics();
     auto config = greeter::config::loadConfig(path);
-    require(config.layout.loginPresentation == greeter::LoginPresentation::Full, "login mode was lost");
+    require(config.layout->loginPresentation == greeter::LoginPresentation::Full, "login mode was lost");
     require(
-        !config.layout.components[0].visible
-            && !config.layout.components[0].output
-            && !config.layout.components[0].x
-            && !config.layout.components[0].width,
+        !config.layout->components[0].visible
+            && !config.layout->components[0].output
+            && !config.layout->components[0].x
+            && !config.layout->components[0].width,
         "invalid login settings survived validation"
     );
-    require(config.layout.components[0].anchor == "center-left", "valid sibling setting lost");
+    require(config.layout->components[0].anchor == "center-left", "valid sibling setting lost");
     require(
-        config.layout.components[1].visible == false
-            && config.layout.components[1].y == -32
-            && !config.layout.components[1].anchor,
+        config.layout->components[1].visible == false
+            && config.layout->components[1].y == -32
+            && !config.layout->components[1].anchor,
         "partial component fallback failed"
     );
     require(greeter::config::configDiagnostics().size() == 6, "layout diagnostics missing");
+    const auto invalidSize = std::filesystem::file_size(path);
+    require(!greeter::config::writeConfig(path, config), "writer replaced invalid layout source");
+    require(std::filesystem::file_size(path) == invalidSize, "refused write changed invalid file");
+    std::filesystem::remove(path);
+    require(!greeter::config::writeConfig(path, config), "writer accepted stale invalid layout");
+    config.layoutValid = true; // Explicitly retain valid siblings in a new, repaired fixture.
     require(greeter::config::writeConfig(path, config), "round trip write failed");
     auto restored = greeter::config::loadConfig(path);
     require(
-        restored.layout.components[1].visible == false
-            && restored.layout.components[0].anchor == "center-left"
-            && restored.layout.loginPresentation == greeter::LoginPresentation::Full,
+        restored.layout->components[1].visible == false
+            && restored.layout->components[0].anchor == "center-left"
+            && restored.layout->loginPresentation == greeter::LoginPresentation::Full,
         "layout round trip changed settings"
     );
     ::setenv("NOCTALIA_GREETER_STATE_DIR", directory.c_str(), 1);
@@ -156,7 +162,7 @@ visible = true
     require(greeter::saveGreeterPreferences(prefs), "preference save failed");
     require(
         std::filesystem::file_size(path) == before
-            && greeter::config::loadConfig(path).layout.components[1].visible == false,
+            && greeter::config::loadConfig(path).layout->components[1].visible == false,
         "UI preference save rewrote administrator layout"
     );
     std::filesystem::create_directories(directory / "data/wayland-sessions");

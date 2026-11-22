@@ -30,6 +30,63 @@ namespace {
   constexpr mode_t kSyncedDirMode = S_IRWXU | S_IRGRP | S_IXGRP;
   constexpr mode_t kGreeterConfMode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
 
+  bool validLegacyClockPosition(std::string_view position) {
+    constexpr std::array<std::string_view, 8> positions{"above-panel", "top-left",      "top-center",   "top-right",
+                                                        "bottom-left", "bottom-center", "bottom-right", "center-left"};
+    return std::ranges::find(positions, position) != positions.end();
+  }
+
+  void mapLegacyCorner(greeter::ComponentPlacement& part, const std::optional<std::string>& legacy) {
+    if (!legacy)
+      return;
+    if (*legacy == "hidden") {
+      if (!part.visible)
+        part.visible = false;
+    } else if (!part.anchor && greeter::validLayoutAnchor(*legacy))
+      part.anchor = *legacy;
+  }
+
+  greeter::GreeterLayoutConfig
+  resolveStoredLayout(const greeter::config::GreeterConfigFile& file, const greeter::config::GreeterSyncFile& sync) {
+    auto result = file.layout.value_or(greeter::GreeterLayoutConfig{});
+    // Explicit legacy administrator keys also outrank Sync; their defaults do not.
+    auto& clock = result.components[1];
+    if (!clock.visible && file.clockEnabled)
+      clock.visible = file.clockEnabled;
+    if (!clock.anchor && file.clockPosition && validLegacyClockPosition(*file.clockPosition))
+      clock.anchor = file.clockPosition;
+    auto& branding = result.components[2];
+    if (!branding.visible && file.appearanceHideLogo)
+      branding.visible = !*file.appearanceHideLogo;
+    mapLegacyCorner(result.components[3], file.appearancePowerButtonsPosition);
+    mapLegacyCorner(result.components[4], file.appearanceSchemeSelectorPosition);
+
+    // Keep valid administrator siblings, but do not fill invalid intent from Sync.
+    if (!file.layoutValid || !sync.layout)
+      return result;
+    if (!result.loginPresentation)
+      result.loginPresentation = sync.layout->loginPresentation;
+    for (std::size_t i = 0; i < result.components.size(); ++i) {
+      auto& preferred = result.components[i];
+      const auto& fallback = sync.layout->components[i];
+      const auto inherit = [](auto& target, const auto& source) {
+        if (!target)
+          target = source;
+      };
+      inherit(preferred.visible, fallback.visible);
+      inherit(preferred.anchor, fallback.anchor);
+      inherit(preferred.x, fallback.x);
+      inherit(preferred.y, fallback.y);
+      inherit(preferred.width, fallback.width);
+      inherit(preferred.output, fallback.output);
+      inherit(preferred.rotation, fallback.rotation);
+      inherit(preferred.scale, fallback.scale);
+      inherit(preferred.flipX, fallback.flipX);
+      inherit(preferred.flipY, fallback.flipY);
+    }
+    return result;
+  }
+
   [[nodiscard]] std::string trim(std::string_view value) {
     std::size_t begin = 0;
     while (begin < value.size() && std::isspace(static_cast<unsigned char>(value[begin])) != 0) {
@@ -408,17 +465,8 @@ namespace greeter {
     auto& brand = layout.components[2];
     if (!brand.visible)
       brand.visible = !prefs.hideLogo;
-    const auto mapCorner = [](ComponentPlacement& part, const std::optional<std::string>& legacy) {
-      if (!legacy)
-        return;
-      if (*legacy == "hidden") {
-        if (!part.visible)
-          part.visible = false;
-      } else if (!part.anchor && validLayoutAnchor(*legacy))
-        part.anchor = *legacy;
-    };
-    mapCorner(layout.components[3], prefs.powerButtonsPosition);
-    mapCorner(layout.components[4], prefs.schemeSelectorPosition);
+    mapLegacyCorner(layout.components[3], prefs.powerButtonsPosition);
+    mapLegacyCorner(layout.components[4], prefs.schemeSelectorPosition);
     return layout;
   }
 
@@ -428,7 +476,7 @@ namespace greeter {
     const config::GreeterSyncFile sync = config::loadSync(greeterSyncPath());
 
     GreeterPreferences prefs;
-    prefs.layout = file.layout;
+    prefs.layout = resolveStoredLayout(file, sync);
     if (file.widgetsValid)
       prefs.widgets = file.widgets.has_value() ? file.widgets : sync.widgets;
     prefs.defaultSession = file.sessionDefault;
@@ -454,10 +502,7 @@ namespace greeter {
       prefs.clockEnabled = *file.clockEnabled;
     }
     if (file.clockPosition.has_value()) {
-      constexpr std::array<std::string_view, 8> kClockPositions{"above-panel",  "top-left",    "top-center",
-                                                                "top-right",    "bottom-left", "bottom-center",
-                                                                "bottom-right", "center-left"};
-      if (std::ranges::find(kClockPositions, *file.clockPosition) != kClockPositions.end()) {
+      if (validLegacyClockPosition(*file.clockPosition)) {
         prefs.clockPosition = *file.clockPosition;
       } else {
         kLog.warn("invalid clock.position '{}' (using center-left)", *file.clockPosition);

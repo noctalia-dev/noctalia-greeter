@@ -202,7 +202,7 @@ The default UI places the clock and date on the left, the login card with the ho
 
 When both a default user and a discovered default session are configured (through CLI or `greeter.toml`), the card automatically uses the compact presentation: identity, credential field, and Sign in. A remembered last session alone does not enable it. Missing session defaults use the full card. Press **Esc** to choose another account or session; selecting a different account/session restores the full card.
 
-Configure components only in `greeter.toml`. The existing appearance sync payload is unchanged; the UI and sync helper never write these settings.
+Both `greeter.toml` and `sync.toml` retain component layout settings. Each explicit administrator field wins over the corresponding Sync field; unset fields inherit Sync, then built-in defaults. An empty `[layout]` table leaves fields unspecified. The existing appearance sync helper does not yet install staged component layouts. Ordinary UI preference saves and appearance updates preserve stored Sync layouts.
 
 ```toml
 [layout]
@@ -220,7 +220,7 @@ x = 16
 visible = false
 ```
 
-`login_mode` accepts `auto` (default), `full` (always show pickers), or `minimal` (use the compact card when valid defaults are available, otherwise show the full card). Component IDs are `login`, `clock`, `branding`, `power`, `appearance`, and `keyboard`. Settings are partial overrides of built-in defaults, resolved by ID; there are no component lists or removal operations. Hide an optional component with `visible = false`.
+`login_mode` accepts `auto` (default; an explicit `auto` overrides a synced mode), `full` (always show pickers), or `minimal` (use the compact card when valid defaults are available, otherwise show the full card). Component IDs are `login`, `clock`, `branding`, `power`, `appearance`, and `keyboard`. Settings are partial overrides of built-in defaults, resolved by ID; there are no component lists or removal operations. Hide an optional component with `visible = false`.
 
 | Field | Values and behavior |
 | --- | --- |
@@ -229,8 +229,11 @@ visible = false
 | `x`, `y` | Finite logical-pixel offsets from the anchor, from -8192 to 8192. Final placement is clamped inside the output. |
 | `width` | Finite logical pixels, from 32 to 1600; login width is further bounded to 280–640 and available space. |
 | `output` | Optional exact connector name or stable monitor identifier. An absent/disconnected target hides that optional component. Rejected for `login`, which remains on every active greeter output. |
+| `rotation` | Finite radians, normalized to [-π, π). Stored for upcoming scene integration. |
+| `scale` | Finite number from 0.5 to 4. Stored for upcoming scene integration. |
+| `flip_x`, `flip_y` | Booleans. Stored for upcoming scene integration. |
 
-Explicit component fields override corresponding `[clock]` and `[appearance]` keys. When a component field is absent, clock enabled/position, hide-logo, power position, and scheme position remain fallbacks. Removing an override restores that fallback or the built-in default. `above-panel` positions the clock above the card when there is room. Unknown IDs/fields, wrong types, invalid anchors, and out-of-range/non-finite values are ignored individually and reported in the startup log and configuration banner. Valid sibling fields remain active. No layout version field is currently required; unsupported keys are ignored with diagnostics.
+Explicit administrator component fields override corresponding legacy `[clock]` and `[appearance]` keys. Explicit legacy administrator keys also win over matching Sync fields; legacy defaults do not mask Sync. Removing an override restores the next available value. `above-panel` positions the clock above the card when there is room. Unknown IDs/fields, wrong types, invalid anchors, and out-of-range/non-finite values are ignored individually and reported in the startup log and configuration banner. Valid administrator sibling fields remain active, but an invalid administrator layout blocks inheritance from Sync until repaired or removed. An invalid Sync layout is ignored as a whole. Writers refuse to replace invalid files. Rotation, scale, and flips currently round-trip as metadata and do not change the native scene. No layout version field is currently required; unsupported keys are ignored with diagnostics.
 
 Placements use output-local logical coordinates. At desktop sizes the card and clock use matching outer gutters (6% of width, bounded to 64–128 logical pixels). Branding and footer use 48-pixel gutters. Widths below 1000 or heights below 600 use the narrow composition with smaller margins. Login keeps priority, followed by clock, branding, Power, Appearance, and keyboard; colliding optional components move inward or disappear. Layout reserves space for configuration errors. Very small views uniformly scale a minimum 320×520 logical canvas, including hit testing, so credential controls stay reachable. Each view calculates its own geometry; fractional/mixed output scaling does not mutate global UI metrics. Configured fonts, palettes, and wallpapers still use the existing appearance rules.
 

@@ -19,9 +19,15 @@ namespace greeter {
     std::optional<float> y;
     std::optional<float> width;
     std::optional<std::string> output;
+    // Stored for scene-transform integration.
+    std::optional<double> rotation;
+    std::optional<double> scale;
+    std::optional<bool> flipX;
+    std::optional<bool> flipY;
   };
   struct GreeterLayoutConfig {
-    LoginPresentation loginPresentation = LoginPresentation::Auto;
+    // Unset follows the runtime Auto default, but does not override a synced mode.
+    std::optional<LoginPresentation> loginPresentation;
     std::array<ComponentPlacement, 6> components;
   };
   struct LayoutRect {
