@@ -294,8 +294,10 @@ namespace {
     greeter::config::GreeterConfigFile config;
     if (auto widgets = greeter::readWidgetCollection(root))
       config.widgets = std::move(*widgets);
-    else
+    else {
+      config.widgetsValid = false;
       widgetDiagnostics(path, root, widgets.error());
+    }
 
     for (const auto& [key, node] : root) {
       const auto keyView = key.str();
@@ -1183,7 +1185,9 @@ namespace greeter::config {
       return parseConfig(table, path);
     } catch (const toml::parse_error& e) {
       recordParseError(path, e);
-      return {};
+      GreeterConfigFile invalid;
+      invalid.widgetsValid = false;
+      return invalid;
     }
   }
 
@@ -1191,6 +1195,10 @@ namespace greeter::config {
     (void)loadConfig(path);
     if (hasDiagnostics(path))
       return false;
+    if (!config.widgetsValid) {
+      widgetDiagnostics(path, {}, {{"widgets", "reload the invalid administrator collection after repair"}});
+      return false;
+    }
 
     // Declarative file only — the last-used session lives in sync.toml.
     GreeterConfigFile declarative = config;

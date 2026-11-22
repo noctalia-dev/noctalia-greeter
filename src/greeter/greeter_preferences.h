@@ -23,6 +23,8 @@ namespace greeter {
 
   struct GreeterPreferences {
     GreeterLayoutConfig layout;
+    // Whole administrator collection wins over Sync, including defaults/empty.
+    std::optional<WidgetCollection> widgets;
     std::optional<std::string> defaultSession;
     std::optional<std::string> defaultUser;
     std::optional<std::string> session;

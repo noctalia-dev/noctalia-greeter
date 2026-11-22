@@ -4,6 +4,7 @@
 #include "greeter/greeter_preferences.h"
 
 #include <algorithm>
+#include <array>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
@@ -379,6 +380,131 @@ title = 'Saved widget'
     require(greeter::config::writeConfig(config, model) && hasDiagnostic(sync), "writer mixed file diagnostics");
   }
 
+  void testWidgetPreferences() {
+    using namespace greeter;
+    WidgetInstance shared;
+    shared.id = "shared";
+    shared.type = "label";
+    shared.settings = {{"title", std::string("Administrator")}};
+    auto adminOnly = shared;
+    adminOnly.id = "admin-only";
+    const WidgetCollection administrator{std::vector{shared, adminOnly}};
+    shared.settings["title"] = std::string("Sync");
+    auto syncOnly = shared;
+    syncOnly.id = "sync-only";
+    const WidgetCollection synced{std::vector{syncOnly, shared}};
+    // Unmanaged, defaults, empty, administrator custom, Sync custom.
+    const std::array<std::optional<WidgetCollection>, 5> choices{
+        std::nullopt, WidgetCollection{}, WidgetCollection{std::vector<WidgetInstance>{}}, administrator, synced
+    };
+    const std::array expected{
+        std::array{0, 1, 2, 4}, std::array{1, 1, 1, 1}, std::array{2, 2, 2, 2}, std::array{3, 3, 3, 3}
+    };
+    for (std::size_t admin = 0; admin < 4; ++admin) {
+      for (std::size_t sync = 0; sync < 4; ++sync) {
+        Fixture fixture;
+        const auto configPath = fixture.directory / "greeter.toml";
+        const auto syncPath = fixture.directory / "sync.toml";
+        config::GreeterConfigFile config;
+        config.widgets = choices[admin];
+        config.sessionDefault = "Pinned session";
+        config.userDefault = "Pinned user";
+        config.appearanceScheme = "Pinned scheme";
+        config::GreeterSyncFile state;
+        state.widgets = choices[sync == 3 ? 4 : sync];
+        state.sessionLast = "Last session";
+        state.appearanceScheme = "Sync scheme";
+        require(config::writeConfig(configPath, config) && config::writeSync(syncPath, state), "fixture save failed");
+        const auto adminBytes = readFile(configPath);
+        const auto syncBytes = readFile(syncPath);
+        auto prefs = loadGreeterPreferences();
+        require(
+            prefs.widgets == choices[static_cast<std::size_t>(expected[admin][sync])],
+            "widget precedence/intent changed"
+        );
+        require(
+            prefs.defaultSession == config.sessionDefault
+                && prefs.defaultUser == config.userDefault
+                && prefs.scheme == config.appearanceScheme
+                && prefs.session == state.sessionLast,
+            "widget resolution changed ordinary preferences"
+        );
+        require(
+            readFile(configPath) == adminBytes && readFile(syncPath) == syncBytes, "preference load wrote profiles"
+        );
+        prefs.widgets = WidgetCollection{std::vector<WidgetInstance>{}};
+        prefs.session = "New session";
+        require(saveGreeterPreferences(prefs), "preference save failed");
+        const auto saved = config::loadSync(syncPath);
+        require(
+            saved.widgets == state.widgets && saved.sessionLast == prefs.session,
+            "preference save persisted effective widgets"
+        );
+        require(readFile(configPath) == adminBytes, "preference save rewrote administrator widgets");
+      }
+    }
+  }
+
+  void testWidgetPreferenceRecovery() {
+    Fixture fixture;
+    const auto configPath = fixture.directory / "greeter.toml";
+    const auto syncPath = fixture.directory / "sync.toml";
+    writeFile(syncPath, kSync);
+    auto state = greeter::config::loadSync(syncPath);
+    state.widgets->instances->front().id = "synced-caption";
+    require(greeter::config::writeSync(syncPath, state), "sync fixture save failed");
+    for (const bool symlink : {false, true}) {
+      for (const auto invalid :
+           {std::string_view("widgets=false\n"), std::string_view("[widgets]\nwidget_order='invalid'\n"),
+            std::string_view("[widgets\n")}) {
+        const auto target = symlink ? fixture.directory / "declarative.toml" : configPath;
+        writeFile(target, invalid);
+        if (symlink)
+          std::filesystem::create_symlink(target, configPath);
+        require(
+            !greeter::loadGreeterPreferences().widgets && hasDiagnostic(configPath),
+            "invalid admin inherited Sync widgets"
+        );
+        const auto stale = greeter::config::loadConfig(configPath);
+        require(!stale.widgetsValid, "invalid administrator collection lost its validity state");
+        writeFile(target, kConfig);
+        require(!greeter::config::writeConfig(configPath, stale), "stale invalid model cleared repaired widgets");
+        require(readFile(target) == kConfig, "stale invalid write changed repaired source");
+        requireWidgets(greeter::loadGreeterPreferences().widgets);
+        require(!hasDiagnostic(configPath), "repaired administrator widget error persisted");
+        std::filesystem::remove(configPath);
+        require(
+            greeter::loadGreeterPreferences().widgets == state.widgets, "removing admin override did not reveal Sync"
+        );
+        if (symlink)
+          std::filesystem::remove(target);
+      }
+    }
+    writeFile(configPath, "[layout.clock]\nanchor='invalid'\n");
+    require(
+        greeter::loadGreeterPreferences().widgets == state.widgets && hasDiagnostic(configPath),
+        "unrelated layout diagnostic blocked Sync widgets"
+    );
+    writeFile(configPath, kConfig);
+    writeFile(syncPath, "[widgets]\nwidget_order='invalid'\n");
+    requireWidgets(greeter::loadGreeterPreferences().widgets);
+    require(hasDiagnostic(syncPath), "lower-priority diagnostic was hidden");
+    std::filesystem::remove(configPath);
+    require(!greeter::loadGreeterPreferences().widgets && hasDiagnostic(syncPath), "invalid Sync became a collection");
+    require(greeter::config::loadConfig(configPath).widgetsValid, "missing administrator file treated as invalid");
+    writeFile(syncPath, kSync);
+    requireWidgets(greeter::loadGreeterPreferences().widgets);
+    require(!hasDiagnostic(syncPath), "repaired Sync widget error persisted");
+    std::filesystem::remove(syncPath);
+    require(
+        !greeter::loadGreeterPreferences().widgets && !hasDiagnostic(syncPath), "missing sources materialized widgets"
+    );
+    require(
+        !std::filesystem::exists(configPath) && !std::filesystem::exists(syncPath),
+        "widget resolution created config files"
+    );
+  }
+
   void testSetup() {
     require(::geteuid() == 0, "setup test requires root in a private user namespace");
     for (const bool symlink : {false, true}) {
@@ -440,7 +566,7 @@ int main(int argc, char** argv) {
   bool passed = true;
   for (const auto test :
        {testConfigWriter, testPreferenceSave, testLegacyAppearance, testDiagnosticRecovery, testWidgetFiles,
-        testWidgetUpdates}) {
+        testWidgetUpdates, testWidgetPreferences, testWidgetPreferenceRecovery}) {
     try {
       test();
     } catch (const std::exception& error) {

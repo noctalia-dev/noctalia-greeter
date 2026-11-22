@@ -429,6 +429,8 @@ namespace greeter {
 
     GreeterPreferences prefs;
     prefs.layout = file.layout;
+    if (file.widgetsValid)
+      prefs.widgets = file.widgets.has_value() ? file.widgets : sync.widgets;
     prefs.defaultSession = file.sessionDefault;
     prefs.defaultUser = file.userDefault;
     prefs.session = sync.sessionLast;

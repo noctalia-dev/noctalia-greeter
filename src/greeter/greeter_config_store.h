@@ -43,8 +43,10 @@ namespace greeter::config {
   // Full declarative greeter.toml. UI and Sync never write this file.
   struct GreeterConfigFile {
     GreeterLayoutConfig layout;
-    // Stored profile metadata; effective collection resolution/activation is separate.
+    // Stored profile metadata; rendering is separate.
     std::optional<WidgetCollection> widgets;
+    // Parse failures block inheriting a lower-priority widget collection.
+    bool widgetsValid = true;
     std::optional<std::string> sessionDefault;
     // Legacy only: migrated into sync.toml; stripped on greeter.toml write.
     std::optional<std::string> sessionLast;

@@ -64,6 +64,14 @@ collection. Profiles are stored and preserved by preference and appearance updat
 rendering saved widget profiles is not enabled yet. Invalid widget metadata is
 reported with its field path and blocks writes to that file until repaired.
 
+An explicit administrator `[widgets]` table owns the entire effective collection,
+including a request for defaults or an empty list. Sync supplies the collection
+only when that table is absent; collections are never merged by widget ID. If the
+administrator collection or TOML is invalid, its diagnostic remains visible and
+the greeter does not select Sync's collection instead. Repairing or removing the
+administrator override takes effect on the next load. Session and scheme saves
+preserve both stored collections.
+
 ## Configuration reference
 
 Set these keys in `greeter.toml`. A command-line `--session` or `--user` value takes precedence over the corresponding default.
