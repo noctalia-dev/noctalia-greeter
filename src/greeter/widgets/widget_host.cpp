@@ -1,9 +1,8 @@
 #include "greeter/widgets/widget_host.h"
 
 #include "core/ui_phase.h"
-#include "greeter/widgets/analog_clock_widget.h"
 #include "greeter/widgets/button_widget.h"
-#include "greeter/widgets/digital_clock_widget.h"
+#include "greeter/widgets/clock_widget.h"
 #include "greeter/widgets/label_widget.h"
 #include "greeter/widgets/sticker_widget.h"
 #include "greeter/widgets/sysmon_gauge_widget.h"
@@ -131,23 +130,17 @@ namespace greeter {
         return std::unexpected(imageIssue(std::move(sticker.error())));
       content = std::move(*sticker);
     } else if (instance.type == "clock") {
-      if (text("clock_style") == "analog") {
-        content = std::make_unique<AnalogClockWidget>(AnalogClockWidget::Options{
-            .timezone = text("timezone"),
-            .color = colorSpec(text("color")),
-            .showCircle = std::get<bool>(settings.at("circle")),
-            .showSeconds = std::get<bool>(settings.at("show_seconds")),
-        });
-      } else {
-        content = std::make_unique<DigitalClockWidget>(DigitalClockWidget::Options{
-            .format = text("format"),
-            .timezone = text("timezone"),
-            .fontFamily = text("font_family"),
-            .color = colorSpec(text("color")),
-            .shadow = std::get<bool>(settings.at("shadow")),
-            .centerText = std::get<bool>(settings.at("center_text")),
-        });
-      }
+      content = std::make_unique<ClockWidget>(ClockWidget::Options{
+          .style = text("clock_style") == "analog" ? ::DesktopClock::Style::Analog : ::DesktopClock::Style::Digital,
+          .format = text("format"),
+          .timezone = text("timezone"),
+          .fontFamily = text("font_family"),
+          .color = colorSpec(text("color")),
+          .shadow = std::get<bool>(settings.at("shadow")),
+          .centerText = std::get<bool>(settings.at("center_text")),
+          .showCircle = std::get<bool>(settings.at("circle")),
+          .showSeconds = std::get<bool>(settings.at("show_seconds")),
+      });
     } else {
       content = std::make_unique<LabelWidget>(LabelWidget::Options{
           .title = text("title"),
