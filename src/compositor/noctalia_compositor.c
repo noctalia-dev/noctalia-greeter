@@ -2617,9 +2617,14 @@ static void resolve_cursor_path(char* path, size_t path_size) {
     return;
   }
   char nested[PATH_MAX];
-  if (snprintf(nested, sizeof(nested), "%s/share/icons", path) < (int)sizeof(nested) && dir_has_cursor_theme(nested)) {
+  const int length = snprintf(nested, sizeof(nested), "%s/share/icons", path);
+  if (length >= 0 && (size_t)length < sizeof(nested) && dir_has_cursor_theme(nested)) {
+    if ((size_t)length >= path_size) {
+      wlr_log(WLR_ERROR, "cursor path '%s' does not fit; using '%s' as given", nested, path);
+      return;
+    }
     wlr_log(WLR_INFO, "cursor path: using %s", nested);
-    snprintf(path, path_size, "%s", nested);
+    memcpy(path, nested, (size_t)length + 1);
     return;
   }
   wlr_log(WLR_ERROR, "cursor path '%s' (or its share/icons) has no cursor theme; using it as given", path);
