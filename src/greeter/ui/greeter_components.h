@@ -71,10 +71,9 @@ class GreeterChrome {
 public:
   explicit GreeterChrome(Node& scene);
   void applyKeyboardTransform(const greeter::LayoutRect& bounds, const greeter::ComponentTransform& transform);
-  static float clockHeight(Renderer& renderer, const Label& time, const Label& date);
   void layout(
-      Renderer& renderer, const greeter::GreeterLayout& layout, Label& time, Label& date, ImageNode& logo, bool hasLogo,
-      float timeFontSize, float dateFontSize, std::string_view keyboardName, float width, float height, bool wallpaper
+      Renderer& renderer, const greeter::GreeterLayout& layout, ImageNode& logo, bool hasLogo,
+      std::string_view keyboardName, float width, float height, bool wallpaper
   );
 
 private:

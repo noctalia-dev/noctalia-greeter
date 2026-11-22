@@ -26,7 +26,6 @@
 #include "render/scene/node.h"
 #include "render/scene/rect_node.h"
 #include "theme/builtin_palettes.h"
-#include "time/time_format.h"
 #include "ui/controls/box.h"
 #include "ui/controls/button.h"
 #include "ui/controls/context_menu.h"
@@ -185,24 +184,6 @@ void GreeterSurface::initialize(RenderContext* context) {
   bottomLogo->setZIndex(4);
   m_brandLogo = bottomLogo.get();
   m_root.addChild(std::move(bottomLogo));
-
-  auto clockTime = std::make_unique<Label>();
-  clockTime->setFontSize(m_clockTimeFontSize);
-  clockTime->setTextAlign(TextAlign::Center);
-  clockTime->setColor(colorForRole(ColorRole::OnSurface));
-  clockTime->setVisible(false);
-  m_clockTimeLabel = clockTime.get();
-  m_clockTimeLabel->setZIndex(5);
-  m_root.addChild(std::move(clockTime));
-
-  auto clockDate = std::make_unique<Label>();
-  clockDate->setFontSize(m_clockDateFontSize);
-  clockDate->setTextAlign(TextAlign::Center);
-  clockDate->setColor(colorForRole(ColorRole::OnSurfaceVariant));
-  clockDate->setVisible(false);
-  m_clockDateLabel = clockDate.get();
-  m_clockDateLabel->setZIndex(5);
-  m_root.addChild(std::move(clockDate));
 
   auto formSubtitle = std::make_unique<Label>();
   formSubtitle->setFontSize(Style::fontSizeTitle);
@@ -527,7 +508,6 @@ void GreeterSurface::initialize(RenderContext* context) {
   m_syncedAppearance = m_model.syncedAppearance();
   m_wallpaperAppearance = loadGreeterWallpaperAppearance();
   loadPreferences();
-  (void)updateClock();
   applyScheme(m_model.state().selectedScheme);
   refreshSelectionLabels();
   syncModel(false);
@@ -858,25 +838,6 @@ void GreeterSurface::prepareFrame(std::uint32_t width, std::uint32_t height, boo
   }
 }
 
-bool GreeterSurface::updateClock() {
-  if (m_clockTimeLabel == nullptr || m_clockDateLabel == nullptr) {
-    return false;
-  }
-
-  const auto now = std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now());
-  const std::int64_t second = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
-  if (m_lastClockSecond.has_value() && *m_lastClockSecond == second) {
-    return false;
-  }
-  m_lastClockSecond = second;
-
-  const std::string time = m_clockEnabled ? formatLocalUnixTime(second, m_clockTimeFormat) : std::string{};
-  const std::string date = m_clockEnabled ? formatLocalUnixTime(second, m_clockDateFormat) : std::string{};
-  const bool timeChanged = m_clockTimeLabel->setText(time);
-  const bool dateChanged = m_clockDateLabel->setText(date);
-  return timeChanged || dateChanged;
-}
-
 void GreeterSurface::enterPasswordStep(std::size_t userIndex) {
   if (!m_auth.selectUser(m_viewId, userIndex)) {
     return;
@@ -975,17 +936,9 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
   );
   const float availableH = std::max(1.0F, sh - reservedTop - 32);
   const float ph = m_loginComponent->measure(renderer, pw, availableH, view);
-  m_clockTimeLabel->setTextAlign(TextAlign::Start);
-  m_clockDateLabel->setTextAlign(TextAlign::Start);
-  const bool narrowClock = sw < 1000 || sh - reservedTop < 600;
-  const float timeSize = narrowClock ? std::min(56.0F, m_clockTimeFontSize) : m_clockTimeFontSize;
-  m_clockTimeLabel->setFontSize(timeSize);
-  m_clockTimeLabel->setFontWeight(FontWeight::Light);
-  m_clockTimeLabel->measure(renderer);
-  m_clockDateLabel->setFontSize(narrowClock ? std::min(14.0F, m_clockDateFontSize) : m_clockDateFontSize);
-  m_clockDateLabel->setFontWeight(FontWeight::Medium);
-  m_clockDateLabel->measure(renderer);
-  const float clockH = GreeterChrome::clockHeight(renderer, *m_clockTimeLabel, *m_clockDateLabel);
+  const float clockH = measureDefaultClocks(renderer, sw, sh - reservedTop);
+  if (!m_placeDefaultClocks || clockH <= 0)
+    settings.components[1].visible = false;
   auto layout = greeter::resolveGreeterLayout(
       settings, sw, sh - reservedTop, ph, m_minimalLogin, m_boundOutputName, m_outputIdentifier, clockH,
       renderer.measureText(m_keyboardLayout, 13).width + 48
@@ -1016,8 +969,7 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
   m_loginButton->setEnabled(!view.blocked);
   m_passwordField->setEnabled(!view.blocked && state.passwordVisible);
   m_chromeComponent->layout(
-      renderer, layout, *m_clockTimeLabel, *m_clockDateLabel, *m_brandLogo, m_brandLogoTexture.id != 0,
-      m_clockTimeFontSize, m_clockDateFontSize, m_keyboardLayout, sw, sh, m_hasWallpaper
+      renderer, layout, *m_brandLogo, m_brandLogoTexture.id != 0, m_keyboardLayout, sw, sh, m_hasWallpaper
   );
   const auto& appearance = layout[Id::Appearance];
   m_schemeSelectButton->setVisible(appearance.visible);
@@ -1053,7 +1005,7 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
           m_sessionCaptionLabel, m_panelDivider, m_headerUserGlyph, m_headerUserAvatar
       }
   );
-  transformNodes(Id::Clock, std::array<Node*, 2>{m_clockTimeLabel, m_clockDateLabel});
+  layoutDefaultClocks(layout);
   transformNodes(Id::Branding, std::array<Node*, 1>{m_brandLogo});
   transformNodes(Id::Power, std::array<Node*, 1>{m_powerMenuButton});
   transformNodes(Id::Appearance, std::array<Node*, 1>{m_schemeSelectButton});
@@ -1420,13 +1372,12 @@ void GreeterSurface::syncWallpaperTexture() {
 void GreeterSurface::loadPreferences() {
   const auto prefs = greeter::loadGreeterPreferences();
   m_layoutConfig = greeter::effectiveGreeterLayout(prefs);
-  m_widgets = prefs.widgets;
+  auto profile = greeter::resolveGreeterWidgetProfile(prefs);
+  m_widgets = greeter::WidgetCollection{std::move(profile.instances)};
+  m_placeDefaultClocks = profile.placeDefaultClocks;
+  if (prefs.administratorWidgets)
+    m_layoutConfig.components[1] = {};
   m_widgetsDirty = true;
-  m_clockEnabled = m_layoutConfig.components[1].visible.value_or(prefs.clockEnabled);
-  m_clockTimeFormat = prefs.clockTimeFormat;
-  m_clockDateFormat = prefs.clockDateFormat;
-  m_clockTimeFontSize = prefs.clockTimeFontSize;
-  m_clockDateFontSize = prefs.clockDateFontSize;
 }
 
 void GreeterSurface::openUserMenu() {

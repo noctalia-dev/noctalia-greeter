@@ -29,7 +29,8 @@
 
 namespace greeter {
   class WidgetLayer;
-}
+  class WidgetHost;
+} // namespace greeter
 
 class Box;
 class Button;
@@ -78,9 +79,6 @@ public:
   void flushDeferredFrameRequests();
 
   void prepareFrame(std::uint32_t width, std::uint32_t height, bool needsLayout);
-  // Refreshes the wall-clock labels once per second. Returns true when their
-  // contents changed and a new layout is needed.
-  [[nodiscard]] bool updateClock();
 
   [[nodiscard]] Node* sceneRoot() noexcept { return &m_root; }
   [[nodiscard]] bool animating() const noexcept { return m_animations.hasActive(); }
@@ -161,6 +159,8 @@ private:
   [[nodiscard]] bool handleUserMenuSearchKey(std::uint32_t sym, bool preedit);
   void loadPreferences();
   void syncWidgetLayer();
+  float measureDefaultClocks(Renderer& renderer, float width, float height);
+  void layoutDefaultClocks(const greeter::GreeterLayout& layout);
   void reconcileKeyboardFocus();
   [[nodiscard]] bool ownsInputArea(const InputArea* area) const;
   [[nodiscard]] bool showsUserDropdown() const noexcept;
@@ -192,6 +192,10 @@ private:
   greeter::GreeterLayoutConfig m_layoutConfig;
   std::optional<greeter::WidgetCollection> m_widgets;
   greeter::WidgetLayer* m_widgetLayer = nullptr;
+  bool m_placeDefaultClocks = false;
+  Node* m_defaultClockGroup = nullptr;
+  greeter::WidgetHost* m_defaultTimeWidget = nullptr;
+  greeter::WidgetHost* m_defaultDateWidget = nullptr;
   greeter::WidgetImageContext m_widgetImages;
   std::string m_widgetImageError;
   bool m_widgetsDirty = true;
@@ -233,8 +237,6 @@ private:
   RectNode* m_configErrorBanner = nullptr;
   Label* m_configErrorHeading = nullptr;
   Label* m_configErrorLabel = nullptr;
-  Label* m_clockTimeLabel = nullptr;
-  Label* m_clockDateLabel = nullptr;
   Button* m_shutdownButton = nullptr;
   Button* m_rebootButton = nullptr;
   Button* m_firmwareButton = nullptr;
@@ -253,12 +255,6 @@ private:
   WallpaperSpanParams m_wallpaperSpanParams;
   bool m_wallpaperDirty = false;
   bool m_hasWallpaper = false;
-  bool m_clockEnabled = true;
-  std::string m_clockTimeFormat = "{:%H:%M}";
-  std::string m_clockDateFormat = "%A, %x";
-  float m_clockTimeFontSize = 112.0f;
-  float m_clockDateFontSize = 19.0f;
-  std::optional<std::int64_t> m_lastClockSecond;
   bool m_inInputDispatch = false;
   bool m_inLayout = false;
   bool m_deferredLayoutRequest = false;

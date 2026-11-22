@@ -43,7 +43,7 @@ int main() {
   try {
     auto widget = clockWidget();
     const auto definitions = greeter::widgetSettingDefinitions("clock");
-    require(definitions && definitions->size() == 14, "Clock schema is incomplete");
+    require(definitions && definitions->size() == 17, "Clock schema is incomplete");
     std::set<std::string_view> keys;
     for (const auto& definition : *definitions) {
       require(keys.insert(definition.key).second, "duplicate Clock setting");
@@ -89,12 +89,22 @@ int main() {
     rejects("timezone", std::int64_t{0});
     rejects("timezone", std::vector<std::string>{"UTC"});
 
-    for (const auto key : std::array<std::string_view, 4>{"center_text", "shadow", "circle", "show_seconds"}) {
+    for (const auto key :
+         std::array<std::string_view, 5>{"tight_text", "center_text", "shadow", "circle", "show_seconds"}) {
       accepts(key, true);
       accepts(key, false);
       rejects(key, std::int64_t{1});
       rejects(key, std::string("true"));
     }
+    accepts("font_size", 0.0);
+    accepts("font_size", 112.0);
+    accepts("font_size", std::int64_t{19});
+    rejects("font_size", -1.0);
+    rejects("font_size", 4097.0);
+    accepts("font_weight", std::int64_t{300});
+    accepts("font_weight", std::int64_t{500});
+    rejects("font_weight", std::int64_t{99});
+    rejects("font_weight", 500.0);
     accepts("color", std::string("primary"));
     accepts("color", std::string("#abcdef80"));
     rejects("color", std::string{});

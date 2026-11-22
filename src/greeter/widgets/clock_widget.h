@@ -20,6 +20,9 @@ namespace greeter {
       bool centerText;
       bool showCircle;
       bool showSeconds;
+      float fontSize = 0;
+      FontWeight fontWeight = FontWeight::Bold;
+      bool tightText = false;
     };
 
     explicit ClockWidget(Options options);

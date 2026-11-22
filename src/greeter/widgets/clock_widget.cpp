@@ -30,6 +30,9 @@ namespace greeter {
     clock->setStyle(options.style);
     clock->setFontFamily(std::move(options.fontFamily));
     clock->setColor(options.color);
+    clock->setFontSize(options.fontSize);
+    clock->setFontWeight(options.fontWeight);
+    clock->setTightText(options.tightText);
     clock->setShadow(options.shadow);
     clock->setCenterText(options.centerText);
     clock->setShowCircle(options.showCircle);

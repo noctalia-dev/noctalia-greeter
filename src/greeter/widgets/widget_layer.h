@@ -22,6 +22,8 @@ namespace greeter {
     );
     ~WidgetLayer() override;
 
+    // A scene coordinator may take over layout for selected ordinary hosts.
+    WidgetHost* useParentLayout(std::string_view id, Node& parent);
     void setActive(bool active);
     void setMetrics(const SysmonSnapshot& snapshot);
     CpuRamDemand metricDemand() const;
@@ -36,6 +38,8 @@ namespace greeter {
     struct Entry {
       std::variant<WidgetAnchorPlacement, WidgetRelativePlacement> placement;
       WidgetHost* host;
+      std::string id;
+      bool parentLayout = false;
     };
     std::vector<Entry> m_entries;
     bool m_active = false;

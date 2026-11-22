@@ -447,6 +447,105 @@ title = 'Saved widget'
     }
   }
 
+  void testDefaultClockProfiles() {
+    using namespace greeter;
+    Fixture fixture;
+    const auto configPath = fixture.directory / "greeter.toml";
+    const auto syncPath = fixture.directory / "sync.toml";
+    config::GreeterConfigFile admin;
+    config::GreeterSyncFile sync;
+    const auto resolve = [&] {
+      require(
+          config::writeConfig(configPath, admin) && config::writeSync(syncPath, sync), "clock fixture write failed"
+      );
+      const auto before = readFile(configPath), state = readFile(syncPath);
+      const auto profile = resolveGreeterWidgetProfile(loadGreeterPreferences());
+      require(readFile(configPath) == before && readFile(syncPath) == state, "clock normalization wrote config");
+      return profile;
+    };
+    auto profile = resolve();
+    require(profile.instances.size() == 2 && profile.placeDefaultClocks, "builtin pair missing");
+    require(
+        profile.instances[0].id == kDefaultTimeWidget && profile.instances[1].id == kDefaultDateWidget,
+        "builtin IDs changed"
+    );
+    require(
+        std::get<double>(profile.instances[0].settings.at("font_size")) == 112
+            && std::get<std::int64_t>(profile.instances[1].settings.at("font_weight")) == 500,
+        "default typography lost"
+    );
+    sync.widgets = WidgetCollection{std::vector<WidgetInstance>{}};
+    profile = resolve();
+    require(profile.instances.empty() && !profile.placeDefaultClocks, "explicit empty collection reinserted clocks");
+    admin.clockEnabled = true;
+    profile = resolve();
+    require(
+        profile.instances.size() == 2 && profile.placeDefaultClocks, "administrator visibility did not require pair"
+    );
+    auto time = profile.instances.front();
+    time.settings["font_size"] = 72.0;
+    time.transform.rotation = .4;
+    time.transform.flipX = true;
+    time.placement = WidgetAnchorPlacement{WidgetAnchor::TopRight, -30, 20};
+    auto date = profile.instances.back();
+    auto extra = time;
+    extra.id = "independent-clock";
+    sync.widgets = WidgetCollection{std::vector{time, date, extra}};
+    admin.clockEnabled = false;
+    admin.clockTimeFormat = "%H";
+    profile = resolve();
+    require(
+        !profile.instances[0].enabled && !profile.instances[1].enabled && profile.instances[2].enabled,
+        "legacy visibility affected unrelated clock"
+    );
+    require(
+        std::get<std::string>(profile.instances[0].settings.at("format")) == "%H"
+            && std::get<double>(profile.instances[0].settings.at("font_size")) == 72
+            && profile.instances[0].placement == time.placement,
+        "partial format override replaced other settings/placement"
+    );
+    admin.clockEnabled.reset();
+    admin.clockTimeFormat = "";
+    admin.clockDateFontSize = 23;
+    profile = resolve();
+    require(
+        !profile.instances[0].enabled
+            && profile.instances[1].enabled
+            && std::get<double>(profile.instances[1].settings.at("font_size")) == 23,
+        "hidden time/date typography normalization failed"
+    );
+    admin.layout.emplace();
+    admin.layout->components[1].rotation = 0.2;
+    admin.layout->components[1].flipX = false;
+    profile = resolve();
+    require(
+        profile.placeDefaultClocks
+            && profile.instances[0].transform.rotation == 0
+            && !profile.instances[0].transform.flipX,
+        "administrator geometry was duplicated or defeated by Sync transforms"
+    );
+    for (const auto& collection :
+         {WidgetCollection{}, WidgetCollection{std::vector<WidgetInstance>{}}, WidgetCollection{std::vector{extra}}}) {
+      admin.widgets = collection;
+      profile = resolve();
+      if (!collection.instances)
+        require(
+            profile.instances.size() == 2
+                && profile.instances[0].enabled
+                && std::get<double>(profile.instances[1].settings.at("font_size")) == 19,
+            "modern defaults did not own collection"
+        );
+      else
+        require(profile.instances == *collection.instances, "legacy fields changed modern administrator widgets");
+    }
+    admin.widgets.reset();
+    admin.clockTimeFormat.reset();
+    admin.clockDateFormat = "";
+    sync.widgets.reset();
+    profile = resolve();
+    require(profile.instances[0].enabled && !profile.instances[1].enabled, "date-only hiding failed");
+  }
+
   void testWidgetPreferenceRecovery() {
     Fixture fixture;
     const auto configPath = fixture.directory / "greeter.toml";
@@ -877,8 +976,8 @@ int main(int argc, char** argv) {
   bool passed = true;
   for (const auto test :
        {testConfigWriter, testPreferenceSave, testLegacyAppearance, testDiagnosticRecovery, testWidgetFiles,
-        testWidgetUpdates, testWidgetPreferences, testWidgetPreferenceRecovery, testCoreLayoutFiles,
-        testCoreLayoutPrecedence, testCoreLayoutRecoveryAndSaves}) {
+        testWidgetUpdates, testWidgetPreferences, testDefaultClockProfiles, testWidgetPreferenceRecovery,
+        testCoreLayoutFiles, testCoreLayoutPrecedence, testCoreLayoutRecoveryAndSaves}) {
     try {
       test();
     } catch (const std::exception& error) {

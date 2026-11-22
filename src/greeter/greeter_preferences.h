@@ -21,10 +21,24 @@ namespace greeter {
     RandomIcons,
   };
 
+  struct DefaultClockOverrides {
+    ComponentPlacement placement;
+    std::optional<std::string> timeFormat, dateFormat;
+    std::optional<float> timeFontSize, dateFontSize;
+  };
+  struct GreeterWidgetProfile {
+    std::vector<WidgetInstance> instances;
+    bool placeDefaultClocks = false;
+  };
+  inline constexpr std::string_view kDefaultTimeWidget = "greeter-default-clock";
+  inline constexpr std::string_view kDefaultDateWidget = "greeter-default-date";
+
   struct GreeterPreferences {
     GreeterLayoutConfig layout;
     // Whole administrator collection wins over Sync, including defaults/empty.
     std::optional<WidgetCollection> widgets;
+    bool administratorWidgets = false;
+    std::optional<DefaultClockOverrides> defaultClockOverrides;
     std::optional<std::string> defaultSession;
     std::optional<std::string> defaultUser;
     std::optional<std::string> session;
@@ -52,6 +66,7 @@ namespace greeter {
   [[nodiscard]] std::filesystem::path greeterSyncPath();
 
   [[nodiscard]] GreeterPreferences loadGreeterPreferences();
+  GreeterWidgetProfile resolveGreeterWidgetProfile(const GreeterPreferences& prefs);
   [[nodiscard]] GreeterLayoutConfig effectiveGreeterLayout(const GreeterPreferences& prefs);
   // Persists [session].last and [appearance].scheme to sync.toml only.
   [[nodiscard]] bool saveGreeterPreferences(const GreeterPreferences& prefs);

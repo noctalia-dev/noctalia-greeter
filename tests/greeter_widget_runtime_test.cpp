@@ -301,8 +301,43 @@ namespace {
       require(probe.widgetMetricDemand() == greeter::CpuRamDemand{}, "empty or rejected profile requested metrics");
       if (state == 2)
         require(layer(probe) && layer(probe)->children().empty(), "empty collection inserted default widgets");
-      else
-        require(!layer(probe), "default or rejected profile mounted a layer");
+      else if (state == 3)
+        require(!layer(probe), "rejected profile mounted a layer");
+      else if (state == 0)
+        require(layer(probe) && labels(*layer(probe)).empty(), "legacy disabled clock inserted visible defaults");
+      else {
+        const auto clockLabels = labels(*layer(probe));
+        require(clockLabels.size() == 2, "default profile did not mount two ordinary Clocks");
+        require(
+            clockLabels[0]->fontSize() == 112
+                && clockLabels[0]->font().weight == FontWeight::Light
+                && clockLabels[1]->fontSize() == 19
+                && clockLabels[1]->font().weight == FontWeight::Medium,
+            "default typography changed"
+        );
+        require(clockLabels[0]->height() < 112 && clockLabels[1]->height() < 24, "default text kept line-box padding");
+        const float tightHeight = clockLabels[0]->height();
+        clockLabels[0]->setTightInkBounds(false);
+        probe.prepareFrame(1280, 720, true);
+        require(clockLabels[0]->height() > tightHeight, "Label tight-bounds cache did not invalidate");
+        clockLabels[0]->setTightInkBounds(true);
+        probe.prepareFrame(1280, 720, true);
+        require(clockLabels[0]->height() == tightHeight, "Label bounds did not restore");
+        auto* const group = layer(probe)->children().back().get();
+        require(group->children().size() == 2, "default pair not hosted as ordinary widgets");
+        const auto& firstClock = *group->children()[0];
+        const auto& secondClock = *group->children()[1];
+        require(secondClock.y() - firstClock.y() - firstClock.height() == 12, "default visible date gap changed");
+        probe.prepareFrame(720, 1280, true);
+        require(
+            clockLabels[0]->fontSize() <= 56 && clockLabels[1]->fontSize() <= 14, "narrow default clocks did not shrink"
+        );
+        probe.prepareFrame(1280, 720, true);
+        require(
+            clockLabels[0]->fontSize() == 112 && clockLabels[1]->fontSize() == 19,
+            "resize mutated default clock font sizes"
+        );
+      }
       if (state == 3) {
         require(
             std::ranges::any_of(

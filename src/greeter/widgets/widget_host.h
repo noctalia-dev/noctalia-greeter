@@ -27,6 +27,7 @@ namespace greeter {
     );
 
     // Push validated readings from the view owner; no collectors or timers are started.
+    void setContentScale(float scale);
     void setMetrics(const SysmonSnapshot& snapshot);
 
     // The view owner activates mounted, effectively visible instances and deactivates
@@ -47,6 +48,7 @@ namespace greeter {
     float m_boxWidth;
     float m_boxHeight;
     float m_padding;
+    float m_contentScale = 1;
     bool m_active = false;
     CpuRamDemand m_metricDemand;
     Timer m_tickTimer;

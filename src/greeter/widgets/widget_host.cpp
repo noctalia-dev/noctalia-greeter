@@ -161,6 +161,9 @@ namespace greeter {
           .centerText = std::get<bool>(settings.at("center_text")),
           .showCircle = std::get<bool>(settings.at("circle")),
           .showSeconds = std::get<bool>(settings.at("show_seconds")),
+          .fontSize = number(settings.at("font_size")),
+          .fontWeight = static_cast<FontWeight>(std::get<std::int64_t>(settings.at("font_weight"))),
+          .tightText = std::get<bool>(settings.at("tight_text")),
       });
     } else {
       content = std::make_unique<LabelWidget>(LabelWidget::Options{
@@ -207,14 +210,14 @@ namespace greeter {
             renderer, std::max(1.0F, m_boxWidth - 2.0F * m_padding), std::max(1.0F, m_boxHeight - 2.0F * m_padding)
         );
     if (!filled)
-      m_content->layoutAtScale(renderer, 1.0F);
+      m_content->layoutAtScale(renderer, m_contentScale);
     if (!filled && (m_boxWidth > 0.0F || m_boxHeight > 0.0F)) {
       float fit = kMaxContentFit;
       if (m_boxWidth > 0.0F)
         fit = std::min(fit, std::max(1.0F, m_boxWidth - 2.0F * m_padding) / std::max(1.0F, m_content->width()));
       if (m_boxHeight > 0.0F)
         fit = std::min(fit, std::max(1.0F, m_boxHeight - 2.0F * m_padding) / std::max(1.0F, m_content->height()));
-      m_content->layoutAtScale(renderer, std::clamp(fit, kMinContentFit, kMaxContentFit));
+      m_content->layoutAtScale(renderer, m_contentScale * std::clamp(fit, kMinContentFit, kMaxContentFit));
     }
     const float width = m_boxWidth > 0.0F ? m_boxWidth : m_content->width() + 2.0F * m_padding;
     const float height = m_boxHeight > 0.0F ? m_boxHeight : m_content->height() + 2.0F * m_padding;
@@ -223,6 +226,13 @@ namespace greeter {
         std::round((height - m_content->height()) * 0.5F)
     );
     setSize(width, height);
+  }
+
+  void WidgetHost::setContentScale(float scale) {
+    if (m_contentScale == scale)
+      return;
+    m_contentScale = scale;
+    markLayoutDirty();
   }
 
   void WidgetHost::refreshTime() {

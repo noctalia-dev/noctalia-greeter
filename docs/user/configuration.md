@@ -97,10 +97,20 @@ images prevent the collection from mounting and show a profile error while
 native login remains available. Assets load once at startup; restart the greeter
 after changing the profile or installed files.
 
-An absent table, a default request, or an empty collection adds no custom widgets
-in this integration stage. The existing native clock remains separate until the
-planned Clock-widget cutover; use `[clock].enabled = false` to hide it when
-configuring your own clocks.
+Without a custom collection, the greeter uses two ordinary `clock` widgets:
+`greeter-default-clock` for time and `greeter-default-date` for date. An absent
+or default-request table selects that pair; `widget_order = []` renders no
+widgets. Custom collections replace the pair, so include the two IDs if you
+want to keep and edit them alongside other widgets. Digital and analog remain
+settings of the same Clock type.
+
+Clock text accepts `font_size` (0 for automatic, otherwise up to 4096 logical
+pixels), integer `font_weight` (100–1000), and `tight_text` (fit the height to
+visible single-line glyphs). Existing Clock defaults remain automatic size,
+weight 700 and normal line bounds. Greeter defaults use sizes 112/19, weights
+300/500, start alignment, no background and tight text bounds. Existing sizing,
+format, timezone, color, font, shadow, rotation and flip settings apply to each
+instance independently.
 
 ```toml
 [widgets]
@@ -318,7 +328,7 @@ Power and Appearance popups align with the right edge of their transformed trigg
 
 ## Clock
 
-The clock is enabled by default at the left of the screen, with the date directly below the time. Both use the active palette's `on_surface` color, including when the **Synced** scheme is selected. The date uses medium-weight text and a subtle shadow over wallpapers. Spacing follows the visible text bounds so font line padding does not leave an oversized gap. The host name appears in the login card's subtitle, including with the compact card or when the clock is hidden.
+The default pair of ordinary Clock widgets appears at the left of the screen, with the date directly below the time. Both use the active palette's `on_surface` color, including when the **Synced** scheme is selected. The date uses medium-weight text and a subtle shadow over wallpapers. Spacing follows the visible text bounds so font line padding does not leave an oversized gap. The host name appears in the login card's subtitle, including with the compact card or when the clock is hidden.
 
 ```toml
 [clock]
@@ -330,7 +340,25 @@ time_font_size = 112
 date_font_size = 19
 ```
 
-Set `time_font_size` and `date_font_size` independently, in logical pixels before UI scaling. Both accept positive integers or decimals and follow the greeter's automatic or manual display scale. Omitted or invalid values use the defaults shown above.
+The existing `[clock]` and `[layout.clock]` settings are normalized at startup;
+they do not create a separate renderer or timer. Sizes map to the corresponding
+widget's `font_size`, capped at 4096 logical pixels, and formats map to `format`.
+The default pair retains the responsive shared placement and 12-pixel visible
+text gap. Its timers belong to the same widget hosts as custom clocks.
+
+An explicit administrator `[widgets]` table owns the whole collection, including
+defaults or an empty list, and supersedes legacy clock settings. Otherwise,
+explicit legacy administrator fields constrain only the two default IDs in a
+Sync collection. Omitted fields preserve each widget's settings. Explicit
+`enabled = true` or `[layout.clock] visible = true` can require the pair even
+when Sync omits it; false hides the default IDs while leaving unrelated clocks
+alone. Legacy placement/transforms position the pair together, and each Clock
+still uses its ordinary presentation. Configuration files are not rewritten.
+
+Set `time_font_size` and `date_font_size` independently, in logical pixels before
+UI scaling. Both accept positive integers or decimals and follow the greeter's
+automatic or manual display scale. Omitted or invalid values use the defaults
+shown above.
 
 Formats accept the same forms as Noctalia: bare `strftime` patterns such as `%H:%M`, or C++ chrono fields such as `{:%H:%M}`. Literal text is preserved, `\n` adds a line break, `%%` prints `%`, and `{{` / `}}` print braces. Common tokens include `%H` (24-hour hour), `%I` (12-hour hour), `%M` (minute), `%S` (second), `%p` (AM/PM), `%A` (weekday), `%B` (month), `%d` (day), `%Y` (year), and `%x` (locale date). The timezone follows the greeter host.
 
@@ -347,7 +375,7 @@ command = "env LC_TIME=en_GB.UTF-8 /usr/local/bin/noctalia-greeter-session"
 
 Keep your existing binary path and arguments. `LC_ALL` takes precedence over `LC_TIME`, so remove or adjust an existing `LC_ALL` override too. Restart greetd after changing the command. See [Date format or language differs from the desktop](troubleshooting.md#date-format-or-language-differs-from-the-desktop) for diagnostics.
 
-Set either format to an empty string to hide that line, or set `enabled = false` to hide the clock and host name. Existing corner positions and `above-panel` remain accepted. Component layout settings take precedence over the matching legacy position/visibility setting. Optional components stack inward when they collide and are hidden if they cannot fit; the login card has priority. On narrow displays the time size is capped at 56 logical pixels.
+Set either format to an empty string to hide that line, or set `enabled = false` to hide the default time/date pair. The host name remains in the login card. Existing corner positions and `above-panel` remain accepted. Component layout settings take precedence over the matching legacy position/visibility setting. Optional components stack inward when they collide and are hidden if they cannot fit; the login card has priority. On narrow displays the time size is capped at 56 logical pixels.
 
 ## Full example
 

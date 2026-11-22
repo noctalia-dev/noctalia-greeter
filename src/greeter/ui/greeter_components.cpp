@@ -19,18 +19,6 @@
 #include <unistd.h>
 
 namespace {
-  constexpr float kClockDateGap = 12;
-  struct LabelInk {
-    float top = 0;
-    float height = 0;
-  };
-  LabelInk labelInk(Renderer& renderer, const Label& node) {
-    if (node.text().empty())
-      return {};
-    const auto metrics = renderer.measureText(node.text(), node.fontSize(), node.font(), node.maxWidth(), 1);
-    return {node.baselineOffset() + metrics.inkTop, std::max(0.0F, metrics.inkBottom - metrics.inkTop)};
-  }
-
   template <class T> T* create(Node& scene, int z = 6) {
     auto node = std::make_unique<T>();
     auto* ptr = node.get();
@@ -237,14 +225,9 @@ GreeterChrome::GreeterChrome(Node& scene) {
   m_orbit1->setHitTestVisible(false);
   m_orbit2->setHitTestVisible(false);
 }
-float GreeterChrome::clockHeight(Renderer& renderer, const Label& time, const Label& date) {
-  return labelInk(renderer, time).height
-      + labelInk(renderer, date).height
-      + (!time.text().empty() && !date.text().empty() ? kClockDateGap : 0);
-}
 void GreeterChrome::layout(
-    Renderer& renderer, const greeter::GreeterLayout& layout, Label& time, Label& date, ImageNode& logo, bool hasLogo,
-    float timeFontSize, float dateFontSize, std::string_view keyboardName, float width, float height, bool wallpaper
+    Renderer& renderer, const greeter::GreeterLayout& layout, ImageNode& logo, bool hasLogo,
+    std::string_view keyboardName, float width, float height, bool wallpaper
 ) {
   using Id = greeter::GreeterComponent;
   const auto placeGlyph = [&](Glyph* glyph, std::string_view name, float x, float y, float size) {
@@ -272,31 +255,6 @@ void GreeterChrome::layout(
   if (brand.visible && hasLogo) {
     logo.setPosition(brand.x, brand.y);
     logo.setSize(28, 28);
-  }
-  const auto& clock = layout[Id::Clock];
-  time.setVisible(clock.visible && !time.text().empty());
-  date.setVisible(clock.visible && !date.text().empty());
-  if (clock.visible) {
-    const float size = layout.narrow ? std::min(timeFontSize, 56.0F) : timeFontSize;
-    label(
-        &time, renderer, time.text(), clock.x, clock.y, size, colorForRole(ColorRole::OnSurface), clock.width,
-        FontWeight::Light
-    );
-    label(
-        &date, renderer, date.text(), clock.x + 5, clock.y,
-        layout.narrow ? std::min(dateFontSize, 14.0F) : dateFontSize, colorForRole(ColorRole::OnSurface),
-        clock.width - 5, FontWeight::Medium
-    );
-    const auto timeInk = labelInk(renderer, time), dateInk = labelInk(renderer, date);
-    time.setPosition(clock.x, clock.y - timeInk.top);
-    const float dateY = clock.y + timeInk.height + (!time.text().empty() && !date.text().empty() ? kClockDateGap : 0);
-    date.setPosition(clock.x + 5, dateY - dateInk.top);
-    time.setVisible(!time.text().empty());
-    date.setVisible(!date.text().empty());
-    if (wallpaper)
-      date.setShadow(colorForRole(ColorRole::Shadow, 0.8F), 0, 1);
-    else
-      date.clearShadow();
   }
   const auto& keyboard = layout[Id::Keyboard];
   m_keyboard->setVisible(keyboard.visible && !keyboardName.empty());

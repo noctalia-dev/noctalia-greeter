@@ -180,12 +180,6 @@ int Greeter::run(WaylandClient& client, const std::atomic<bool>& shutdownRequest
     client.repeatTick();
     updateWidgetMetrics();
 
-    for (auto& view : m_views) {
-      if (view.surface->updateClock()) {
-        view.surface->requestLayout();
-      }
-    }
-
     if (client.flush() < 0) {
       kLog.error("Wayland flush failed");
       return 1;
@@ -194,12 +188,6 @@ int Greeter::run(WaylandClient& client, const std::atomic<bool>& shutdownRequest
     const int repeatMs = client.repeatPollTimeoutMs();
     const int requestMs = m_greetdClient.requestPollTimeoutMs();
     const int eventTimeoutMs = repeatMs < 0 ? requestMs : requestMs < 0 ? repeatMs : std::min(repeatMs, requestMs);
-    const auto wallNow = std::chrono::system_clock::now().time_since_epoch();
-    const auto wallMilliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(wallNow).count();
-    const auto currentSecondRemainder = (wallMilliseconds % 1000 + 1000) % 1000;
-    const int clockTimeoutMs = 1000 - static_cast<int>(currentSecondRemainder);
-    const int timeoutMs = eventTimeoutMs < 0 ? clockTimeoutMs : std::min(eventTimeoutMs, clockTimeoutMs);
-
     while (wl_display_prepare_read(display) != 0) {
       drainGreeterUiWork();
       if (wl_display_dispatch_pending(display) < 0) {
@@ -211,9 +199,11 @@ int Greeter::run(WaylandClient& client, const std::atomic<bool>& shutdownRequest
     GPollFD glibPoll{.fd = -1, .events = 0, .revents = 0};
     int glibPriority = 0;
     const int uiTimeout = greeterUiPollTimeoutMs();
-    int pollTimeout = uiTimeout < 0 ? timeoutMs : std::min(timeoutMs, uiTimeout);
+    int pollTimeout = eventTimeoutMs < 0 ? uiTimeout
+        : uiTimeout < 0                  ? eventTimeoutMs
+                                         : std::min(eventTimeoutMs, uiTimeout);
     if (const int metricsTimeout = widgetMetricsPollTimeoutMs(); metricsTimeout >= 0)
-      pollTimeout = std::min(pollTimeout, metricsTimeout);
+      pollTimeout = pollTimeout < 0 ? metricsTimeout : std::min(pollTimeout, metricsTimeout);
     if (resumeMonitor.active()) {
       resumeMonitor.prepareDispatch(glibPriority, glibPoll, pollTimeout);
     }

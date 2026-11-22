@@ -1,13 +1,17 @@
 #include "core/deferred_call.h"
 #include "core/input/key_symbols.h"
 #include "core/log.h"
+#include "greeter/greeter_preferences.h"
 #include "greeter/greeter_surface.h"
 #include "greeter/power_actions.h"
+#include "greeter/ui/greeter_components.h"
 #include "greeter/widgets/widget_layer.h"
 #include "render/scene/input_area.h"
 #include "render/scene/rect_node.h"
+#include "ui/builders.h"
 #include "ui/controls/button.h"
 #include "ui/controls/label.h"
+#include "ui/style.h"
 
 #include <algorithm>
 
@@ -200,8 +204,10 @@ void GreeterSurface::syncWidgetLayer() {
     m_root.removeChild(m_widgetLayer).reset();
     m_widgetLayer = nullptr;
   }
+  m_defaultClockGroup = nullptr;
+  m_defaultTimeWidget = nullptr;
+  m_defaultDateWidget = nullptr;
   std::string error;
-  // Default requests keep the native clock until the coordinated Clock-widget cutover.
   if (m_widgets && m_widgets->instances) {
     if (!m_widgetImageError.empty()) {
       error = "Widget profile: " + m_widgetImageError;
@@ -214,6 +220,18 @@ void GreeterSurface::syncWidgetLayer() {
         // Custom back-to-front order stays below login, chrome, errors and menus.
         m_widgetLayer->setZIndex(3);
         m_root.addChild(std::move(*layer));
+        if (m_placeDefaultClocks) {
+          auto group = ui::node({.hitTestVisible = false});
+          m_defaultClockGroup = group.get();
+          m_widgetLayer->addChild(std::move(group));
+          m_defaultTimeWidget = m_widgetLayer->useParentLayout(greeter::kDefaultTimeWidget, *m_defaultClockGroup);
+          m_defaultDateWidget = m_widgetLayer->useParentLayout(greeter::kDefaultDateWidget, *m_defaultClockGroup);
+          if (m_defaultTimeWidget || m_defaultDateWidget) {
+            const auto timeZ = m_defaultTimeWidget ? m_defaultTimeWidget->zIndex() : m_defaultDateWidget->zIndex();
+            const auto dateZ = m_defaultDateWidget ? m_defaultDateWidget->zIndex() : timeZ;
+            m_defaultClockGroup->setZIndex(std::min(timeZ, dateZ));
+          }
+        }
       } else {
         const auto& issue = layer.error().front();
         error = "Widget profile: " + issue.path + ": " + issue.message;
@@ -226,4 +244,59 @@ void GreeterSurface::syncWidgetLayer() {
   m_configErrorLabel->setVisible(!message.empty());
   m_configErrorHeading->setVisible(!message.empty());
   m_configErrorBanner->setVisible(!message.empty());
+}
+
+float GreeterSurface::measureDefaultClocks(Renderer& renderer, float width, float height) {
+  if (!m_defaultClockGroup)
+    return 0;
+  const bool narrow = width < 1000 || height < 600;
+  const float edge = narrow ? std::min(24.0F, std::min(width, height) * .04F) : std::clamp(width * .06F, 64.0F, 128.0F);
+  const float available = std::min(m_layoutConfig.components[1].width.value_or(400), width - 2 * edge);
+  const auto measure = [&](greeter::WidgetHost* host, std::string_view id, float cap, float inset) {
+    if (!host)
+      return;
+    float fontSize = Style::fontSizeBody * 4;
+    for (const auto& widget : *m_widgets->instances) {
+      if (widget.id != id)
+        continue;
+      if (const auto setting = widget.settings.find("font_size"); setting != widget.settings.end()) {
+        if (const auto* value = std::get_if<double>(&setting->second); value && *value > 0)
+          fontSize = static_cast<float>(*value);
+        else if (const auto* integer = std::get_if<std::int64_t>(&setting->second); integer && *integer > 0)
+          fontSize = static_cast<float>(*integer);
+      }
+    }
+    float scale = narrow ? std::min(1.0F, cap / fontSize) : 1;
+    host->setContentScale(scale);
+    host->layout(renderer);
+    if (host->width() > std::max(1.0F, available - inset)) {
+      scale *= std::max(1.0F, available - inset) / host->width();
+      host->setContentScale(scale);
+      host->layout(renderer);
+    }
+  };
+  measure(m_defaultTimeWidget, greeter::kDefaultTimeWidget, 56, 0);
+  measure(m_defaultDateWidget, greeter::kDefaultDateWidget, 14, 5);
+  const float timeHeight = m_defaultTimeWidget ? m_defaultTimeWidget->height() : 0;
+  const float dateHeight = m_defaultDateWidget ? m_defaultDateWidget->height() : 0;
+  return timeHeight + dateHeight + (timeHeight > 0 && dateHeight > 0 ? 12 : 0);
+}
+
+void GreeterSurface::layoutDefaultClocks(const greeter::GreeterLayout& layout) {
+  if (!m_defaultClockGroup)
+    return;
+  const auto& rect = layout[greeter::GreeterComponent::Clock];
+  m_defaultClockGroup->setPosition(rect.x, rect.y);
+  m_defaultClockGroup->setSize(rect.width, rect.height);
+  m_defaultClockGroup->setVisible(rect.visible);
+  if (m_defaultTimeWidget) {
+    m_defaultTimeWidget->setPosition(0, 0);
+    m_defaultTimeWidget->setVisible(rect.visible);
+  }
+  if (m_defaultDateWidget) {
+    const float timeHeight = m_defaultTimeWidget ? m_defaultTimeWidget->height() : 0;
+    m_defaultDateWidget->setPosition(5, timeHeight + (timeHeight > 0 ? 12 : 0));
+    m_defaultDateWidget->setVisible(rect.visible);
+  }
+  greeter::applyComponentTransform(*m_defaultClockGroup, rect, layout.transforms[1]);
 }

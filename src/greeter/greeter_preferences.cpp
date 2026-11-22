@@ -481,6 +481,21 @@ namespace greeter {
 
     GreeterPreferences prefs;
     prefs.layout = resolveStoredLayout(file, sync);
+    prefs.administratorWidgets = file.widgets.has_value() || !file.widgetsValid;
+    if (!prefs.administratorWidgets) {
+      DefaultClockOverrides overrides;
+      if (file.layout)
+        overrides.placement = file.layout->components[1];
+      if (!overrides.placement.visible)
+        overrides.placement.visible = file.clockEnabled;
+      if (!overrides.placement.anchor && file.clockPosition && validLegacyClockPosition(*file.clockPosition))
+        overrides.placement.anchor = file.clockPosition;
+      overrides.timeFormat = file.clockTimeFormat;
+      overrides.dateFormat = file.clockDateFormat;
+      overrides.timeFontSize = file.clockTimeFontSize;
+      overrides.dateFontSize = file.clockDateFontSize;
+      prefs.defaultClockOverrides = overrides;
+    }
     if (file.widgetsValid)
       prefs.widgets = file.widgets.has_value() ? file.widgets : sync.widgets;
     prefs.defaultSession = file.sessionDefault;
@@ -531,6 +546,78 @@ namespace greeter {
       prefs.authRequestTimeoutSec = *file.authRequestTimeoutSec;
     }
     return prefs;
+  }
+
+  GreeterWidgetProfile resolveGreeterWidgetProfile(const GreeterPreferences& prefs) {
+    const bool builtin = !prefs.widgets || !prefs.widgets->instances;
+    GreeterWidgetProfile profile;
+    profile.placeDefaultClocks = builtin;
+    const auto makeClock = [](std::string_view id, bool date) {
+      WidgetInstance widget;
+      widget.id = id;
+      widget.type = "clock";
+      widget.placement = WidgetAnchorPlacement{WidgetAnchor::CenterLeft, date ? 5.0 : 0.0, date ? 50.0 : -15.0};
+      widget.settings = {
+          {"format", std::string(date ? "%A, %x" : "{:%H:%M}")},
+          {"font_size", date ? 19.0 : 112.0},
+          {"font_weight", std::int64_t{date ? 500 : 300}},
+          {"tight_text", true},
+          {"center_text", false},
+          {"background", false},
+          {"shadow", date}
+      };
+      return widget;
+    };
+    if (builtin)
+      profile.instances = {makeClock(kDefaultTimeWidget, false), makeClock(kDefaultDateWidget, true)};
+    else
+      profile.instances = *prefs.widgets->instances;
+    if (!prefs.defaultClockOverrides || prefs.administratorWidgets)
+      return profile;
+    const auto& overrides = *prefs.defaultClockOverrides;
+    const auto& placement = overrides.placement;
+    if (placement.anchor
+        || placement.x
+        || placement.y
+        || placement.width
+        || placement.output
+        || placement.scale
+        || placement.rotation
+        || placement.flipX
+        || placement.flipY)
+      profile.placeDefaultClocks = true;
+    for (const bool date : {false, true}) {
+      const auto id = date ? kDefaultDateWidget : kDefaultTimeWidget;
+      auto it = std::ranges::find(profile.instances, id, &WidgetInstance::id);
+      if (it == profile.instances.end() && placement.visible == true) {
+        profile.instances.push_back(makeClock(id, date));
+        it = std::prev(profile.instances.end());
+        profile.placeDefaultClocks = true;
+      }
+      if (it == profile.instances.end() || it->type != "clock")
+        continue;
+      if (placement.visible)
+        it->enabled = *placement.visible;
+      if (placement.output)
+        it->output = placement.output;
+      // The legacy group supplies explicitly owned transforms once.
+      if (placement.rotation)
+        it->transform.rotation = 0;
+      if (placement.flipX)
+        it->transform.flipX = false;
+      if (placement.flipY)
+        it->transform.flipY = false;
+      const auto& format = date ? overrides.dateFormat : overrides.timeFormat;
+      if (format) {
+        it->settings["format"] = *format;
+        if (format->empty())
+          it->enabled = false;
+      }
+      const auto& fontSize = date ? overrides.dateFontSize : overrides.timeFontSize;
+      if (fontSize)
+        it->settings["font_size"] = static_cast<double>(std::min(*fontSize, 4096.0F));
+    }
+    return profile;
   }
 
   bool installGreeterSystemLayout(const std::string_view greeterUser, std::string& errorOut) {

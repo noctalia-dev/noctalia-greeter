@@ -111,6 +111,9 @@ namespace greeter {
         std::vector<WidgetSettingDefinition> result{
             setting("clock_style", WidgetSettingType::Enum, std::string("digital"), {}, {}, {}, kClockStyles),
             setting("format", WidgetSettingType::String, std::string("{:%H:%M}")),
+            setting("font_size", WidgetSettingType::Double, 0.0, 0, 4096, 1),
+            setting("font_weight", WidgetSettingType::Int, std::int64_t{700}, 100, 1000, 100),
+            setting("tight_text", WidgetSettingType::Bool, false),
             setting("center_text", WidgetSettingType::Bool, true),
             setting("timezone", WidgetSettingType::String, std::string{}),
             setting("color", WidgetSettingType::Color, std::string("on_surface")),

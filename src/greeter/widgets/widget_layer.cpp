@@ -56,7 +56,7 @@ namespace greeter {
       (*host)->setZIndex(static_cast<std::int32_t>(layer->m_entries.size()));
       auto* retained = host->get();
       layer->addChild(std::move(*host));
-      layer->m_entries.push_back({instance.placement, retained});
+      layer->m_entries.push_back({instance.placement, retained, instance.id});
     }
     return layer;
   }
@@ -68,6 +68,8 @@ namespace greeter {
     const float edge =
         narrow ? std::min(24.0F, std::min(width(), height()) * 0.04F) : std::clamp(width() * 0.06F, 64.0F, 128.0F);
     for (const auto& entry : m_entries) {
+      if (entry.parentLayout)
+        continue;
       auto& host = *entry.host;
       host.layout(renderer);
       if (!sized) {
@@ -124,6 +126,15 @@ namespace greeter {
     return std::ranges::any_of(m_entries, [x, y](const auto& entry) {
       return Node::hitTestStrict(entry.host, x, y) != nullptr;
     });
+  }
+
+  WidgetHost* WidgetLayer::useParentLayout(std::string_view id, Node& parent) {
+    const auto it = std::ranges::find(m_entries, id, &Entry::id);
+    if (it == m_entries.end())
+      return nullptr;
+    parent.addChild(removeChild(it->host));
+    it->parentLayout = true;
+    return it->host;
   }
 
   void WidgetLayer::setActive(bool active) {

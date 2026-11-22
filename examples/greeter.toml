@@ -76,7 +76,8 @@ fill_mode = "crop"
 # fill_mode = "crop"
 
 [clock]
-# Show the clock and date (default true), to the left of the login card.
+# Configure the default time/date Clock widget pair (default true), left of the login card.
+# An explicit administrator [widgets] table supersedes these legacy keys.
 # The host name is shown in the login card.
 enabled = true
 # center-left (default), above-panel, top-left, top-center, top-right, bottom-left, bottom-center, bottom-right.
@@ -87,7 +88,7 @@ time_format = "{:%H:%M}"
 # Locale-preferred date, matching Noctalia's default.
 # Uses the inherited time locale, then system locale files, then en_US.UTF-8 (if installed).
 date_format = "%A, %x"
-# Font sizes in logical pixels before UI scaling; positive integers or decimals.
+# Font sizes in logical pixels before UI scaling; positive numbers, capped at 4096.
 time_font_size = 112
 date_font_size = 19
 
@@ -121,9 +122,10 @@ login_mode = "auto"
 # The whole component and its input transform together; popups stay upright.
 # Oversized transformed components scale down to fit the output.
 
-# Optional additional desktop widgets. Administrator [widgets] owns the whole collection.
+# Optional desktop-widget collection. Administrator [widgets] owns the whole collection.
 # See docs/user/configuration.md for a complete example and supported settings.
-# An empty widget_order creates no custom widgets; the native clock remains separate.
+# Empty [widgets] requests the default time/date Clock pair; widget_order=[] renders none.
+# A custom list replaces that pair; include ordinary Clock entries to retain time/date.
 # [widgets]
 # widget_order = ["welcome"]
 # [widgets.widget.welcome]
@@ -138,7 +140,7 @@ login_mode = "auto"
 # background = false
 # Sticker image_path accepts widget-assets/<lowercase-sha256>.png in the state directory
 # or its exact installed absolute path. PNGs are bounded and hash-checked; no links/URLs.
-# Helper installation of images and applying profiles from Noctalia are not enabled yet.
+# The constrained helper and Noctalia editor Save & apply can install profiles and managed PNGs.
 
 [output]
 # Use layout, transforms, and scales from sync.toml when not declared here (default true).
