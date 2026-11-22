@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/timer_manager.h"
+#include "greeter/widgets/widget_actions.h"
 #include "greeter/widgets/widget_image_source.h"
 #include "greeter/widgets/widget_model.h"
 #include "ui/controls/box.h"
@@ -20,7 +21,8 @@ namespace greeter {
   public:
     // Validates before constructing controls. Only implemented presentations can be created.
     static std::expected<std::unique_ptr<WidgetHost>, std::vector<WidgetModelIssue>> create(
-        const WidgetInstance& instance, const WidgetImageContext& images = {}, const SysmonSnapshot* metrics = nullptr
+        const WidgetInstance& instance, const WidgetImageContext& images = {}, const SysmonSnapshot* metrics = nullptr,
+        WidgetActions actions = {}
     );
 
     // Push validated readings from the view owner; no collectors or timers are started.

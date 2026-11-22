@@ -50,8 +50,10 @@ namespace greeter {
     }
   } // namespace
 
-  std::expected<std::unique_ptr<WidgetHost>, std::vector<WidgetModelIssue>>
-  WidgetHost::create(const WidgetInstance& instance, const WidgetImageContext& images, const SysmonSnapshot* metrics) {
+  std::expected<std::unique_ptr<WidgetHost>, std::vector<WidgetModelIssue>> WidgetHost::create(
+      const WidgetInstance& instance, const WidgetImageContext& images, const SysmonSnapshot* metrics,
+      WidgetActions actions
+  ) {
     auto issues = validateWidgetStructure({std::vector{instance}});
     const auto settingIssues = validateWidgetSettings(instance);
     issues.insert(issues.end(), settingIssues.begin(), settingIssues.end());
@@ -74,15 +76,19 @@ namespace greeter {
     const auto text = [&](const char* key) -> const std::string& { return std::get<std::string>(settings.at(key)); };
     std::unique_ptr<WidgetContent> content;
     if (instance.type == "button") {
-      content = std::make_unique<ButtonWidget>(ButtonWidget::Options{
-          .glyph = text("glyph"),
-          .label = text("label"),
-          .fontFamily = text("font_family"),
-          .variant = buttonVariant(text("variant")),
-          .background = std::get<bool>(settings.at("background")),
-          .color = text("color").empty() ? std::nullopt : std::make_optional(colorSpec(text("color"))),
-          .hoverBackground = colorSpec(text("hover_background")),
-      });
+      content = std::make_unique<ButtonWidget>(
+          ButtonWidget::Options{
+              .glyph = text("glyph"),
+              .label = text("label"),
+              .fontFamily = text("font_family"),
+              .variant = buttonVariant(text("variant")),
+              .background = std::get<bool>(settings.at("background")),
+              .color = text("color").empty() ? std::nullopt : std::make_optional(colorSpec(text("color"))),
+              .hoverBackground = colorSpec(text("hover_background")),
+              .action = *parseWidgetAction(text("action")),
+          },
+          std::move(actions)
+      );
       // Button owns its chrome; its schema deliberately has no common host background fields.
       return std::unique_ptr<WidgetHost>(new WidgetHost(instance, std::move(content), false, clearColorSpec(), 0, 0));
     }
@@ -204,6 +210,8 @@ namespace greeter {
 
   void WidgetHost::setActive(bool active) {
     active = active && visible();
+    m_content->setActive(active);
+    setHitTestVisible(m_content->hitTestVisible());
     if (m_active == active)
       return;
     m_active = active;

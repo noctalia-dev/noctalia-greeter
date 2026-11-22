@@ -6,10 +6,12 @@
 #include <button_widget.h>
 #include <cmath>
 #include <memory>
+#include <utility>
 
 namespace greeter {
 
-  ButtonWidget::ButtonWidget(const Options& options) {
+  ButtonWidget::ButtonWidget(const Options& options, WidgetActions actions)
+      : m_action(options.action), m_actions(std::move(actions)) {
     setHitTestVisible(false);
     auto button = std::make_unique<::DesktopButton>();
     m_button = button.get();
@@ -22,9 +24,30 @@ namespace greeter {
         .hoverBackground = options.hoverBackground,
     });
     button->setFontFamily(options.fontFamily);
-    // Presentation only; action dispatch remains owned by the greeter.
+    button->setEditorPreview(true);
     button->setTabStop(false);
+    if (m_action != WidgetAction::None && m_actions.available && m_actions.activate) {
+      button->setOnClick([this] {
+        if (!m_active || !m_actions.available(m_action))
+          return;
+        for (const Node* node = this; node != nullptr; node = node->parent())
+          if (!node->visible())
+            return;
+        m_actions.activate(m_action);
+      });
+    }
     addChild(std::move(button));
+  }
+
+  void ButtonWidget::setActive(bool active) {
+    m_active = active
+        && m_action != WidgetAction::None
+        && m_actions.available
+        && m_actions.activate
+        && m_actions.available(m_action);
+    setHitTestVisible(m_active);
+    m_button->setEditorPreview(!m_active);
+    m_button->setTabStop(m_active);
   }
 
   void ButtonWidget::layoutButton(Renderer& renderer, float scale, float width, float height) {

@@ -7,6 +7,7 @@
 #include "greeter/greeter_model.h"
 #include "greeter/greeter_sessions.h"
 #include "greeter/render/wallpaper_types.h"
+#include "greeter/widgets/widget_actions.h"
 #include "render/animation/animation_manager.h"
 #include "render/core/color.h"
 #include "render/core/texture_handle.h"
@@ -77,6 +78,9 @@ public:
   [[nodiscard]] Node* sceneRoot() noexcept { return &m_root; }
   [[nodiscard]] bool animating() const noexcept { return m_animations.hasActive(); }
 
+  // Hosts using these callbacks must be destroyed before this view.
+  [[nodiscard]] greeter::WidgetActions widgetActions();
+
 private:
   void layoutScene(std::uint32_t width, std::uint32_t height);
   void tryAuthenticate();
@@ -100,6 +104,8 @@ private:
   void togglePowerMenu();
   void closePowerMenu(bool restoreTriggerFocus = true);
   void requestPowerAction(int action);
+  [[nodiscard]] bool widgetActionAvailable(greeter::WidgetAction action) const;
+  void activateWidgetAction(greeter::WidgetAction action);
   void layoutPowerMenu(float width, float height);
   bool minimalLogin() const;
   void setFocusIndex(std::ptrdiff_t index);
