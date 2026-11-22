@@ -3,10 +3,9 @@
 #include "greeter/widgets/widget_content.h"
 #include "ui/palette.h"
 
-#include <cstdint>
 #include <string>
 
-class Label;
+class DigitalClockWidget;
 
 namespace greeter {
 
@@ -28,17 +27,10 @@ namespace greeter {
     bool updateTime(std::chrono::sys_seconds now) override;
 
   private:
-    Label* m_label = nullptr;
+    ::DigitalClockWidget* m_clock = nullptr;
     std::string m_format;
     std::string m_timezone;
-    bool m_shadow;
     bool m_centerText;
-    std::string m_sample;
-    float m_stableWidth = 0.0F;
-    float m_metricsFontSize = -1.0F;
-    float m_metricsRenderScale = -1.0F;
-    std::uint64_t m_metricsGeneration = 0;
-    char m_widestDigit = '0';
   };
 
 } // namespace greeter
