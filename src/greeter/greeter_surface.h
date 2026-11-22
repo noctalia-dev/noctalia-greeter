@@ -86,9 +86,9 @@ private:
   void tryAuthenticate();
   void openUserMenu();
   void toggleSessionMenu();
-  void toggleSchemeMenu();
+  void toggleSchemeMenu(bool fromWidget = false);
   void closeMenus();
-  void closeMenusAndRestoreFocus();
+  void closeMenusAndRestoreFocus(bool restoreWidgetTrigger = false);
   // Password field while the password step is up, else null. Selector menus hand
   // focus back here so typing can resume without a manual Shift+Tab.
   [[nodiscard]] InputArea* menuReturnFocusTarget() const;
@@ -105,7 +105,12 @@ private:
   void closePowerMenu(bool restoreTriggerFocus = true);
   void requestPowerAction(int action);
   [[nodiscard]] bool widgetActionAvailable(greeter::WidgetAction action) const;
-  void activateWidgetAction(greeter::WidgetAction action);
+  void activateWidgetAction(greeter::WidgetAction action, Node& source);
+  [[nodiscard]] bool liveWidgetInput(const InputArea* area) const;
+  void reconcileWidgetInput();
+  void appendWidgetFocusTargets();
+  void clearWidgetMenuTrigger();
+  [[nodiscard]] greeter::LayoutRect popupAnchor(const Node* native, greeter::WidgetAction action) const;
   void layoutPowerMenu(float width, float height);
   bool minimalLogin() const;
   void setFocusIndex(std::ptrdiff_t index);
@@ -128,9 +133,9 @@ private:
   void scrollSelectorMenu(int delta);
   void applyMenuHighlight();
   void buildMenu(
-      const std::vector<std::string>& names, std::size_t selected, Node* anchor, bool upward, bool rightAlign,
-      int zBase, Box*& panelOut, ContextMenuControl*& controlOut, MenuScroll& scroll,
-      std::function<void(std::size_t)> onSelect
+      const std::vector<std::string>& names, std::size_t selected, const greeter::LayoutRect& anchor, bool appearance,
+      bool upward, bool rightAlign, int zBase, Box*& panelOut, ContextMenuControl*& controlOut, MenuScroll& scroll,
+      const std::function<void(std::size_t)>& onSelect
   );
   void rebuildUserMenu();
   void refreshUserMenuRows();
@@ -274,6 +279,10 @@ private:
   std::function<void()> m_pendingMenuActivation;
   std::optional<GreeterSyncedAppearance> m_syncedAppearance;
   std::optional<GreeterWallpaperAppearance> m_wallpaperAppearance;
+  std::shared_ptr<void> m_widgetInputLifetime = std::make_shared<int>(0);
+  InputArea* m_widgetMenuTrigger = nullptr;
+  greeter::WidgetAction m_widgetMenuAction = greeter::WidgetAction::None;
+  bool m_widgetFocusRecovery = false;
 
   void refreshSelectionLabels();
 };

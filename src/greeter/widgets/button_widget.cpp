@@ -33,7 +33,7 @@ namespace greeter {
         for (const Node* node = this; node != nullptr; node = node->parent())
           if (!node->visible())
             return;
-        m_actions.activate(m_action);
+        m_actions.activate(m_action, *this);
       });
     }
     addChild(std::move(button));

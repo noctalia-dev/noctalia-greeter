@@ -141,6 +141,7 @@ GreeterSurface::GreeterSurface(GreeterModel& model, GreeterAuthController& auth,
     : m_model(model), m_auth(auth), m_viewId(viewId) {}
 
 GreeterSurface::~GreeterSurface() {
+  m_widgetInputLifetime.reset();
   if (m_renderContext != nullptr) {
     if (m_brandLogoTexture.id != 0) {
       m_renderContext->textureManager().unload(m_brandLogoTexture);
@@ -592,7 +593,11 @@ bool GreeterSurface::ownsInputArea(const InputArea* area) const {
 
 void GreeterSurface::reconcileKeyboardFocus() {
   InputArea* focused = m_inputDispatcher.focusedArea();
-  if (focused != nullptr && ownsInputArea(focused)) {
+  if (focused != nullptr
+      && ownsInputArea(focused)
+      && (menuOpen() || m_powerMenuOpen || std::ranges::any_of(m_focusRing, [focused](const auto& item) {
+            return item.area == focused;
+          }))) {
     syncFocusIndexFromFocused();
     return;
   }
@@ -651,6 +656,7 @@ void GreeterSurface::onPointerLeave() {
 }
 
 void GreeterSurface::onPointerEvent(float x, float y, std::uint32_t button, bool pressed) {
+  reconcileWidgetInput();
   const float sceneX = x / m_sceneScale, sceneY = y / m_sceneScale;
   if (m_powerMenuOpen) {
     const bool hit = m_powerPanel
@@ -658,7 +664,8 @@ void GreeterSurface::onPointerEvent(float x, float y, std::uint32_t button, bool
         && sceneY >= m_powerPanel->y()
         && sceneX <= m_powerPanel->x() + m_powerPanel->width()
         && sceneY <= m_powerPanel->y() + m_powerPanel->height();
-    if (!hit) {
+    const bool onTrigger = m_widgetMenuTrigger && m_widgetMenuTrigger->containsScenePoint(x, y);
+    if (!hit && !onTrigger) {
       if (pressed && button == BTN_LEFT) {
         m_inputDispatcher.pointerMotion(x, y, 0);
         closePowerMenu(false);
@@ -680,8 +687,15 @@ void GreeterSurface::onPointerEvent(float x, float y, std::uint32_t button, bool
     const bool onUserMenu = inRect(m_userMenuPanel);
     const bool onSessionMenu = inRect(m_sessionMenuPanel);
     const bool onSchemeMenu = inRect(m_schemeMenuPanel);
-    if (!onUserAnchor && !onSessionAnchor && !onSchemeAnchor && !onUserMenu && !onSessionMenu && !onSchemeMenu) {
-      if (m_userMenuOpen) {
+    const bool onWidgetAnchor = m_widgetMenuTrigger && m_widgetMenuTrigger->containsScenePoint(x, y);
+    if (!onUserAnchor
+        && !onSessionAnchor
+        && !onSchemeAnchor
+        && !onWidgetAnchor
+        && !onUserMenu
+        && !onSessionMenu
+        && !onSchemeMenu) {
+      if (m_userMenuOpen || m_widgetMenuTrigger != nullptr) {
         closeMenusAndRestoreFocus();
         return;
       }
@@ -749,6 +763,8 @@ void GreeterSurface::onKeyEvent(
 ) {
   if (!pressed)
     return;
+  reconcileWidgetInput();
+  rebuildFocusRing();
   reconcileKeyboardFocus();
   m_inInputDispatch = true;
   // A focused shared Input can still receive key events when disabled. Keep
@@ -838,6 +854,7 @@ void GreeterSurface::prepareFrame(std::uint32_t width, std::uint32_t height, boo
     m_renderer = &m_window->renderTarget().renderer();
     syncWallpaperTexture();
     m_inLayout = true;
+    reconcileWidgetInput();
     layoutScene(width, height);
     m_inLayout = false;
   }
@@ -1010,7 +1027,7 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
     m_schemeSelectButton->setSize(appearance.width, appearance.height);
     m_schemeSelectButton->setControlHeight(appearance.height);
     m_schemeSelectButton->layout(renderer);
-  } else if (m_schemeMenuOpen) {
+  } else if (m_schemeMenuOpen && m_widgetMenuAction != greeter::WidgetAction::Appearance) {
     m_schemeMenuOpen = false;
     clearSchemeMenu();
   }
@@ -1055,8 +1072,12 @@ void GreeterSurface::togglePowerMenu() {
   requestLayout();
 }
 void GreeterSurface::closePowerMenu(bool restoreTriggerFocus) {
+  auto* trigger = m_widgetMenuTrigger != nullptr && liveWidgetInput(m_widgetMenuTrigger)
+      ? m_widgetMenuTrigger
+      : m_powerMenuButton->inputArea();
   m_powerMenuOpen = false;
-  m_inputDispatcher.setFocus(restoreTriggerFocus ? m_powerMenuButton->inputArea() : menuReturnFocusTarget());
+  clearWidgetMenuTrigger();
+  m_inputDispatcher.setFocus(restoreTriggerFocus ? trigger : menuReturnFocusTarget());
   syncFocusIndexFromFocused();
   requestLayout();
 }
@@ -1093,10 +1114,8 @@ void GreeterSurface::layoutPowerMenu(float sw, float sh) {
   const float rowH =
       std::min(38.0F, std::max(24.0F, (sh - 100) / static_cast<float>(std::max(std::size_t{1}, actions.size())) - gap));
   const float h = 52 + (rowH + gap) * static_cast<float>(actions.size()) + 12;
-  const auto bounds = greeter::placeGreeterPopup(
-      {m_powerMenuButton->x(), m_powerMenuButton->y(), m_powerMenuButton->width(), m_powerMenuButton->height(), true},
-      w, h, sw, sh, m_powerMenuButton->y() > sh / 2
-  );
+  const auto anchor = popupAnchor(m_powerMenuButton, greeter::WidgetAction::Power);
+  const auto bounds = greeter::placeGreeterPopup(anchor, w, h, sw, sh, anchor.y > sh / 2);
   const float x = bounds.x, y = bounds.y;
   m_powerPanel->setVisible(true);
   m_powerPanel->setPosition(x, y);
@@ -1386,6 +1405,7 @@ void GreeterSurface::openUserMenu() {
   if (m_userMenuOpen || !showsUserDropdown()) {
     return;
   }
+  clearWidgetMenuTrigger();
   m_userMenuOpen = true;
   m_sessionMenuOpen = false;
   clearSessionMenu();
@@ -1399,6 +1419,7 @@ void GreeterSurface::openUserMenu() {
 }
 
 void GreeterSurface::toggleSessionMenu() {
+  clearWidgetMenuTrigger();
   if (m_minimalLogin)
     return;
   m_sessionMenuOpen = !m_sessionMenuOpen;
@@ -1414,9 +1435,10 @@ void GreeterSurface::toggleSessionMenu() {
   requestLayout();
 }
 
-void GreeterSurface::toggleSchemeMenu() {
+void GreeterSurface::toggleSchemeMenu(bool fromWidget) {
+  clearWidgetMenuTrigger();
   // Don't toggle the menu if the selector is hidden
-  if (!m_schemeSelectArea->visible()) {
+  if (!fromWidget && !m_schemeSelectArea->visible()) {
     m_schemeMenuOpen = false;
     requestLayout();
     return;
@@ -1435,6 +1457,7 @@ void GreeterSurface::toggleSchemeMenu() {
 }
 
 void GreeterSurface::closeMenus() {
+  clearWidgetMenuTrigger();
   m_userMenuOpen = false;
   m_sessionMenuOpen = false;
   m_schemeMenuOpen = false;
@@ -1458,7 +1481,9 @@ InputArea* GreeterSurface::menuReturnFocusTarget() const {
   return m_passwordField->inputArea();
 }
 
-void GreeterSurface::closeMenusAndRestoreFocus() {
+void GreeterSurface::closeMenusAndRestoreFocus(bool restoreWidgetTrigger) {
+  const bool widgetMenu = m_widgetMenuTrigger != nullptr;
+  auto* widgetTarget = restoreWidgetTrigger && liveWidgetInput(m_widgetMenuTrigger) ? m_widgetMenuTrigger : nullptr;
   InputArea* owner = m_userMenuOpen ? m_userSelectArea
       : m_sessionMenuOpen           ? m_sessionSelectArea
       : m_schemeMenuOpen            ? m_schemeSelectArea
@@ -1468,8 +1493,10 @@ void GreeterSurface::closeMenusAndRestoreFocus() {
   if (InputArea* passwordArea = menuReturnFocusTarget(); passwordArea != nullptr) {
     target = passwordArea;
   }
+  if (widgetTarget != nullptr)
+    target = widgetTarget;
   closeMenus();
-  if (target != nullptr) {
+  if (target != nullptr || widgetMenu) {
     m_inputDispatcher.setFocus(target);
   }
   requestLayout();
@@ -1482,6 +1509,7 @@ void GreeterSurface::selectSession(std::size_t index) {
   m_model.selectSession(m_viewId, index);
   refreshSelectionLabels();
   m_sessionMenuOpen = false;
+  clearWidgetMenuTrigger();
   m_menuHighlight = -1;
   InputArea* sessionFocus = menuReturnFocusTarget();
   if (sessionFocus == nullptr) {
@@ -1500,6 +1528,7 @@ void GreeterSurface::selectScheme(std::size_t index) {
   m_model.selectScheme(m_viewId, index);
   refreshSelectionLabels();
   m_schemeMenuOpen = false;
+  clearWidgetMenuTrigger();
   m_menuHighlight = -1;
   InputArea* schemeFocus = menuReturnFocusTarget();
   if (schemeFocus == nullptr) {
@@ -1573,6 +1602,8 @@ void GreeterSurface::rebuildFocusRing() {
   if (m_shutdownButton != nullptr && m_shutdownButton->inputArea() != nullptr && m_shutdownButton->visible()) {
     m_focusRing.push_back({m_shutdownButton->inputArea(), [this]() { requestPowerAction(3); }});
   }
+
+  appendWidgetFocusTargets();
 
   // Keep focus on whatever was focused before the rebuild, if still present.
   m_focusIndex = -1;
@@ -2048,7 +2079,7 @@ bool GreeterSurface::handleNavigationKey(std::uint32_t sym, std::uint32_t utf32,
     if (m_minimalLogin)
       return true;
     if (m_sessionMenuOpen) {
-      closeMenusAndRestoreFocus();
+      closeMenusAndRestoreFocus(true);
     } else {
       if (m_sessionSelectArea != nullptr) {
         m_inputDispatcher.setFocus(m_sessionSelectArea);
@@ -2063,7 +2094,7 @@ bool GreeterSurface::handleNavigationKey(std::uint32_t sym, std::uint32_t utf32,
       return true;
     }
     if (m_schemeMenuOpen) {
-      closeMenusAndRestoreFocus();
+      closeMenusAndRestoreFocus(true);
     } else {
       if (m_schemeSelectArea != nullptr) {
         m_inputDispatcher.setFocus(m_schemeSelectArea);
@@ -2107,11 +2138,11 @@ bool GreeterSurface::handleNavigationKey(std::uint32_t sym, std::uint32_t utf32,
       return true;
     }
     if (KeySymbol::isEscape(sym)) {
-      closeMenusAndRestoreFocus();
+      closeMenusAndRestoreFocus(true);
       return true;
     }
     if (KeySymbol::isTab(sym)) {
-      closeMenusAndRestoreFocus();
+      closeMenusAndRestoreFocus(true);
       moveFocus(backward ? -1 : 1);
       return true;
     }
@@ -2497,13 +2528,14 @@ void GreeterSurface::rebuildUserMenu() {
 }
 
 void GreeterSurface::buildMenu(
-    const std::vector<std::string>& names, std::size_t selected, Node* anchor, bool upward, bool rightAlign, int zBase,
-    Box*& panelOut, ContextMenuControl*& controlOut, MenuScroll& scroll, std::function<void(std::size_t)> onSelect
+    const std::vector<std::string>& names, std::size_t selected, const greeter::LayoutRect& anchor, bool appearance,
+    bool upward, bool rightAlign, int zBase, Box*& panelOut, ContextMenuControl*& controlOut, MenuScroll& scroll,
+    const std::function<void(std::size_t)>& onSelect
 ) {
   const std::size_t count = names.size();
-  if (anchor == nullptr || count == 0)
+  if (!anchor.visible || count == 0)
     return;
-  const float headerH = anchor == m_schemeSelectButton ? 38 : 0;
+  const float headerH = appearance ? 38 : 0;
   const float border = Style::borderWidth;
   const float rowH = Style::controlHeightSm;
   std::vector<ContextMenuControlEntry> entries;
@@ -2512,7 +2544,7 @@ void GreeterSurface::buildMenu(
     ContextMenuControlEntry entry{.id = static_cast<std::int32_t>(i), .label = names[i]};
     entry.checkmark = true;
     entry.toggleState = i == selected ? 1 : 0;
-    if (anchor == m_schemeSelectButton) {
+    if (appearance) {
       const auto* builtin = noctalia::theme::findBuiltinPalette(names[i]);
       const Palette* builtinPalette =
           builtin ? &(isLightPalette() ? builtin->light.palette : builtin->dark.palette) : nullptr;
@@ -2526,8 +2558,8 @@ void GreeterSurface::buildMenu(
     }
     entries.push_back(std::move(entry));
   }
-  const float above = std::max(0.0F, anchor->y() - 10 - 12);
-  const float below = std::max(0.0F, m_root.height() - 12 - anchor->y() - anchor->height() - 10);
+  const float above = std::max(0.0F, anchor.y - 10 - 12);
+  const float below = std::max(0.0F, m_root.height() - 12 - anchor.y - anchor.height - 10);
   const float paddingH = ContextMenuControl::preferredHeight({}, 1);
   const float wantedH =
       headerH + ContextMenuControl::preferredHeight(entries, kSelectorMenuMaxVisibleRows) + 2 * border;
@@ -2546,12 +2578,11 @@ void GreeterSurface::buildMenu(
   scroll.offset = std::min(scroll.offset, maxOffset);
   const float gutter = maxOffset > 0 ? GreeterMetrics::scrollbarWidth + Style::scrollbarGap : 0;
   const float menuW = std::max(
-      anchor->width(), std::max(240.0F, ContextMenuControl::preferredWidth(*m_renderer, entries)) + gutter + 2 * border
+      anchor.width, std::max(240.0F, ContextMenuControl::preferredWidth(*m_renderer, entries)) + gutter + 2 * border
   );
   const float listH = rowH * static_cast<float>(scroll.visibleCount) + paddingH;
   const auto bounds = greeter::placeGreeterPopup(
-      {anchor->x(), anchor->y(), anchor->width(), anchor->height(), true}, menuW, headerH + listH + 2 * border,
-      m_root.width(), m_root.height(), upward, rightAlign
+      anchor, menuW, headerH + listH + 2 * border, m_root.width(), m_root.height(), upward, rightAlign
   );
   auto panel = std::make_unique<Box>();
   panelOut = panel.get();
@@ -2641,7 +2672,8 @@ void GreeterSurface::rebuildSessionMenu() {
     names.push_back(session.name);
   }
   buildMenu(
-      names, m_model.state().selectedSession, m_sessionSelectBox, /*upward=*/false,
+      names, m_model.state().selectedSession, popupAnchor(m_sessionSelectBox, greeter::WidgetAction::Sessions),
+      /*appearance=*/false, /*upward=*/false,
       /*rightAlign=*/false, /*zBase=*/50, m_sessionMenuPanel, m_sessionMenuControl, m_sessionMenuScroll,
       [this](std::size_t i) { selectSession(i); }
   );
@@ -2653,10 +2685,11 @@ void GreeterSurface::rebuildSchemeMenu() {
     return;
   }
   // Open upward when selector is at the bottom, downward otherwise
-  const bool upward = m_schemeSelectButton->y() > m_root.height() / 2;
+  const auto anchor = popupAnchor(m_schemeSelectButton, greeter::WidgetAction::Appearance);
+  const bool upward = anchor.y > m_root.height() / 2;
   buildMenu(
-      m_model.schemeNames(), m_model.state().selectedScheme, m_schemeSelectButton,
-      /*upward=*/upward,
+      m_model.schemeNames(), m_model.state().selectedScheme, anchor,
+      /*appearance=*/true, /*upward=*/upward,
       /*rightAlign=*/true, /*zBase=*/60, m_schemeMenuPanel, m_schemeMenuControl, m_schemeMenuScroll,
       [this](std::size_t i) { selectScheme(i); }
   );
