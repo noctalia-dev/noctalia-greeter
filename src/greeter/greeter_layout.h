@@ -28,6 +28,14 @@ namespace greeter {
     // Unset follows the runtime Auto default, but does not override a synced mode.
     std::optional<LoginPresentation> loginPresentation;
     std::array<ComponentPlacement, 6> components;
+    bool empty() const {
+      if (loginPresentation)
+        return false;
+      for (const auto& p : components)
+        if (p.visible || p.anchor || p.x || p.y || p.width || p.output || p.rotation || p.scale || p.flipX || p.flipY)
+          return false;
+      return true;
+    }
   };
   struct LayoutRect {
     float x = 0, y = 0, width = 0, height = 0;

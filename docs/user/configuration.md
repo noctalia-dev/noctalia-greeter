@@ -88,8 +88,9 @@ Only PNG files with dimensions from 1 to 4096 on each axis are accepted, at most
 encoded and 128 MiB decoded. Directories and files must be owned by root or the
 running greeter user and must not be group/world writable. Symlink traversal,
 hard-linked files, arbitrary paths, home expansion and URLs are rejected.
-Images must already be installed: the appearance helper does not yet install
-staged images or widget profiles from Noctalia.
+The [constrained sync helper](sync.md#customization-payload) can install staged
+profiles and managed PNGs. Noctalia's customization Apply integration is still
+pending; ordinary appearance sync preserves the existing widget collection.
 
 An empty Sticker retains its placeholder. Missing, corrupt or invalid managed
 images prevent the collection from mounting and show a profile error while
@@ -278,7 +279,7 @@ The default UI places the clock and date on the left, the login card with the ho
 
 When both a default user and a discovered default session are configured (through CLI or `greeter.toml`), the card automatically uses the compact presentation: identity, credential field, and Sign in. A remembered last session alone does not enable it. Missing session defaults use the full card. Press **Esc** to choose another account or session; selecting a different account/session restores the full card.
 
-Both `greeter.toml` and `sync.toml` retain component layout settings. Each explicit administrator field wins over the corresponding Sync field; unset fields inherit Sync, then built-in defaults. An empty `[layout]` table leaves fields unspecified. The existing appearance sync helper does not yet install staged component layouts. Ordinary UI preference saves and appearance updates preserve stored Sync layouts.
+Both `greeter.toml` and `sync.toml` retain component layout settings. Each explicit administrator field wins over the corresponding Sync field; unset fields inherit Sync, then built-in defaults. An empty `[layout]` table leaves fields unspecified. The [constrained sync helper](sync.md#customization-payload) can replace or reset Sync's component layout. Ordinary UI preference saves and appearance-only updates preserve stored Sync layouts.
 
 ```toml
 [layout]

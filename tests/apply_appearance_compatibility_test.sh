@@ -24,6 +24,16 @@ if ! cmp -s "$test_dir/expected" "$test_dir/stdout" || [ -s "$test_dir/stderr" ]
     exit 1
 fi
 
+printf 'greeter-customization-sync-v1\n' > "$test_dir/expected"
+if ! "$helper" --supports greeter-customization-sync-v1 > "$test_dir/stdout" 2> "$test_dir/stderr"; then
+    printf 'customization capability probe failed\n' >&2
+    exit 1
+fi
+if ! cmp -s "$test_dir/expected" "$test_dir/stdout" || [ -s "$test_dir/stderr" ]; then
+    printf 'customization capability response was not exact\n' >&2
+    exit 1
+fi
+
 status=0
 "$helper" --supports secure-sync-v2 > "$test_dir/stdout" 2> "$test_dir/stderr" || status=$?
 if [ "$status" -ne 2 ] || [ -s "$test_dir/stdout" ] || ! grep -Fq -- '--supports secure-sync-v1' "$test_dir/stderr"; then

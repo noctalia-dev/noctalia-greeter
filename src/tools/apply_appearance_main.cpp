@@ -15,6 +15,7 @@ namespace {
 
   constexpr Logger kLog("apply-appearance");
   constexpr std::string_view kSecureSyncCapability = "secure-sync-v1";
+  constexpr std::string_view kCustomizationCapability = "greeter-customization-sync-v1";
 
   void printUsage(const char* programName) {
     std::cerr
@@ -26,7 +27,7 @@ namespace {
         << " --sync <staging-directory>\n"
         << "       "
         << programName
-        << " --supports secure-sync-v1\n"
+        << " --supports secure-sync-v1|greeter-customization-sync-v1\n"
         << "       "
         << programName
         << " --setup-system\n"
@@ -55,8 +56,11 @@ namespace {
 
 int main(int argc, char* argv[]) {
   setApplicationIdentity({.name = "noctalia-greeter", .envPrefix = "NOCTALIA_GREETER"});
-  if (argc == 3 && std::string_view(argv[1]) == "--supports" && std::string_view(argv[2]) == kSecureSyncCapability) {
-    std::cout << kSecureSyncCapability << '\n';
+  if (argc == 3
+      && std::string_view(argv[1]) == "--supports"
+      && (std::string_view(argv[2]) == kSecureSyncCapability
+          || std::string_view(argv[2]) == kCustomizationCapability)) {
+    std::cout << argv[2] << '\n';
     return 0;
   }
 

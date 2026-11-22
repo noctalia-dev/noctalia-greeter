@@ -251,6 +251,9 @@ _apply_appearance_support_sources = files(
     'src/greeter/greeter_layout.cpp',
   'src/greeter/greeter_preferences.cpp',
   'src/tools/secure_appearance_sync.cpp',
+  'src/tools/greeter_customization_sync.cpp',
+  'src/greeter/widgets/widget_image_source.cpp',
+  'src/greeter/widgets/widget_image_loader.cpp',
 ) + _widget_config_sources
 
 _apply_appearance_sources = _apply_appearance_support_sources + files('src/tools/apply_appearance_main.cpp')
@@ -259,7 +262,7 @@ _greeter_tools_inc = include_directories('src', 'lib')
 
 apply_appearance_executable = executable('noctalia-greeter-apply-appearance',
   sources: _apply_appearance_sources,
-  dependencies: [nlohmann_dep, tomlplusplus_dep, noctalia_ui_dep],
+  dependencies: [nlohmann_dep, tomlplusplus_dep, noctalia_ui_codecs_dep],
   include_directories: _greeter_tools_inc,
   cpp_args: [
     '-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow',
@@ -397,7 +400,7 @@ legacy_staging_compatibility_test = executable(
     'src/greeter/appearance_config.cpp',
     'tests/legacy_staging_compatibility_test.cpp',
   ),
-  dependencies: [nlohmann_dep, tomlplusplus_dep, noctalia_ui_dep],
+  dependencies: [nlohmann_dep, tomlplusplus_dep, noctalia_ui_codecs_dep],
   include_directories: _greeter_tools_inc,
   cpp_args: [
     '-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow',
@@ -408,11 +411,22 @@ legacy_staging_compatibility_test = executable(
 
 test('legacy-staging-compatibility', legacy_staging_compatibility_test)
 
+greeter_customization_sync_test = executable(
+  'greeter-customization-sync-test',
+  sources: _apply_appearance_support_sources + files('tests/greeter_customization_sync_test.cpp'),
+  dependencies: [nlohmann_dep, tomlplusplus_dep, noctalia_ui_codecs_dep],
+  include_directories: _greeter_tools_inc,
+  cpp_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow', '-DNOCTALIA_GREETER_TESTING'],
+  link_args: ['-Wl,--wrap=rename'],
+  build_by_default: false,
+)
+test('greeter-customization-sync', greeter_customization_sync_test)
+
 config_preservation_test = executable(
   'config-preservation-test',
   sources: files('tests/config_preservation_test.cpp', 'src/greeter/appearance_config.cpp'),
   objects: apply_appearance_executable.extract_objects(_apply_appearance_support_sources),
-  dependencies: [nlohmann_dep, tomlplusplus_dep, noctalia_ui_dep],
+  dependencies: [nlohmann_dep, tomlplusplus_dep, noctalia_ui_codecs_dep],
   include_directories: _greeter_tools_inc,
   cpp_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow'],
   build_by_default: false,

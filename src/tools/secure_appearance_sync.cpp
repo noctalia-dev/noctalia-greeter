@@ -3,6 +3,7 @@
 #include "greeter/appearance_sync.h"
 #include "greeter/greetd_user.h"
 #include "greeter/greeter_config_store.h"
+#include "tools/greeter_customization_sync.h"
 
 #include <algorithm>
 #include <array>
@@ -44,6 +45,9 @@ namespace greeter::secure_sync {
     constexpr std::uint64_t kTotalSizeLimit = 512U * 1024U * 1024U;
     // Config + three output files + a fallback and up to sixteen per-output wallpapers.
     constexpr std::size_t kFileCountLimit = 22;
+    constexpr std::size_t kWidgetImageCountLimit = 32;
+    constexpr std::uint64_t kWidgetImageSizeLimit = 16U * 1024U * 1024U;
+    constexpr std::uint64_t kWidgetImageTotalLimit = 64U * 1024U * 1024U;
     constexpr std::size_t kOutputEntryLimit = 16;
     constexpr std::size_t kOutputNameLengthLimit = 127;
     constexpr std::size_t kPaletteEntryLimit = 64;
@@ -511,6 +515,8 @@ namespace greeter::secure_sync {
           || name == appearance::kOutputScalesFileName) {
         return kOutputMetadataSizeLimit;
       }
+      if (!allowLegacyManifest && isWidgetImageFileName(name))
+        return kWidgetImageSizeLimit;
       if (isWallpaperFileName(name)) {
         return kWallpaperSizeLimit;
       }
@@ -566,7 +572,8 @@ namespace greeter::secure_sync {
         return setErrnoError("failed to enumerate the sync staging directory", errorOut);
       }
 
-      std::uint64_t totalBytes = 0;
+      std::uint64_t totalBytes = 0, widgetBytes = 0;
+      std::size_t ordinaryFiles = 0, widgetFiles = 0;
       bool foundSyncToml = false;
       bool foundLegacyManifest = false;
       errno = 0;
@@ -575,7 +582,9 @@ namespace greeter::secure_sync {
         if (name == "." || name == "..") {
           continue;
         }
-        if (snapshots.size() >= kFileCountLimit) {
+        const bool widgetImage = !allowLegacyManifest && isWidgetImageFileName(name);
+        if ((widgetImage && ++widgetFiles > kWidgetImageCountLimit)
+            || (!widgetImage && ++ordinaryFiles > kFileCountLimit)) {
           ::closedir(rawDirectory);
           errorOut = "sync staging directory contains too many files";
           return false;
@@ -608,7 +617,8 @@ namespace greeter::secure_sync {
         if (!S_ISREG(state.st_mode)
             || state.st_uid != callerUid
             || (state.st_mode & S_IWOTH) != 0
-            || (groupWritable && (!allowGroupWritable || state.st_nlink != 1))) {
+            || (groupWritable && (!allowGroupWritable || state.st_nlink != 1))
+            || (widgetImage && state.st_nlink != 1)) {
           ::closedir(rawDirectory);
           errorOut = "staged file has unsafe type, ownership, or permissions: '" + std::string(name) + "'";
           return false;
@@ -618,7 +628,8 @@ namespace greeter::secure_sync {
           errorOut = "staged files must reside on the caller runtime filesystem: '" + std::string(name) + "'";
           return false;
         }
-        if (state.st_size < 0 || static_cast<std::uint64_t>(state.st_size) > *fileLimit) {
+        const auto boundedLimit = widgetImage ? std::min(*fileLimit, kWidgetImageTotalLimit - widgetBytes) : *fileLimit;
+        if (state.st_size < 0 || static_cast<std::uint64_t>(state.st_size) > boundedLimit) {
           ::closedir(rawDirectory);
           errorOut = "staged file exceeds the allowed size: '" + std::string(name) + "'";
           return false;
@@ -627,11 +638,13 @@ namespace greeter::secure_sync {
         StagedFileSnapshot snapshot;
         snapshot.name = name;
         snapshot.contents.reserve(static_cast<std::size_t>(state.st_size));
-        if (!snapshotFileContents(source.get(), *fileLimit, totalBytes, snapshot.contents, errorOut)) {
+        if (!snapshotFileContents(source.get(), boundedLimit, totalBytes, snapshot.contents, errorOut)) {
           ::closedir(rawDirectory);
           return false;
         }
 
+        if (widgetImage)
+          widgetBytes += snapshot.contents.size();
         if (name == appearance::kSyncTomlFileName) {
           foundSyncToml = true;
         } else if (name == appearance::kManifestFileName) {
@@ -1056,6 +1069,25 @@ namespace greeter::secure_sync {
       return true;
     }
 
+    [[nodiscard]] bool applyPrivatePayload(
+        const TemporaryDirectory& staging, const std::unordered_set<std::string>& wallpaperFiles, bool install,
+        std::string& errorOut
+    ) {
+      CustomizationUpdate customization;
+      if (!prepareCustomization(staging.path(), customization, errorOut)
+          || !validatePayload(staging, wallpaperFiles, errorOut))
+        return false;
+      if (!install)
+        return true;
+      if (!validateLiveSync(errorOut))
+        return false;
+      if (customization.present())
+        return installCustomization(staging.path(), std::move(customization), wallpaperFiles, errorOut);
+      if (!appearance::installFromStaging(staging.path(), errorOut))
+        return false;
+      return appearance::applySyncedGreeterPreferences(staging.path(), false, errorOut);
+    }
+
     [[nodiscard]] bool dropPrivileges(const TargetAccount& account, std::string& errorOut) {
       if (::setgroups(0, nullptr) != 0) {
         return setErrnoError("failed to clear supplementary groups", errorOut);
@@ -1142,7 +1174,23 @@ namespace greeter::secure_sync {
       if (!privateStaging.create(errorOut) || !materializeSnapshots(privateStaging, snapshots, errorOut)) {
         return false;
       }
-      return validatePayload(privateStaging, wallpaperFiles, errorOut);
+      return applyPrivatePayload(privateStaging, wallpaperFiles, false, errorOut);
+    }
+
+    bool applyConstrainedPayloadForTesting(const std::filesystem::path& stagingDirectory, std::string& errorOut) {
+      UniqueFd staging(::open(stagingDirectory.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW));
+      if (!staging.valid())
+        return setErrnoError("failed to open staging fixture", errorOut);
+      std::vector<StagedFileSnapshot> snapshots;
+      std::unordered_set<std::string> wallpapers;
+      if (!snapshotStagingFiles(
+              staging.get(), ::getuid(), snapshots, wallpapers, false, WritableEntryPolicy::Reject, errorOut
+          ))
+        return false;
+      TemporaryDirectory privateStaging;
+      if (!privateStaging.create(errorOut) || !materializeSnapshots(privateStaging, snapshots, errorOut))
+        return false;
+      return applyPrivatePayload(privateStaging, wallpapers, true, errorOut);
     }
 
   } // namespace detail
@@ -1204,16 +1252,7 @@ namespace greeter::secure_sync {
     if (!materializeSnapshots(privateStaging, snapshots, errorOut)) {
       return false;
     }
-    if (!validatePayload(privateStaging, wallpaperFiles, errorOut)) {
-      return false;
-    }
-    if (!validateLiveSync(errorOut)) {
-      return false;
-    }
-    if (!appearance::installFromStaging(privateStaging.path(), errorOut)) {
-      return false;
-    }
-    return appearance::applySyncedGreeterPreferences(privateStaging.path(), /*includeSessionCommands=*/false, errorOut);
+    return applyPrivatePayload(privateStaging, wallpaperFiles, true, errorOut);
   }
 
   bool applyLegacyFromStaging(const std::filesystem::path& stagingDirectory, std::string& errorOut) {

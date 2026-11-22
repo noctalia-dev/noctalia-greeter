@@ -7,7 +7,7 @@
 
 namespace greeter::secure_sync {
 
-  // Applies the Polkit-authorized appearance-only sync after snapshotting bounded
+  // Applies Polkit-authorized appearance and optional visual customization sync after snapshotting bounded
   // caller-owned files, dropping to the greeter account, and parsing them there.
   [[nodiscard]] bool applyFromStaging(const std::filesystem::path& stagingDirectory, std::string& errorOut);
 
@@ -34,6 +34,9 @@ namespace greeter::secure_sync {
     // semantic checks used by the privileged apply path.
     [[nodiscard]] bool
     validateConstrainedPayloadForTesting(const std::filesystem::path& stagingDirectory, std::string& errorOut);
+
+    [[nodiscard]] bool
+    applyConstrainedPayloadForTesting(const std::filesystem::path& stagingDirectory, std::string& errorOut);
 
   } // namespace detail
 #endif

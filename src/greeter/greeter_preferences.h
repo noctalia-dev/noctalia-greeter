@@ -64,6 +64,9 @@ namespace greeter {
   struct GreeterSyncAppearanceUpdate {
     config::GreeterTomlAppearance appearance;
     bool replaceSession = true;
+    // Absence preserves Sync; engaged empty/default snapshots reset that section.
+    std::optional<GreeterLayoutConfig> layout;
+    std::optional<WidgetCollection> widgets;
     std::optional<std::string> sessionPowerSuspend;
     std::optional<std::string> sessionPowerReboot;
     std::optional<std::string> sessionPowerShutdown;

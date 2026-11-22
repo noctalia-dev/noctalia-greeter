@@ -576,7 +576,8 @@ namespace greeter::appearance {
   }
 
   bool applySyncedGreeterPreferences(
-      const std::filesystem::path& stagingDirectory, const bool includeSessionCommands, std::string& errorOut
+      const std::filesystem::path& stagingDirectory, const bool includeSessionCommands, std::string& errorOut,
+      const std::optional<GreeterLayoutConfig>& stagedLayout, const std::optional<WidgetCollection>& stagedWidgets
   ) {
     auto readStagedText = [&](std::string_view fileName, std::optional<std::string>& out) -> bool {
       const auto path = stagingDirectory / fileName;
@@ -627,6 +628,8 @@ namespace greeter::appearance {
     std::error_code ec;
     greeter::GreeterSyncAppearanceUpdate appearanceUpdate;
     appearanceUpdate.replaceSession = includeSessionCommands;
+    appearanceUpdate.layout = stagedLayout;
+    appearanceUpdate.widgets = stagedWidgets;
     if (std::filesystem::is_regular_file(stagedSyncPath, ec) && !ec) {
       const config::GreeterSyncFile staged = config::loadSync(stagedSyncPath);
       if (!staged.appearance.hasCompletePalette()) {

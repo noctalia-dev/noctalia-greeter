@@ -445,6 +445,10 @@ namespace greeter {
     }
     if (appearanceUpdate.has_value()) {
       sync.appearance = appearanceUpdate->appearance;
+      if (appearanceUpdate->layout)
+        sync.layout = appearanceUpdate->layout->empty() ? std::nullopt : appearanceUpdate->layout;
+      if (appearanceUpdate->widgets)
+        sync.widgets = appearanceUpdate->widgets->instances ? appearanceUpdate->widgets : std::nullopt;
       if (appearanceUpdate->replaceSession) {
         sync.sessionPowerSuspend = appearanceUpdate->sessionPowerSuspend;
         sync.sessionPowerReboot = appearanceUpdate->sessionPowerReboot;

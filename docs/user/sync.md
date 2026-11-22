@@ -45,7 +45,11 @@ unrelated values in `sync.toml` are preserved. The authenticated compatibility
 path retains the older payload, including Noctalia's configured session power
 commands and actions, because older greeters expect it.
 
-Greeter UI component settings (`[layout]` and its component tables) belong to `greeter.toml`. Appearance sync leaves them intact; `[output].layout` remains the synchronized monitor arrangement. A Noctalia editor/exporter for greeter components is deferred.
+Greeter UI component settings (`[layout]` and its component tables) can be
+declared in `greeter.toml` or installed into Sync by the customization protocol
+below. Ordinary appearance sync preserves them. `[output].layout` remains the
+synchronized monitor arrangement. Noctalia's customization Apply integration is
+still pending.
 
 User avatars are also separate from appearance sync. They come from AccountsService, so enable `accountsservice` or `accounts-daemon` if you want the avatar selected in Noctalia to appear in the greeter.
 
@@ -64,6 +68,70 @@ authorization. A compatible helper selects constrained sync; a recognized
 older helper selects the legacy path. An unrecognized response stops the
 operation. A failed or cancelled constrained sync is never retried through the
 legacy path.
+
+## Customization payload
+
+The installed helper advertises customization installation with:
+
+```sh
+noctalia-greeter-apply-appearance --supports greeter-customization-sync-v1
+```
+
+Success prints exactly `greeter-customization-sync-v1`. The existing
+`secure-sync-v1` capability remains available. Customization clients must require
+the new capability and use the same `--sync` operation and constrained Polkit
+action; they must not fall back to the positional legacy helper. All existing
+runtime-directory, trusted-install and caller-ownership requirements still apply.
+
+Staged `sync.toml` must contain a complete appearance payload, and may also
+contain the validated `[layout]` and `[widgets]` tables described in
+[Configuration](configuration.md). These sections update only `sync.toml`:
+
+| Staged section | Effect on stored Sync settings |
+| --- | --- |
+| Omitted `[layout]` or `[widgets]` | Preserve that section |
+| Empty `[layout]` | Remove Sync's core layout overrides |
+| Empty `[widgets]` | Remove Sync's collection override and request defaults |
+| `[widgets]` with `widget_order = []` | Store an explicit empty collection |
+| Populated section | Replace that section with the validated snapshot |
+
+Administrator fields in `greeter.toml` retain priority: core layout overrides
+apply per field, while an explicit administrator widget collection owns the
+whole collection. Login cannot be hidden or pinned to one output. Staged login
+width is limited to 280–640 logical pixels. Session commands, scripts, plugin
+widgets, arbitrary image paths, `[clock]`, and legacy `[layout.clock]` are rejected.
+Monitor metadata continues to use the existing dedicated output files.
+
+Sticker images use flat staged filenames `widget-<lowercase-sha256>.png`. List
+each distinct filename exactly once in the staging-only manifest:
+
+```toml
+[assets]
+images = ["widget-<lowercase-sha256>.png"]
+```
+
+Each Sticker's `image_path` must be the corresponding relative
+`widget-assets/<lowercase-sha256>.png`. The manifest, nonempty Sticker references
+(including disabled Stickers), and staged PNG files must match exactly.
+The helper verifies hashes, PNG contents and
+[image limits](configuration.md#desktop-widgets), installs files as `0644` under
+the greeter-owned `widget-assets/` directory, and rewrites references to their
+installed absolute paths. Identical valid installed images are reused; an unsafe
+or corrupt existing destination is rejected. The `assets` manifest is not stored
+in live config.
+
+Staging allows up to 32 PNGs, 16 MiB each and 64 MiB combined, separately from the
+existing 22-file appearance/output quota. The overall 512 MiB staging limit is
+unchanged. Root snapshots bounded files before dropping privileges permanently;
+PNG decoding and installation run as the greeter account. Symlinks and hard-linked
+widget images are rejected.
+
+A failed customization install restores replaced wallpapers and removes newly
+installed images; the config merge uses the existing atomic writer. After a
+successful install, unused managed images are removed only when no administrator
+or Sync Sticker references them. Cleanup skips unsafe file types and stops if
+either config has diagnostics. Appearance-only sync and the authenticated legacy
+operation retain their existing behavior.
 
 ## Synced state and precedence
 
