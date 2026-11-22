@@ -115,6 +115,7 @@ _greeter_sources = files(
   'src/greeter/greeter_config_io.cpp',
   'src/greeter/greeter_layout.cpp',
   'src/greeter/widgets/widget_model.cpp',
+  'src/greeter/widgets/widget_config.cpp',
   'src/greeter/widgets/widget_catalog.cpp',
   'src/greeter/widgets/widget_settings.cpp',
   'src/greeter/widgets/widget_settings_validation.cpp',
@@ -597,6 +598,23 @@ widget_model_test = executable(
   build_by_default: false,
 )
 test('widget-model', widget_model_test)
+
+widget_config_test = executable(
+  'widget-config-test',
+  sources: files(
+    'tests/widget_config_test.cpp',
+    'src/greeter/widgets/widget_config.cpp',
+    'src/greeter/widgets/widget_model.cpp',
+    'src/greeter/widgets/widget_catalog.cpp',
+    'src/greeter/widgets/widget_settings.cpp',
+    'src/greeter/widgets/widget_settings_validation.cpp',
+  ),
+  dependencies: [tomlplusplus_dep, noctalia_ui_dep],
+  include_directories: _greeter_inc,
+  cpp_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow'],
+  build_by_default: false,
+)
+test('widget-config', widget_config_test)
 
 widget_catalog_test = executable(
   'widget-catalog-test',
