@@ -5,8 +5,7 @@
 #include "greeter/widgets/clock_widget.h"
 #include "greeter/widgets/label_widget.h"
 #include "greeter/widgets/sticker_widget.h"
-#include "greeter/widgets/sysmon_gauge_widget.h"
-#include "greeter/widgets/sysmon_graph_widget.h"
+#include "greeter/widgets/sysmon_widget.h"
 #include "greeter/widgets/widget_settings.h"
 
 #include <algorithm>
@@ -89,29 +88,21 @@ namespace greeter {
     }
     if (instance.type == "sysmon") {
       const auto primary = findSysmonMetric(text("stat"))->metric;
-      if (text("display") == "gauge") {
-        content = std::make_unique<SysmonGaugeWidget>(SysmonGaugeWidget::Options{
-            .metric = primary,
-            .color = colorSpec(text("color")),
-            .highlightColor = colorSpec(text("highlight_color")),
-            .fontFamily = text("font_family"),
-            .stacked = text("gauge_layout") == "vertical",
-            .showLabel = std::get<bool>(settings.at("show_label")),
-            .labelMinWidth = number(settings.at("label_min_width")),
-            .shadow = std::get<bool>(settings.at("shadow")),
-        });
-      } else {
-        content = std::make_unique<SysmonGraphWidget>(SysmonGraphWidget::Options{
-            .primary = primary,
-            .secondary =
-                text("stat2").empty() ? std::nullopt : std::make_optional(findSysmonMetric(text("stat2"))->metric),
-            .color = colorSpec(text("color")),
-            .color2 = colorSpec(text("color2")),
-            .fontFamily = text("font_family"),
-            .showLabel = std::get<bool>(settings.at("show_label")),
-            .shadow = std::get<bool>(settings.at("shadow")),
-        });
-      }
+      const bool gauge = text("display") == "gauge";
+      content = std::make_unique<SysmonWidget>(SysmonWidget::Options{
+          .primary = primary,
+          .secondary = !gauge && !text("stat2").empty() ? std::make_optional(findSysmonMetric(text("stat2"))->metric)
+                                                        : std::nullopt,
+          .gauge = gauge,
+          .color = colorSpec(text("color")),
+          .color2 = colorSpec(text("color2")),
+          .highlightColor = colorSpec(text("highlight_color")),
+          .fontFamily = text("font_family"),
+          .stacked = text("gauge_layout") == "vertical",
+          .showLabel = std::get<bool>(settings.at("show_label")),
+          .labelMinWidth = number(settings.at("label_min_width")),
+          .shadow = std::get<bool>(settings.at("shadow")),
+      });
       if (metrics != nullptr)
         content->updateMetrics(*metrics);
     } else if (instance.type == "sticker") {

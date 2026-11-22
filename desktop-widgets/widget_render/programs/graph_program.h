@@ -7,9 +7,9 @@
 #include <GLES2/gl2.h>
 
 class TextureId;
-struct SysmonGraphStyle;
+struct GraphStyle;
 
-class SysmonGraphProgram final : public RenderExtension {
+class GraphProgram final : public RenderExtension {
 public:
   void ensureInitialized();
   void destroy() override;
@@ -17,7 +17,7 @@ public:
 
   void draw(
       TextureId dataTexture, int texWidth, float surfaceWidth, float surfaceHeight, float width, float height,
-      const SysmonGraphStyle& style, const Mat3& transform = Mat3::identity()
+      const GraphStyle& style, const Mat3& transform = Mat3::identity()
   ) const;
 
 private:
@@ -28,10 +28,13 @@ private:
   GLint m_transformLoc = -1;
   GLint m_lineColor1Loc = -1;
   GLint m_lineColor2Loc = -1;
+  GLint m_lineColor3Loc = -1;
   GLint m_count1Loc = -1;
   GLint m_count2Loc = -1;
+  GLint m_count3Loc = -1;
   GLint m_scroll1Loc = -1;
   GLint m_scroll2Loc = -1;
+  GLint m_scroll3Loc = -1;
   GLint m_lineWidthLoc = -1;
   GLint m_graphFillOpacityLoc = -1;
   GLint m_texWidthLoc = -1;

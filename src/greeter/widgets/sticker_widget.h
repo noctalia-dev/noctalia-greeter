@@ -8,7 +8,7 @@
 #include <memory>
 #include <string>
 
-class Image;
+class StickerWidget;
 
 namespace greeter {
 
@@ -22,7 +22,7 @@ namespace greeter {
 
   private:
     StickerWidget(std::shared_ptr<const LoadedImageFile> pixels, float opacity);
-    Image* m_image = nullptr;
+    ::StickerWidget* m_sticker = nullptr;
     std::shared_ptr<const LoadedImageFile> m_pixels;
     SharedTextureCache::Lease m_lease;
   };

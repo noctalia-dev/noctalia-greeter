@@ -1,8 +1,6 @@
 #include "greeter/widgets/sticker_widget.h"
 
-#include "ui/controls/image.h"
-
-#include <algorithm>
+#include <sticker_widget.h>
 #include <utility>
 
 namespace greeter {
@@ -11,11 +9,9 @@ namespace greeter {
       : m_pixels(std::move(pixels)) {
     setHitTestVisible(false);
     setOpacity(opacity);
-    auto image = std::make_unique<Image>();
-    m_image = image.get();
-    image->setHitTestVisible(false);
-    image->setFit(ImageFit::Contain);
-    addChild(std::move(image));
+    auto sticker = std::make_unique<::StickerWidget>();
+    m_sticker = sticker.get();
+    addChild(std::move(sticker));
   }
 
   std::expected<std::unique_ptr<StickerWidget>, std::string> StickerWidget::create(
@@ -41,15 +37,11 @@ namespace greeter {
 
   void StickerWidget::layoutAtScale(Renderer& renderer, float scale) {
     // The cache uploads from dispatch; layout only binds its current externally owned texture.
-    m_image->setExternalTexture(renderer, m_lease.texture());
-    const float baseSize = 200.0F * scale;
-    const float width = m_pixels ? static_cast<float>(m_pixels->width) : 1.0F;
-    const float height = m_pixels ? static_cast<float>(m_pixels->height) : 1.0F;
-    const float longest = std::max(width, height);
-    const float fittedWidth = baseSize * width / longest;
-    const float fittedHeight = baseSize * height / longest;
-    m_image->setSize(fittedWidth, fittedHeight);
-    setSize(fittedWidth, fittedHeight);
+    if (m_pixels)
+      m_sticker->setExternalTexture(renderer, m_lease.texture(), m_pixels->width, m_pixels->height);
+    m_sticker->setContentScale(scale);
+    m_sticker->layout(renderer);
+    setSize(m_sticker->width(), m_sticker->height());
   }
 
 } // namespace greeter

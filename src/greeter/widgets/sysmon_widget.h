@@ -7,34 +7,41 @@
 #include <array>
 #include <string>
 
-class Glyph;
-class Label;
+class DesktopSysmon;
 
 namespace greeter {
-  class SysmonGraphPlot;
 
-  class SysmonGraphWidget final : public WidgetContent {
+  class SysmonWidget final : public WidgetContent {
   public:
     struct Options {
       SysmonMetric primary;
       std::optional<SysmonMetric> secondary;
+      bool gauge;
       ColorSpec color;
       ColorSpec color2;
+      ColorSpec highlightColor;
       std::string fontFamily;
+      bool stacked;
       bool showLabel;
+      float labelMinWidth;
       bool shadow;
     };
-    explicit SysmonGraphWidget(const Options& options);
+    explicit SysmonWidget(const Options& options);
     void layoutAtScale(Renderer& renderer, float scale) override;
     bool updateMetrics(const SysmonSnapshot& snapshot) override;
 
   private:
+    void syncGauge();
+
+    ::DesktopSysmon* m_widget = nullptr;
     std::array<SysmonMetric, 2> m_metrics;
-    std::size_t m_count;
     std::array<SysmonReading, 2> m_readings;
-    std::array<Glyph*, 2> m_glyphs{};
-    std::array<Label*, 2> m_labels{};
-    SysmonGraphPlot* m_plot = nullptr;
+    std::size_t m_count;
+    bool m_gauge;
+    bool m_historyDirty = true;
+    ColorSpec m_color;
+    ColorSpec m_highlightColor;
+    Signal<>::ScopedConnection m_paletteConnection;
   };
 
 } // namespace greeter
