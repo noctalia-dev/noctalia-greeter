@@ -1175,8 +1175,10 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
   const float headerToContentGap = Style::spaceLg();
   const float headerBlockHeight = headerTopPadding + headerGlyphBlock + subtitleGap + headerToContentGap;
 
-  const float sessionRowH = rowHeight;
-  const float sessionRowGap = rowGap;
+  // A single session leaves nothing to choose: drop the selector and its row.
+  const bool hasSessionChoice = m_sessions.size() > 1;
+  const float sessionRowH = hasSessionChoice ? rowHeight : 0.0f;
+  const float sessionRowGap = hasSessionChoice ? rowGap : 0.0f;
 
   const float userBlockHeight = showsUserDropdown() ? rowHeight : 0.0f;
   const float userPickerContentHeight = userBlockHeight + sessionRowGap + sessionRowH;
@@ -2241,6 +2243,9 @@ void GreeterSurface::openUserMenu() {
 }
 
 void GreeterSurface::toggleSessionMenu() {
+  if (m_sessions.size() <= 1) {
+    return;
+  }
   m_sessionMenuOpen = !m_sessionMenuOpen;
   if (m_sessionMenuOpen) {
     m_userMenuOpen = false;
@@ -2398,7 +2403,7 @@ void GreeterSurface::rebuildFocusRing() {
                            }});
   }
 
-  if (m_sessionSelectArea != nullptr) {
+  if (m_sessionSelectArea != nullptr && m_sessions.size() > 1) {
     m_focusRing.push_back({m_sessionSelectArea, [this]() { toggleSessionMenu(); }});
   }
   if (m_schemeSelectArea != nullptr && m_schemeSelectArea->visible()) {
@@ -2641,6 +2646,17 @@ void GreeterSurface::layoutPanelSessionSelector(float x, float y, float w, float
       || m_sessionSelectLabel == nullptr
       || m_sessionSelectGlyph == nullptr
       || m_sessionSelectArea == nullptr) {
+    return;
+  }
+
+  if (m_sessions.size() <= 1) {
+    m_sessionSelectBox->setVisible(false);
+    m_sessionSelectArea->setVisible(false);
+    if (m_sessionSelectIcon != nullptr) {
+      m_sessionSelectIcon->setVisible(false);
+    }
+    m_sessionSelectLabel->setVisible(false);
+    m_sessionSelectGlyph->setVisible(false);
     return;
   }
 
