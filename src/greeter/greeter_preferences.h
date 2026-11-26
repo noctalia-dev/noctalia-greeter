@@ -6,6 +6,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 namespace greeter {
@@ -23,6 +24,7 @@ namespace greeter {
 
   struct GreeterPreferences {
     std::optional<std::string> defaultSession;
+    std::unordered_map<std::string, std::string> userSessions;
     // greeter.toml [keyboard].layout, e.g. "us,fr"; used for short layout labels.
     std::optional<std::string> keyboardLayout;
     std::optional<std::string> defaultUser;

@@ -21,6 +21,7 @@
 #include <string>
 #include <string_view>
 #include <sys/types.h>
+#include <unordered_map>
 #include <vector>
 
 class Box;
@@ -237,6 +238,7 @@ private:
   Label* m_statusLabel = nullptr;
   Label* m_layoutLabel = nullptr;
   std::string m_layoutText;
+  std::unordered_map<std::string, std::string> m_userSessions;
   RectNode* m_configErrorBanner = nullptr;
   Label* m_configErrorHeading = nullptr;
   Label* m_configErrorLabel = nullptr;

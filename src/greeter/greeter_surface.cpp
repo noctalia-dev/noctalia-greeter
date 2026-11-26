@@ -765,7 +765,15 @@ void GreeterSurface::setWindow(GreeterWindow* window) { m_window = window; }
 
 void GreeterSurface::setGreetdClient(GreetdClient* client) { m_greetdClient = client; }
 
-void GreeterSurface::setUsername(const std::string& username) { m_username = username; }
+void GreeterSurface::setUsername(const std::string& username) {
+  m_username = username;
+  // Per-user session from [session.users]; the selector can still override it.
+  if (const auto it = m_userSessions.find(username); it != m_userSessions.end()) {
+    if (const auto index = greeter::findSessionIndex(m_sessions, it->second)) {
+      m_selectedSession = *index;
+    }
+  }
+}
 
 void GreeterSurface::setKeyboardLayoutText(const std::string& text) {
   if (text == m_layoutText) {
@@ -2198,6 +2206,7 @@ void GreeterSurface::syncWallpaperTexture() {
 void GreeterSurface::loadPreferences() {
   const auto prefs = greeter::loadGreeterPreferences();
   m_allowEmptyPassword = prefs.allowEmptyPassword;
+  m_userSessions = prefs.userSessions;
   const auto initialSession = greeter::resolveInitialSessionName(prefs);
 
   if (initialSession.has_value()) {

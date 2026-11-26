@@ -404,6 +404,7 @@ namespace greeter {
 
     GreeterPreferences prefs;
     prefs.defaultSession = file.sessionDefault;
+    prefs.userSessions = file.sessionUsers;
     prefs.keyboardLayout = file.keyboardLayout;
     prefs.defaultUser = file.userDefault;
     prefs.session = sync.sessionLast;

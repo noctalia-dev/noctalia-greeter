@@ -57,6 +57,7 @@ Set these keys in `greeter.toml`. A command-line `--session` or `--user` value t
 | Key | Purpose |
 |-----|---------|
 | `[session].default` | Session selected on startup; overrides `[session].last` |
+| `[session.users]` | Per-user session, preselected when that user is chosen |
 | `[user].default` | Username selected on startup; opens the password step |
 | `[appearance].scheme` | Color scheme: `Synced` or a built-in name such as `Noctalia` |
 | `[appearance].password_style` | Password mask: `default` or `random` |
@@ -153,6 +154,16 @@ command = "/usr/bin/noctalia-greeter-session -- --session niri"
 ```
 
 Resolution order is command-line `--session`, `[session].default`, remembered `[session].last`, then the first discovered session. An unknown name is ignored.
+
+To give each account its own session, map usernames to session names:
+
+```toml
+[session.users]
+alice = "niri"
+bob = "Plasma (Wayland)"
+```
+
+When a listed user is chosen, their session is preselected; the picker can still change it for that login. Users without an entry keep the order above.
 
 Before PAM opens the selected session, the greeter passes `XDG_SESSION_TYPE=wayland` and derives `XDG_CURRENT_DESKTOP` and `XDG_SESSION_DESKTOP` from the desktop entry's `DesktopNames=`. This helps environments that expect systemd-managed session metadata. GNOME support remains best-effort compared with GDM.
 
