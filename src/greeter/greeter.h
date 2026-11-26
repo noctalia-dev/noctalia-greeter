@@ -50,6 +50,7 @@ private:
   [[nodiscard]] bool claimAuthSurface(GreeterSurface* surface);
   void releaseAuthSurface(GreeterSurface* surface);
   void setupInputCallbacks(WaylandClient& client);
+  void refreshKeyboardLayout();
   void syncOutputWindows();
   void syncStateFrom(const GreeterSurface* source);
   void setActiveSurface(GreeterSurface* surface);
@@ -57,6 +58,8 @@ private:
   [[nodiscard]] View* viewForSurface(wl_surface* surface) noexcept;
 
   WaylandClient* m_client = nullptr;
+  std::vector<std::string> m_layoutCodes;
+  std::string m_layoutText;
   GlSharedContext m_glSharedContext;
   std::unique_ptr<RenderContext> m_renderContext;
   std::vector<View> m_views;

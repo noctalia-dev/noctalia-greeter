@@ -95,6 +95,8 @@ layout = "us,cz"
 variant = ",qwertz"
 options = "grp:alt_shift_toggle"
 ```
+The active layout appears as a short label in the top-right cornere of the login panel. With `[keyboard].layout` set,
+tht label is the matching code in upper case, otherwse it is the XKB layout name.
 
 Use standard [XKB layout codes](https://man.archlinux.org/man/xkeyboard-config.7#LAYOUTS) such as `de`, `fr`, or `ru`. You can also inspect `/usr/share/X11/xkb/rules/base.lst`; systems with systemd commonly provide `localectl list-x11-keymap-layouts`.
 

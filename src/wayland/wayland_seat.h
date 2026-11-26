@@ -72,6 +72,7 @@ public:
     bool operator==(const LockKeysState&) const = default;
   };
 
+  using LayoutChangedCallback = std::function<void()>;
   using PointerEventCallback = std::function<void(const PointerEvent&)>;
   using KeyboardEventCallback = std::function<void(const KeyboardEvent&)>;
 
@@ -142,6 +143,9 @@ public:
   [[nodiscard]] bool hasPointerPosition() const noexcept { return m_hasPointerPosition; }
   [[nodiscard]] double lastPointerX() const noexcept { return m_lastPointerX; }
   [[nodiscard]] double lastPointerY() const noexcept { return m_lastPointerY; }
+  void setLayoutChangedCallback(LayoutChangedCallback callback) { m_layoutChangedCallback = std::move(callback); }
+  // Effective xkb group index, or -1 without a keymap.
+  [[nodiscard]] int currentLayoutIndex() const;
   [[nodiscard]] std::string currentLayoutName() const;
   [[nodiscard]] std::vector<std::string> layoutNames() const;
   [[nodiscard]] LockKeysState lockKeysState() const;
@@ -185,6 +189,8 @@ private:
   xkb_compose_table* m_composeTable = nullptr;
   xkb_compose_state* m_composeState = nullptr;
   KeyboardEventCallback m_keyboardEventCallback;
+  LayoutChangedCallback m_layoutChangedCallback;
+  int m_lastLayoutIndex = -1;
 
   // Key repeat
   SteadyClock::time_point m_lastUserActivitySteady{};
