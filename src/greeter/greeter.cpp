@@ -15,11 +15,13 @@
 #include "wayland/wayland_seat.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cerrno>
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
 #include <poll.h>
+#include <sstream>
 #include <wayland-client.h>
 
 namespace {
@@ -320,6 +322,7 @@ void Greeter::syncOutputWindows() {
     view.surface->setOnGreetdTransportError([this](const GreetdError& error) { onGreetdTransportError(error); });
     view.surface->initialize(m_renderContext.get());
     view.surface->setSharedAuthBlocked(m_authSurface != nullptr);
+    view.surface->setKeyboardLayoutText(m_layoutText);
     if (m_greetdUnavailable) {
       view.surface->setGreetdUnavailable("Login service is unavailable. Restart greetd.");
     }
@@ -557,9 +560,38 @@ void Greeter::setupInputCallbacks(WaylandClient& client) {
     }
   });
 
+  client.setLayoutChangedCallback([this]() { refreshKeyboardLayout(); });
+
   client.setKeyboardEventCallback([this](const KeyboardEvent& event) {
     onKeyboardEvent(event.sym, event.utf32, event.modifiers, event.pressed, event.preedit);
   });
+}
+
+void Greeter::refreshKeyboardLayout() {
+  if (m_client == nullptr) {
+    return;
+  }
+  if (m_layoutCodes.empty()) {
+    // "us,fr" -> {"US", "FR"}; falls back to the xkb layout name when unset.
+    if (const auto layout = greeter::loadGreeterPreferences().keyboardLayout) {
+      std::stringstream ss(*layout);
+      for (std::string code; std::getline(ss, code, ',');) {
+        std::transform(code.begin(), code.end(), code.begin(), [](unsigned char c) { return std::toupper(c); });
+        m_layoutCodes.push_back(code);
+      }
+    }
+  }
+  const int index = m_client->currentLayoutIndex();
+  std::string text;
+  if (index >= 0 && static_cast<std::size_t>(index) < m_layoutCodes.size()) {
+    text = m_layoutCodes[static_cast<std::size_t>(index)];
+  } else if (index >= 0) {
+    text = m_client->currentLayoutName();
+  }
+  m_layoutText = text;
+  for (auto& view : m_views) {
+    view.surface->setKeyboardLayoutText(text);
+  }
 }
 
 void Greeter::onKeyboardEvent(

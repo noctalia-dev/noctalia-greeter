@@ -532,6 +532,15 @@ void GreeterSurface::initialize(RenderContext* context) {
   m_statusLabel->setZIndex(6);
   m_root.addChild(std::move(status));
 
+  auto layoutLabel = std::make_unique<Label>();
+  layoutLabel->setFontSize(Style::fontSizeCaption());
+  layoutLabel->setBold(true);
+  layoutLabel->setColor(colorForRole(ColorRole::OnSurfaceVariant));
+  layoutLabel->setHitTestVisible(false);
+  m_layoutLabel = layoutLabel.get();
+  m_layoutLabel->setZIndex(6);
+  m_root.addChild(std::move(layoutLabel));
+
   auto configErrorBanner = std::make_unique<RectNode>();
   configErrorBanner->setHitTestVisible(false);
   configErrorBanner->setVisible(false);
@@ -757,6 +766,14 @@ void GreeterSurface::setWindow(GreeterWindow* window) { m_window = window; }
 void GreeterSurface::setGreetdClient(GreetdClient* client) { m_greetdClient = client; }
 
 void GreeterSurface::setUsername(const std::string& username) { m_username = username; }
+
+void GreeterSurface::setKeyboardLayoutText(const std::string& text) {
+  if (text == m_layoutText) {
+    return;
+  }
+  m_layoutText = text;
+  requestLayout();
+}
 
 void GreeterSurface::setOnExitRequested(std::function<void()> callback) { m_onExitRequested = std::move(callback); }
 
@@ -1386,6 +1403,19 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
     }
   } else {
     m_backButton->setVisible(false);
+  }
+
+  if (m_layoutLabel != nullptr) {
+    const bool showLayout = showPasswordStep && !m_layoutText.empty();
+    m_layoutLabel->setVisible(showLayout);
+    if (showLayout) {
+      m_layoutLabel->setText(m_layoutText);
+      m_layoutLabel->setFontSize(Style::fontSizeCaption());
+      m_layoutLabel->measure(*renderer);
+      m_layoutLabel->setPosition(
+          std::round(contentLeft + contentWidth - m_layoutLabel->width()), std::round(panelY + panelPadding)
+      );
+    }
   }
 
   const float sessionY = m_passwordVisible ? (contentTop + Style::controlHeight() + sessionRowGap)

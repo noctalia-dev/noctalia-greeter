@@ -49,6 +49,8 @@ public:
   void setWallpaperSpanParams(const WallpaperSpanParams& params);
   void setGreetdClient(GreetdClient* client);
   void setUsername(const std::string& username);
+  // Short label of the active keyboard layout (e.g. "FR"); empty hides the indicator.
+  void setKeyboardLayoutText(const std::string& text);
   void setOnExitRequested(std::function<void()> callback);
   void setOnStateChanged(std::function<void(GreeterSurface*)> callback);
   void setOnUserSelectionRequested(std::function<bool()> callback);
@@ -233,6 +235,8 @@ private:
   Button* m_loginButton = nullptr;
   Button* m_backButton = nullptr;
   Label* m_statusLabel = nullptr;
+  Label* m_layoutLabel = nullptr;
+  std::string m_layoutText;
   RectNode* m_configErrorBanner = nullptr;
   Label* m_configErrorHeading = nullptr;
   Label* m_configErrorLabel = nullptr;

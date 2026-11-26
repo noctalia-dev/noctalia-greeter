@@ -728,6 +728,13 @@ void WaylandSeat::handleKeyboardModifiers(
   auto* self = static_cast<WaylandSeat*>(data);
   if (self->m_xkbState != nullptr) {
     xkb_state_update_mask(self->m_xkbState, modsDepressed, modsLatched, modsLocked, 0, 0, group);
+    const int layout = self->currentLayoutIndex();
+    if (layout != self->m_lastLayoutIndex) {
+      self->m_lastLayoutIndex = layout;
+      if (self->m_layoutChangedCallback) {
+        self->m_layoutChangedCallback();
+      }
+    }
   }
 }
 
@@ -766,6 +773,14 @@ void WaylandSeat::repeatTick() {
   m_repeatInDelay = false;
   const auto intervalMs = std::chrono::milliseconds(1000 / m_repeatRate);
   m_repeatNextFire = now + intervalMs;
+}
+
+int WaylandSeat::currentLayoutIndex() const {
+  if (m_xkbState == nullptr || m_xkbKeymap == nullptr) {
+    return -1;
+  }
+  const xkb_layout_index_t layout = xkb_state_serialize_layout(m_xkbState, XKB_STATE_LAYOUT_EFFECTIVE);
+  return layout == XKB_LAYOUT_INVALID ? -1 : static_cast<int>(layout);
 }
 
 std::string WaylandSeat::currentLayoutName() const {

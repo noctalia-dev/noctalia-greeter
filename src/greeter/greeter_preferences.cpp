@@ -404,6 +404,7 @@ namespace greeter {
 
     GreeterPreferences prefs;
     prefs.defaultSession = file.sessionDefault;
+    prefs.keyboardLayout = file.keyboardLayout;
     prefs.defaultUser = file.userDefault;
     prefs.session = sync.sessionLast;
     // greeter.toml is declarative and wins; sync.toml only carries the last UI pick.

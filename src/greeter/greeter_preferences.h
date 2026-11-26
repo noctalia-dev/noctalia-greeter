@@ -23,6 +23,8 @@ namespace greeter {
 
   struct GreeterPreferences {
     std::optional<std::string> defaultSession;
+    // greeter.toml [keyboard].layout, e.g. "us,fr"; used for short layout labels.
+    std::optional<std::string> keyboardLayout;
     std::optional<std::string> defaultUser;
     std::optional<std::string> session;
     std::optional<std::string> scheme;

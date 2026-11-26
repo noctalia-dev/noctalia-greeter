@@ -66,6 +66,9 @@ public:
 
   void setPointerEventCallback(WaylandSeat::PointerEventCallback callback);
   void setKeyboardEventCallback(WaylandSeat::KeyboardEventCallback callback);
+  void setLayoutChangedCallback(WaylandSeat::LayoutChangedCallback callback);
+  [[nodiscard]] int currentLayoutIndex() const { return m_seatHandler.currentLayoutIndex(); }
+  [[nodiscard]] std::string currentLayoutName() const { return m_seatHandler.currentLayoutName(); }
   void setOutputsChangedCallback(std::function<void()> callback);
   void setPreferredOutputName(std::optional<std::string> name);
 
