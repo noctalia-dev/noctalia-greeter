@@ -1,5 +1,5 @@
 project('noctalia-greeter', ['c', 'cpp'],
-  version: '1.7.0',
+  version: '1.7.1',
   default_options: [
     'cpp_std=c++20',
     'cpp_extensions=false',
@@ -14,7 +14,6 @@ cpp = meson.get_compiler('cpp')
 
 if get_option('buildtype') == 'release'
   add_project_arguments(
-    '-march=native', '-mtune=native',
     '-fomit-frame-pointer', '-ffunction-sections', '-fdata-sections',
     language: ['c', 'cpp'],
   )
@@ -22,6 +21,10 @@ if get_option('buildtype') == 'release'
     '-Wl,--gc-sections', '-Wl,--as-needed',
     language: ['c', 'cpp'],
   )
+endif
+
+if get_option('native_optimizations')
+  add_project_arguments('-march=native', '-mtune=native', language: ['c', 'cpp'])
 endif
 
 wayland_client_dep = dependency('wayland-client')
@@ -102,6 +105,7 @@ _greeter_sources = files(
   'src/core/resource_paths.cpp',
   'src/core/ui_phase.cpp',
   'src/time/time_format.cpp',
+  'src/time/time_locale.cpp',
   'src/wayland/wayland_client.cpp',
   'src/wayland/wayland_seat.cpp',
   'src/render/gl_shared_context.cpp',
@@ -297,6 +301,9 @@ install_data(
 noctalia_greeter_compositor_executable = executable('noctalia-greeter-compositor',
   sources: files(
     'src/compositor/noctalia_compositor.c',
+    'src/compositor/output_layout_move.c',
+    'src/compositor/output_render.c',
+    'src/compositor/pointer_config.c',
     'src/compositor/system_keyboard_config.c',
     'src/config/output_identity.c',
     'src/core/log.cpp',
@@ -317,6 +324,23 @@ noctalia_greeter_compositor_executable = executable('noctalia-greeter-compositor
   ],
   install: true,
 )
+
+pointer_config_test = executable(
+  'pointer-config-test',
+  sources: files(
+    'tests/pointer_config_test.cpp',
+    'src/compositor/pointer_config.c',
+    'src/greeter/greeter_config_io.cpp',
+    'src/core/log.cpp',
+  ),
+  dependencies: [libinput_dep, wlroots_dep, tomlplusplus_dep],
+  include_directories: include_directories('src'),
+  c_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-DWLR_USE_UNSTABLE'],
+  cpp_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow'],
+  build_by_default: false,
+)
+
+test('pointer-config', pointer_config_test)
 
 greetd_client_response_test = executable(
   'greetd-client-response-test',
@@ -436,6 +460,34 @@ system_keyboard_config_test = executable(
 
 test('system-keyboard-config', system_keyboard_config_test)
 
+output_layout_move_test = executable(
+  'output-layout-move-test',
+  sources: files(
+    'tests/output_layout_move_test.c',
+    'src/compositor/output_layout_move.c',
+  ),
+  dependencies: [wlroots_dep, wayland_server_dep, wayland_client_dep],
+  include_directories: include_directories('src'),
+  c_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-DWLR_USE_UNSTABLE'],
+  build_by_default: false,
+)
+
+test('output-layout-move', output_layout_move_test)
+
+output_render_test = executable(
+  'output-render-test',
+  sources: files(
+    'tests/output_render_test.c',
+    'src/compositor/output_render.c',
+  ),
+  dependencies: [wlroots_dep, wayland_server_dep],
+  include_directories: include_directories('src'),
+  c_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-DWLR_USE_UNSTABLE'],
+  build_by_default: false,
+)
+
+test('output-render', output_render_test)
+
 output_identity_test = executable(
   'output-identity-test',
   sources: files(
@@ -489,6 +541,16 @@ time_format_test = executable(
 
 test('time-format', time_format_test)
 
+time_locale_test = executable(
+  'time-locale-test',
+  sources: files('tests/time_locale_test.cpp', 'src/time/time_locale.cpp', 'src/time/time_format.cpp'),
+  include_directories: include_directories('src'),
+  cpp_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow'],
+  build_by_default: false,
+)
+
+test('time-locale', time_locale_test)
+
 greeter_frame_loop_test = executable(
   'greeter-frame-loop-test',
   sources: files('tests/greeter_frame_loop_test.cpp'),
@@ -511,6 +573,49 @@ test(
     greeter_frame_loop_test,
   ],
   timeout: 30,
+)
+
+greeter_user_switch_test = executable(
+  'greeter-user-switch-test',
+  sources: files('tests/greeter_user_switch_test.cpp'),
+  objects: noctalia_greeter_executable.extract_objects(_greeter_sources),
+  dependencies: _greeter_dependencies + [dependency('threads')],
+  include_directories: _greeter_inc,
+  cpp_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow'],
+  link_args: ['-Wl,--wrap=wl_proxy_add_listener', '-Wl,--wrap=poll'],
+  build_by_default: false,
+)
+
+test(
+  'greeter-user-switch',
+  find_program('sh'),
+  args: [
+    meson.project_source_root() / 'tests/greeter_user_switch_test.sh',
+    noctalia_greeter_compositor_executable,
+    greeter_user_switch_test,
+  ],
+  timeout: 60,
+)
+
+greeter_login_flow_test = executable(
+  'greeter-login-flow-test',
+  sources: files('tests/greeter_login_flow_test.cpp'),
+  objects: noctalia_greeter_executable.extract_objects(_greeter_sources),
+  dependencies: _greeter_dependencies,
+  include_directories: _greeter_inc,
+  cpp_args: ['-Wall', '-Wextra', '-Wpedantic', '-Wconversion', '-Wshadow'],
+  build_by_default: false,
+)
+
+test(
+  'greeter-login-flow',
+  find_program('python3'),
+  args: [
+    meson.project_source_root() / 'tests/greeter_login_flow_test.py',
+    noctalia_greeter_compositor_executable,
+    greeter_login_flow_test,
+  ],
+  timeout: 60,
 )
 
 wallpaper_program_pixel_test = executable(

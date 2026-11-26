@@ -3,6 +3,7 @@
 #include "greeter/greeter.h"
 #include "greeter/greeter_preferences.h"
 #include "greeter/greeter_sessions.h"
+#include "time/time_locale.h"
 #include "tools/passwordless_sync_policy.h"
 #include "wayland/wayland_client.h"
 
@@ -52,7 +53,7 @@ namespace {
     return oss.str();
   }
 
-  void logStartupEnvironment() {
+  void logStartupEnvironment(bool timeLocaleReady) {
     kLog.info("uid={} euid={} gid={} groups=[{}]", getuid(), geteuid(), getgid(), formatGroupList());
     kLog.info(
         "WAYLAND_DISPLAY={} XDG_SESSION_TYPE={} XDG_RUNTIME_DIR={}",
@@ -60,6 +61,14 @@ namespace {
         std::getenv("XDG_SESSION_TYPE") ? std::getenv("XDG_SESSION_TYPE") : "unset",
         std::getenv("XDG_RUNTIME_DIR") ? std::getenv("XDG_RUNTIME_DIR") : "unset"
     );
+    kLog.info(
+        "locale: LANG={} LC_ALL={} LC_TIME={} active LC_TIME={}", std::getenv("LANG") ? std::getenv("LANG") : "unset",
+        std::getenv("LC_ALL") ? std::getenv("LC_ALL") : "unset",
+        std::getenv("LC_TIME") ? std::getenv("LC_TIME") : "unset", std::setlocale(LC_TIME, nullptr)
+    );
+    if (!timeLocaleReady) {
+      kLog.warn("could not initialize LC_TIME; check that the requested locale is installed");
+    }
   }
 
   void preventGreetdRespawnLoop() {
@@ -82,6 +91,7 @@ namespace {
 int main(int argc, char* argv[]) {
   std::setlocale(LC_ALL, "");
   std::setlocale(LC_NUMERIC, "C");
+  const bool timeLocaleReady = initializeTimeLocale();
 
   if (argc >= 2 && std::strcmp(argv[1], "passwordless-sync") == 0) {
     return greeter::passwordless_sync::runCommand(argc - 2, argv + 2);
@@ -154,6 +164,7 @@ int main(int argc, char* argv[]) {
     if (std::strcmp(argv[i], "--log-test") == 0) {
       emergencyLogBootstrap(argc, argv);
       initLogging();
+      logStartupEnvironment(timeLocaleReady);
       kLog.info("log-test ok; open files: {}", loggingPaths()[0] != '\0' ? loggingPaths() : "(none)");
       kLog.warn("log-test warn line");
       kLog.error("log-test error line");
@@ -222,7 +233,7 @@ int main(int argc, char* argv[]) {
     } else {
       kLog.info("greetd session: syslog logging");
     }
-    logStartupEnvironment();
+    logStartupEnvironment(timeLocaleReady);
   }
 
   if (std::getenv("WAYLAND_DISPLAY") == nullptr) {

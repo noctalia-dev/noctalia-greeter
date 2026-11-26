@@ -1,5 +1,8 @@
 #define _POSIX_C_SOURCE 200809L
 
+#include "compositor/output_layout_move.h"
+#include "compositor/output_render.h"
+#include "compositor/pointer_config.h"
 #include "compositor/system_keyboard_config.h"
 #include "config/output_identity.h"
 #include "greeter/greeter_config_io.h"
@@ -295,6 +298,9 @@ struct greeter_server {
   char cursor_theme[128];
   int cursor_size;
   char cursor_path[512];
+  char pointer_accel_profile[16];
+  bool pointer_accel_speed_set;
+  double pointer_accel_speed;
   char keyboard_layout[128];
   char keyboard_variant[128];
   char keyboard_options[256];
@@ -759,6 +765,9 @@ static void read_greeter_config(struct greeter_server* server) {
   if (config.cursor_path[0] != '\0') {
     snprintf(server->cursor_path, sizeof(server->cursor_path), "%s", config.cursor_path);
   }
+  snprintf(server->pointer_accel_profile, sizeof(server->pointer_accel_profile), "%s", config.pointer_accel_profile);
+  server->pointer_accel_speed_set = config.pointer_accel_speed_set != 0;
+  server->pointer_accel_speed = config.pointer_accel_speed;
   if (config.keyboard_layout[0] != '\0') {
     snprintf(server->keyboard_layout, sizeof(server->keyboard_layout), "%s", config.keyboard_layout);
   }
@@ -1281,28 +1290,6 @@ static bool initialize_output_render(struct greeter_output* output) {
   return true;
 }
 
-static bool render_output_black(struct greeter_output* output, struct wlr_output_state* state) {
-  struct wlr_render_pass* pass = wlr_output_begin_render_pass(output->wlr_output, state, NULL);
-  if (pass == NULL) {
-    wlr_log(WLR_ERROR, "failed to begin black frame for output %s", output->wlr_output->name);
-    return false;
-  }
-
-  wlr_render_pass_add_rect(
-      pass,
-      &(struct wlr_render_rect_options){
-          .box = {.width = state->buffer->width, .height = state->buffer->height},
-          .color = {0.0f, 0.0f, 0.0f, 1.0f},
-          .blend_mode = WLR_RENDER_BLEND_MODE_NONE,
-      }
-  );
-  if (!wlr_render_pass_submit(pass)) {
-    wlr_log(WLR_ERROR, "failed to render black frame for output %s", output->wlr_output->name);
-    return false;
-  }
-  return true;
-}
-
 static bool clear_enabled_output(struct greeter_output* output) {
   if (!output->wlr_output->enabled) {
     return true;
@@ -1313,7 +1300,7 @@ static bool clear_enabled_output(struct greeter_output* output) {
 
   struct wlr_output_state state;
   wlr_output_state_init(&state);
-  const bool rendered = render_output_black(output, &state);
+  const bool rendered = output_render_black(output->wlr_output, &state);
   const bool committed = rendered && wlr_output_commit_state(output->wlr_output, &state);
   wlr_output_state_finish(&state);
   if (!committed) {
@@ -1483,7 +1470,7 @@ static bool commit_output_enabled(struct greeter_output* output) {
   const int mode_height = mode != NULL ? mode->height : 0;
   const float scale = output_ui_scale(server, output->wlr_output, mode_width, mode_height);
   wlr_output_state_set_scale(&state, scale);
-  const bool rendered = render_output_black(output, &state);
+  const bool rendered = output_render_black(output->wlr_output, &state);
   const bool ok = rendered && wlr_output_commit_state(output->wlr_output, &state);
   wlr_output_state_finish(&state);
   if (!ok) {
@@ -1542,17 +1529,12 @@ static void load_cursor_theme_for_scale(struct greeter_server* server, float sca
 static bool layout_output_at(struct greeter_output* output, int layout_x, int layout_y) {
   if (output->active) {
     struct greeter_server* server = output->server;
-    if (output->layout_output != NULL) {
-      wlr_output_layout_remove(server->output_layout, output->wlr_output);
-      output->layout_output = NULL;
-    }
-    output->layout_output = wlr_output_layout_add(server->output_layout, output->wlr_output, layout_x, layout_y);
-    if (output->layout_output == NULL) {
+    if (!output_layout_move(
+            server->output_layout, server->scene_output_layout, output->wlr_output, output->scene_output,
+            &output->layout_output, layout_x, layout_y
+        )) {
       wlr_log(WLR_ERROR, "failed to reposition output %s in layout", output->wlr_output->name);
       return false;
-    }
-    if (output->scene_output != NULL) {
-      wlr_scene_output_layout_add_output(server->scene_output_layout, output->layout_output, output->scene_output);
     }
     if (output->view != NULL && output->view->mapped) {
       configure_view(output->view);
@@ -1627,6 +1609,17 @@ static void warp_cursor_to_initial_position(struct greeter_server* server) {
   }
 }
 
+// Sends the output's logical size and fractional scale to the view.
+static void send_output_geometry(struct greeter_view* view) {
+  int width = 0;
+  int height = 0;
+  wlr_output_effective_resolution(view->output->wlr_output, &width, &height);
+  if (width > 0 && height > 0) {
+    wlr_xdg_toplevel_set_size(view->toplevel, width, height);
+  }
+  notify_surface_scale(view->server, view->toplevel->base->surface, view->output);
+}
+
 static void configure_view(struct greeter_view* view) {
   if (view == NULL || !view->mapped || view->output == NULL || !view->output->active) {
     return;
@@ -1638,13 +1631,7 @@ static void configure_view(struct greeter_view* view) {
   wlr_output_layout_get_box(server->output_layout, output->wlr_output, &layout_box);
   wlr_scene_node_set_position(&view->scene_tree->node, layout_box.x, layout_box.y);
 
-  int width = 0;
-  int height = 0;
-  wlr_output_effective_resolution(output->wlr_output, &width, &height);
-  if (width > 0 && height > 0) {
-    wlr_xdg_toplevel_set_size(view->toplevel, width, height);
-  }
-  notify_surface_scale(server, view->toplevel->base->surface, output);
+  send_output_geometry(view);
   focus_view(view);
   schedule_output_frames(server);
 }
@@ -2143,7 +2130,7 @@ static void configure_libinput_touchpad(struct wlr_input_device* device) {
   wlr_log(WLR_INFO, "touchpad: enabled tap-to-click for %s", device->name);
 }
 
-static void configure_libinput_pointer(struct wlr_input_device* device) {
+static void configure_libinput_pointer(struct greeter_server* server, struct wlr_input_device* device) {
   if (!wlr_input_device_is_libinput(device)) {
     return;
   }
@@ -2153,10 +2140,10 @@ static void configure_libinput_pointer(struct wlr_input_device* device) {
     return;
   }
 
-  if (libinput_device_config_accel_is_available(libinput_dev)) {
-    libinput_device_config_accel_set_profile(libinput_dev, LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT);
-    wlr_log(WLR_INFO, "pointer: disabled acceleration for %s", device->name);
-  }
+  pointer_config_apply(
+      libinput_dev, device->name, server->pointer_accel_profile,
+      server->pointer_accel_speed_set ? &server->pointer_accel_speed : NULL
+  );
 }
 
 static void add_keyboard(struct greeter_server* server, struct wlr_input_device* device) {
@@ -2259,7 +2246,7 @@ static void handle_new_input(struct wl_listener* listener, void* data) {
     return;
   case WLR_INPUT_DEVICE_POINTER:
     configure_libinput_touchpad(device);
-    configure_libinput_pointer(device);
+    configure_libinput_pointer(server, device);
     wlr_cursor_attach_input_device(server->cursor, device);
     caps |= WL_SEAT_CAPABILITY_POINTER;
     break;
@@ -2306,6 +2293,11 @@ static void handle_xdg_commit(struct wl_listener* listener, void* data) {
   struct greeter_view* view = wl_container_of(listener, view, commit);
   struct wlr_xdg_surface* xdg = view->toplevel->base;
   if (xdg->initial_commit) {
+    // Size and scale the first configure, so the first frame already fits the
+    // output instead of being drawn at the integer wl_output scale and resized.
+    if (view->output != NULL && view->output->active) {
+      send_output_geometry(view);
+    }
     wlr_xdg_surface_schedule_configure(xdg);
     return;
   }
@@ -2453,6 +2445,9 @@ static void try_launch_greeter(void* data) {
   }
 
   warp_cursor_to_initial_position(server);
+  // Show the pointer only once it is centered, not at the layout origin while
+  // the outputs come up.
+  wlr_cursor_set_xcursor(server->cursor, server->cursor_mgr, "default");
 
   char** argv = child_argv(server->child_argc, server->child_argv_ptr);
   bool free_argv = server->child_argc <= 1 || (server->child_argc > 1 && strcmp(server->child_argv_ptr[1], "--") == 0);
@@ -2711,7 +2706,6 @@ int main(int argc, char** argv) {
 
   server.cursor_mgr = wlr_xcursor_manager_create(cursor_theme, cursor_size);
   wlr_cursor_attach_output_layout(server.cursor, server.output_layout);
-  wlr_cursor_set_xcursor(server.cursor, server.cursor_mgr, "default");
 
   server.new_output.notify = handle_new_output;
   wl_signal_add(&server.backend->events.new_output, &server.new_output);

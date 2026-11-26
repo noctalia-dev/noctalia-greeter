@@ -1,16 +1,21 @@
 ---
 title: Keyboard and cursor
-description: Configure keyboard navigation, XKB layouts, Num Lock, and cursor themes.
+description: Configure keyboard navigation, XKB layouts, Num Lock, cursor themes, and pointer sensitivity.
 sidebar:
   order: 5
 ---
 
 Noctalia Greeter supports keyboard-only navigation and lets administrators configure the keyboard layout, Num Lock state, and cursor theme used on the login screen.
 
+Power buttons activate with a single click, including when the password field
+has focus. Interface relayouts preserve a held button or scrollbar drag unless
+that control is removed or its menu is closed.
+
 - [Keyboard controls](#keyboard-controls)
 - [Keyboard layout](#keyboard-layout)
 - [Num Lock](#num-lock)
 - [Cursor theme](#cursor-theme)
+- [Pointer sensitivity](#pointer-sensitivity)
 - [NixOS](#nixos)
 
 ---
@@ -32,6 +37,13 @@ The greeter works without a mouse.
 | `F3` | Open the session picker |
 | `F7` | Open the color scheme picker |
 | `Ctrl+Alt+F1`–`F12` | Switch to a virtual terminal (TTY) |
+
+Returning to the user list with Back or `Esc` cancels the active login,
+including an attempt started on another monitor. Choosing another account
+clears entered passwords across all monitors. Password entry stays disabled
+until the previous attempt has been cancelled; a busy PAM device may take time to return its
+pending reply. Once the desktop session handoff has started, account changes
+are blocked until it finishes.
 
 Long session and color scheme menus stay within the screen and show a scrollbar
 when their entries do not fit. Scroll with the mouse wheel over the menu, drag
@@ -174,6 +186,33 @@ Add `XCURSOR_PATH` when the theme is not in the default search path.
 
 ---
 
+## Pointer sensitivity
+
+Set pointer acceleration and speed in `greeter.toml`:
+
+```toml
+[pointer]
+accel_profile = "adaptive"
+accel_speed = 0.3
+```
+
+`accel_profile` accepts `flat` (the existing default) or `adaptive`. Flat scales
+movement by a constant factor; adaptive acceleration changes with movement speed.
+`accel_speed` accepts numbers from `-1.0` (slowest) to `1.0` (fastest), with
+`0.0` selecting the device's neutral speed. Omitting it leaves the libinput
+speed unchanged. Set the same profile and speed as your desktop to match its
+pointer behavior.
+
+The settings apply to libinput mice, trackballs, and touchpads that support
+acceleration, including devices connected after startup. Unsupported settings
+are logged and leave that device's setting unchanged; an unsupported profile
+does not prevent applying a supported speed. Invalid values are ignored with
+a warning. Restart the greeter session after editing the configuration.
+
+These settings belong in `greeter.toml`; appearance Sync does not change them.
+
+---
+
 ## NixOS
 
 NixOS has two different Noctalia Greeter modules. Configure the option path belonging to the module you enabled; do not enable both modules at once.
@@ -193,6 +232,10 @@ services.displayManager.noctalia-greeter = {
 
   settings = {
     cursor.size = 24;
+    pointer = {
+      accel_profile = "adaptive";
+      accel_speed = 0.3;
+    };
     keyboard = {
       layout = "us,cz";
       options = "grp:alt_shift_toggle";

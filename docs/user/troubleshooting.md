@@ -59,6 +59,13 @@ For a source checkout, `sudo ./scripts/setup_greeter_system.sh` performs the com
 
 Treat this like a blank screen: inspect the current-boot logs, confirm that the state directory was recreated with the right owner, and check that referenced wallpaper files still exist. A tmpfiles rule that assumes a different greeter account can recreate the directory with the wrong ownership.
 
+If the compositor reports `no usable mode (0x0)` for an external display, its
+connector is present but has no usable resolution yet. The compositor skips
+that output while keeping other selected displays usable, then retries on a
+backend output change. Check the display's power, cable, dock, and adapter if
+it never acquires a mode. An explicit output pin still limits the greeter to
+the selected display; remove the pin to allow another connected display.
+
 ### Intel eDP stays black until a VT switch
 
 If the compositor log shows a successful output modeset and first frame, but an
@@ -237,6 +244,19 @@ available, you will still need to unlock the keyring separately.
 
 greetd did not answer a request before the watchdog expired. Inspect the greetd journal for a stalled or crashed PAM or session worker, then restart greetd. `[auth].request_timeout` controls the watchdog; its default is `60` seconds, and `0` disables it. See [Configuration](configuration.md).
 
+### Waiting for the previous login attempt to finish
+
+After Back or an account change on any monitor, the greeter cancels the previous
+account's authentication before accepting another password. If PAM is still
+waiting on a device, cancellation waits for its pending reply. The new account
+can be selected during this wait, but password entry stays disabled until
+greetd confirms cancellation. Passwords and replies from the previous account
+are discarded.
+
+If cancellation fails or greetd stops responding, the greeter disables login
+and asks for a greetd restart. Check the greetd journal for the underlying PAM
+or connection error.
+
 ### Fingerprint blocks password login
 
 PAM authentication is serialized. While `pam_fprintd` is waiting for a
@@ -394,6 +414,16 @@ then log out to view the newly installed appearance.
 This is expected when using seatd without logind or elogind: Polkit has no active graphical session to associate with the process. Use terminal or console `pkexec` for an administrator-authenticated sync, or install elogind to provide session tracking. A passwordless rule limited to active local sessions cannot match a seatd-only session.
 
 ## Appearance and input
+
+### Date format or language differs from the desktop
+
+The default clock format `%A, %x` matches Noctalia and follows the greeter's time locale. `MM/DD/YY` is the C locale's date format; US English also uses month-first dates. This alone does not mean the clock has a hardcoded US format.
+
+greetd constructs the greeter's environment through PAM and optional profile scripts, so locale variables from the desktop or greetd service may not reach the greeter. If `LC_ALL`, `LC_TIME`, and `LANG` are all missing or empty, the greeter loads the system time locale from `/etc/locale.conf` or `/etc/default/locale`. With neither file configured, it tries installed locales in this order: `en_US.UTF-8`, `C.UTF-8`, `C`.
+
+Look for the `locale:` startup log line. It reports `LANG`, `LC_ALL`, `LC_TIME`, and the active `LC_TIME`. A warning means the requested locale could not be loaded; check installed locales with `locale -a`. Running `locale` in your desktop terminal shows that terminal's environment, which can differ from the greeter's.
+
+Correct the system locale configuration or set `LC_TIME` explicitly in greetd's session command, as shown under [Clock](configuration.md#clock). An inherited `LC_ALL` overrides both `LC_TIME` and `LANG`, including when it is `C` or `C.UTF-8`. Restart greetd after changing its environment. To choose a fixed presentation instead, set `[clock].date_format` in `greeter.toml`.
 
 ### User avatars are missing
 

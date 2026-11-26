@@ -27,6 +27,11 @@ If `greeter.toml` is missing, the greeter uses built-in defaults. System setup c
 
 On NixOS, use `services.displayManager.noctalia-greeter.settings` with both the nixpkgs, and project flake modules. Both materialize `greeter.toml` using a tmpfiles `L+` entry.
 
+Startup migration copies legacy runtime values into writable `sync.toml` and
+preserves `greeter.toml` byte for byte, including writable files, comments, and
+symlink targets. Declarative scheme, layout, transform, and scale settings keep
+their priority over later Sync updates and login-screen choices.
+
 The **Synced** scheme uses a complete `[appearance.palette]` from `greeter.toml` when present, otherwise the same keys from `sync.toml`. Legacy live `appearance.json` is migrated into `sync.toml` once. See [Sync with Noctalia](sync.md) for the complete precedence and authorization model.
 
 Wallpaper configuration is independent of the selected color scheme and does
@@ -62,7 +67,7 @@ Set these keys in `greeter.toml`. A command-line `--session` or `--user` value t
 | `[appearance].corner_radius_scale` | Corner-radius scale for the Synced appearance |
 | `[appearance].font_family` | Fontconfig family for the Synced appearance |
 | `[appearance.palette]` | Complete Synced palette; takes precedence over Sync appearance |
-| `[appearance.wallpaper]` | Default wallpaper `path`, `fill_mode`, and `fill_color`; `fill_color` also works without an image, and `fill_mode` accepts `center`, `crop`, `fit`, `stretch`, `repeat`, or `span` |
+| `[appearance.wallpaper]` | Default wallpaper `path`, `fill_mode`, `fill_color`, `blur`, and `tint`; `fill_color` also works without an image, `fill_mode` accepts `center`, `crop`, `fit`, `stretch`, `repeat`, or `span`, and `blur`/`tint` take an intensity from `0.0` (off, default) to `1.0` |
 | `[appearance.wallpapers.<connector>]` | Per-output wallpaper override using the same fill modes |
 | `[clock].enabled` | Show the clock; defaults to `true` |
 | `[clock].position` | `above-panel` (default), `top-left`, `top-center`, `top-right`, `bottom-left`, `bottom-center`, or `bottom-right` |
@@ -80,6 +85,8 @@ Set these keys in `greeter.toml`. A command-line `--session` or `--user` value t
 | `[output].scale` | Manual UI scale for every output |
 | `[idle].timeout` | Seconds before outputs blank; `0` disables |
 | `[cursor].theme` / `.size` / `.path` | Cursor theme |
+| `[pointer].accel_profile` | Libinput acceleration profile: `flat` (default) or `adaptive` |
+| `[pointer].accel_speed` | Libinput speed from `-1.0` to `1.0`; omitted leaves the device's speed unchanged |
 | `[keyboard].layout` / `.variant` / `.options` / `.numlock` | XKB keymap |
 | `[auth].allow_empty_password` | Permit an empty submission to start fprintd or smartcard PAM; this does not make password and fingerprint checks run in parallel |
 | `[auth].request_timeout` | Seconds to wait for each greetd reply (`0`–`3600`, default `60`); `0` disables the watchdog |
@@ -178,7 +185,20 @@ date_font_size = 14
 
 Set `time_font_size` and `date_font_size` independently, in logical pixels before UI scaling. Both accept positive integers or decimals and follow the greeter's automatic or manual display scale. Omitted or invalid values use the defaults shown above.
 
-Formats accept the same forms as Noctalia: bare `strftime` patterns such as `%H:%M`, or C++ chrono fields such as `{:%H:%M}`. Literal text is preserved, `\n` adds a line break, `%%` prints `%`, and `{{` / `}}` print braces. Common tokens include `%H` (24-hour hour), `%I` (12-hour hour), `%M` (minute), `%S` (second), `%p` (AM/PM), `%A` (weekday), `%B` (month), `%d` (day), `%Y` (year), and `%x` (locale date). Names and locale-preferred values follow the system's `LC_TIME`; the timezone follows the greeter host.
+Formats accept the same forms as Noctalia: bare `strftime` patterns such as `%H:%M`, or C++ chrono fields such as `{:%H:%M}`. Literal text is preserved, `\n` adds a line break, `%%` prints `%`, and `{{` / `}}` print braces. Common tokens include `%H` (24-hour hour), `%I` (12-hour hour), `%M` (minute), `%S` (second), `%p` (AM/PM), `%A` (weekday), `%B` (month), `%d` (day), `%Y` (year), and `%x` (locale date). The timezone follows the greeter host.
+
+The default `%A, %x` matches Noctalia: the weekday followed by the locale's preferred date. Names and date ordering follow the greeter process's locale (`LC_ALL`, then `LC_TIME`, then `LANG`), which can differ from your desktop session's locale.
+
+When all three environment variables are unset or empty, the greeter reads `LC_TIME` (or `LANG` if absent) from `/etc/locale.conf`, falling back to `/etc/default/locale` if the first file has no usable setting. With neither file configured, it tries `en_US.UTF-8`, then `C.UTF-8`, then `C`, using the first installed locale. This fallback sets only the time locale; explicit environment settings always take precedence. A configured locale that is not installed produces a warning in the startup log.
+
+To choose a different date locale for the greeter, put it in greetd's session command, using a locale installed on the system:
+
+```toml
+[default_session]
+command = "env LC_TIME=en_GB.UTF-8 /usr/local/bin/noctalia-greeter-session"
+```
+
+Keep your existing binary path and arguments. `LC_ALL` takes precedence over `LC_TIME`, so remove or adjust an existing `LC_ALL` override too. Restart greetd after changing the command. See [Date format or language differs from the desktop](troubleshooting.md#date-format-or-language-differs-from-the-desktop) for diagnostics.
 
 Set either format to an empty string to hide only that line, or set `enabled = false` to disable the clock. The four corner positions use the same names as the power and scheme controls. When multiple elements use one corner, they stack inward in this order: scheme selector, power buttons, clock. `top-center` stays below a configuration-error banner. `bottom-center` occupies the logo's bottom-center slot when `[appearance].hide_logo = true`; with the logo visible, the clock stacks directly above it. On a display too short to fit a centered clock without touching the login panel, the date is omitted first; the clock is hidden only if the time line still cannot fit without overlap.
 

@@ -66,6 +66,9 @@ path = "/var/lib/noctalia-greeter/wallpaper.webp"
 fill_mode = "crop"
 # May also be used without path for a solid background.
 # fill_color = "#070722"
+# Background effects, 0.0 (off, default) to 1.0. tint uses the active scheme's surface color.
+# blur = 0.75
+# tint = 0.4
 
 # Optional per-connector wallpapers (overrides [appearance.wallpaper] for that output):
 # [appearance.wallpapers.DP-1]
@@ -81,6 +84,8 @@ enabled = true
 position = "above-panel"
 # Noctalia-compatible bare strftime or C++ chrono formats. Empty hides that line.
 time_format = "{:%H:%M}"
+# Locale-preferred date, matching Noctalia's default.
+# Uses the inherited time locale, then system locale files, then en_US.UTF-8 (if installed).
 date_format = "%A, %x"
 # Font sizes in logical pixels before UI scaling; positive integers or decimals.
 time_font_size = 48
@@ -126,6 +131,13 @@ theme = "Adwaita"
 size = 24
 # Colon-separated search path when the theme is not under the default icon dirs.
 path = "/usr/share/icons"
+
+[pointer]
+# Acceleration profile: "flat" (default) or "adaptive".
+accel_profile = "flat"
+# Optional libinput speed: -1.0 (slowest) to 1.0 (fastest), 0.0 is neutral.
+# Omit to leave the device's speed unchanged.
+# accel_speed = 0.0
 
 [keyboard]
 # Comma-separated for multiple layouts.

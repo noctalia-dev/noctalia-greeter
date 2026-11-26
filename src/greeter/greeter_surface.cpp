@@ -52,8 +52,11 @@
 
 namespace {
   constexpr Logger kLog("greeter-surface");
+  constexpr const char* kAuthCancelStatus = "Waiting for the previous login attempt to finish...";
   constexpr float kHeaderUserIconBase = 64.0f;
   constexpr float kHeaderAvatarBorderScale = 2.0f;
+  // Blur taps at quarter resolution; matches the shader's 40-tap cap.
+  constexpr float kWallpaperMaxBlurRadius = 40.0f;
 
   Button::ButtonStateColors
   makePaletteState(ColorRole bg, std::optional<ColorRole> border, ColorRole label, float alpha = 1.0f) {
@@ -762,6 +765,10 @@ void GreeterSurface::setOnStateChanged(std::function<void(GreeterSurface*)> call
   m_onStateChanged = std::move(callback);
 }
 
+void GreeterSurface::setOnUserSelectionRequested(std::function<bool()> callback) {
+  m_onUserSelectionRequested = std::move(callback);
+}
+
 void GreeterSurface::setOnAuthBeginRequested(std::function<bool(GreeterSurface*)> callback) {
   m_onAuthBeginRequested = std::move(callback);
 }
@@ -786,6 +793,9 @@ void GreeterSurface::mirrorStateFrom(const GreeterSurface& other) {
   }
 
   const bool schemeChanged = m_selectedScheme != other.m_selectedScheme;
+  if (m_username != other.m_username || m_passwordVisible != other.m_passwordVisible) {
+    clearPasswordInput();
+  }
 
   m_selectedUser = other.m_selectedUser;
   m_selectedSession = other.m_selectedSession;
@@ -1059,6 +1069,9 @@ void GreeterSurface::enterPasswordStep(std::size_t userIndex) {
   if (userIndex >= m_users.size()) {
     return;
   }
+  if (m_onUserSelectionRequested && !m_onUserSelectionRequested()) {
+    return;
+  }
   m_selectedUser = userIndex;
   setUsername(m_users[userIndex]);
   m_userMenuOpen = false;
@@ -1070,6 +1083,7 @@ void GreeterSurface::enterPasswordStep(std::size_t userIndex) {
     m_inputDispatcher.setFocus(m_passwordField->inputArea());
   }
   refreshSelectionLabels();
+  updateStatus(m_authCancelRequested || m_sharedAuthBlocked ? kAuthCancelStatus : "", false);
   notifyStateChanged();
   commitImmediateFrame(true);
 }
@@ -1103,6 +1117,8 @@ void GreeterSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
     m_wallpaper->setSize(sw, sh);
     m_wallpaper->setFillMode(m_wallpaperFillMode);
     m_wallpaper->setFillColor(m_wallpaperFillColor);
+    m_wallpaper->setBlurRadius(m_wallpaperBlur * kWallpaperMaxBlurRadius);
+    m_wallpaper->setTintColor(colorForRole(ColorRole::Surface, m_wallpaperTint));
   }
 
   m_backdrop->setPosition(ox, oy);
@@ -1488,6 +1504,15 @@ void GreeterSurface::handleGreetdResponse(const GreetdResponse& response) {
   const AuthRequest expected = m_pendingReplies.front();
   m_pendingReplies.pop_front();
 
+  if (m_authCancelRequested && expected != AuthRequest::Cancel) {
+    // This reply belongs to the previous account. It must never supply a
+    // prompt or start a session for the newly displayed selection.
+    (void)resetAuthSession();
+    syncAuthInteractivity();
+    commitImmediateFrame(false);
+    return;
+  }
+
   const char* reqName = expected == AuthRequest::CreateSession ? "create_session"
       : expected == AuthRequest::PostAuthData                  ? "post_auth_data"
       : expected == AuthRequest::StartSession                  ? "start_session"
@@ -1499,6 +1524,19 @@ void GreeterSurface::handleGreetdResponse(const GreetdResponse& response) {
 
   // Cancel ack drained the queue; re-enable input it had locked.
   if (expected == AuthRequest::Cancel) {
+    if (m_authCancelRequested) {
+      if (response.type != GreetdResponseType::Success) {
+        reportGreetdTransportError(
+            response.type == GreetdResponseType::Error
+                ? response.error
+                : GreetdError{GreetdErrorType::Error, "Unexpected response while cancelling authentication"}
+        );
+        return;
+      }
+      m_authCancelRequested = false;
+      updateStatus("", false);
+      notifyStateChanged();
+    }
     if (m_onAuthEnded) {
       m_onAuthEnded(this);
     }
@@ -1590,7 +1628,7 @@ void GreeterSurface::postAuthResponse(const std::string& data) {
 }
 
 void GreeterSurface::syncAuthInteractivity() {
-  const bool busy = m_greetdUnavailable || m_sharedAuthBlocked || awaitingReply();
+  const bool busy = m_greetdUnavailable || m_sharedAuthBlocked || m_authCancelRequested || awaitingReply();
   if (m_passwordField != nullptr) {
     m_passwordField->setEnabled(!busy);
   }
@@ -1610,6 +1648,7 @@ void GreeterSurface::setSharedAuthBlocked(const bool blocked) {
 
 void GreeterSurface::setGreetdUnavailable(const std::string_view reason) {
   m_greetdUnavailable = true;
+  m_authCancelRequested = false;
   m_authenticating = false;
   m_authSessionStarted = false;
   m_secretPromptWaiting = false;
@@ -1682,6 +1721,28 @@ void GreeterSurface::beginSessionStart() {
   }
 
   m_pendingReplies.push_back(AuthRequest::StartSession);
+}
+
+bool GreeterSurface::cancelAuthentication() {
+  if (!m_pendingReplies.empty() && m_pendingReplies.front() == AuthRequest::StartSession) {
+    return false;
+  }
+  if (m_authCancelRequested || (!m_authSessionStarted && !awaitingReply())) {
+    return true;
+  }
+  m_authCancelRequested = true;
+  m_authenticating = false;
+  m_secretPromptWaiting = false;
+  m_hasPendingResponse = false;
+  m_pendingResponse.clear();
+  clearPasswordInput();
+  updateStatus(kAuthCancelStatus, false);
+  // IPC is lockstep. Drain the outstanding reply before sending cancel, and
+  // keep the shared owner through both that reply and the cancel ack.
+  const bool cancelled = awaitingReply() || resetAuthSession();
+  syncAuthInteractivity();
+  commitImmediateFrame(false);
+  return cancelled;
 }
 
 bool GreeterSurface::resetAuthSession() {
@@ -1924,6 +1985,8 @@ void GreeterSurface::clearWallpaperDisplay() {
   m_wallpaperPath.clear();
   m_wallpaperFillMode = WallpaperFillMode::Crop;
   m_wallpaperFillColor = rgba(0.0f, 0.0f, 0.0f, 0.0f);
+  m_wallpaperBlur = 0.0f;
+  m_wallpaperTint = 0.0f;
   m_wallpaperDirty = true;
 }
 
@@ -1942,6 +2005,8 @@ void GreeterSurface::applyConfiguredWallpaper() {
   m_wallpaperPath = wallpaper->path;
   m_wallpaperFillMode = wallpaper->fillMode;
   m_wallpaperFillColor = wallpaper->fillColor;
+  m_wallpaperBlur = wallpaper->blur;
+  m_wallpaperTint = wallpaper->tint;
   m_hasWallpaper = !m_wallpaperPath.empty() || m_wallpaperFillColor.a > 0.0f;
   m_wallpaperDirty = true;
 }
@@ -2296,10 +2361,13 @@ void GreeterSurface::runBackAction() {
   if (!showsUserDropdown()) {
     return;
   }
+  if (m_onUserSelectionRequested && !m_onUserSelectionRequested()) {
+    return;
+  }
   m_passwordVisible = false;
   m_passwordField->setValue("");
   m_password.clear();
-  updateStatus("", false);
+  updateStatus(m_authCancelRequested || m_sharedAuthBlocked ? kAuthCancelStatus : "", false);
   if (m_userSelectArea != nullptr) {
     m_inputDispatcher.setFocus(m_userSelectArea);
   }
@@ -3139,13 +3207,6 @@ void GreeterSurface::scrollSelectorMenu(int delta) {
   }
 }
 
-void GreeterSurface::invalidateMenuPointers() {
-  // Rows are transient, but the shared Noctalia scrollbar stays alive through
-  // relayouts so its pointer capture and hover animation can continue.
-  const MenuScroll* scroll = activeMenuScroll();
-  m_inputDispatcher.invalidateTransientPointers(scroll != nullptr ? scroll->bar : nullptr);
-}
-
 bool GreeterSurface::pointerInUserMenuScrollArea(float x, float y) const {
   const auto inRect = [x, y](const Node* node) {
     if (node == nullptr || !node->visible()) {
@@ -3174,7 +3235,7 @@ void GreeterSurface::activateMenuHighlight() {
 }
 
 bool GreeterSurface::handleNavigationKey(std::uint32_t sym, std::uint32_t utf32, std::uint32_t modifiers) {
-  if (m_authenticating) {
+  if (m_authenticating && !KeySymbol::isEscape(sym)) {
     return false;
   }
   const bool shift = (modifiers & KeyMod::Shift) != 0;
@@ -3323,6 +3384,7 @@ void GreeterSurface::clearUserMenuRows() {
     (void)m_root.removeChild(icon);
   }
   for (auto* area : m_userMenuAreas) {
+    m_inputDispatcher.invalidatePointersFor(area);
     (void)m_root.removeChild(area);
   }
   for (auto* row : m_userMenuRows) {
@@ -3335,11 +3397,11 @@ void GreeterSurface::clearUserMenuRows() {
 }
 
 void GreeterSurface::clearUserMenu() {
-  invalidateMenuPointers();
   clearUserMenuRows();
   m_userMenuSearchQuery.clear();
   m_userMenuScrollOffset = 0;
   if (m_userMenuSearchField != nullptr) {
+    m_inputDispatcher.invalidatePointersFor(m_userMenuSearchField);
     m_userMenuSearchField->setValue("");
     m_userMenuSearchField->setVisible(false);
   }
@@ -3347,7 +3409,6 @@ void GreeterSurface::clearUserMenu() {
 }
 
 void GreeterSurface::clearSessionMenu() {
-  invalidateMenuPointers();
   if (m_sessionMenuPanel != nullptr) {
     (void)m_root.removeChild(m_sessionMenuPanel);
     m_sessionMenuPanel = nullptr;
@@ -3356,6 +3417,7 @@ void GreeterSurface::clearSessionMenu() {
     (void)m_root.removeChild(label);
   }
   for (auto* area : m_sessionMenuAreas) {
+    m_inputDispatcher.invalidatePointersFor(area);
     (void)m_root.removeChild(area);
   }
   for (auto* row : m_sessionMenuRows) {
@@ -3365,13 +3427,13 @@ void GreeterSurface::clearSessionMenu() {
   m_sessionMenuAreas.clear();
   m_sessionMenuRows.clear();
   if (!m_sessionMenuOpen && m_sessionMenuScroll.bar != nullptr) {
+    m_inputDispatcher.invalidatePointersFor(m_sessionMenuScroll.bar);
     (void)m_root.removeChild(m_sessionMenuScroll.bar);
     m_sessionMenuScroll = {};
   }
 }
 
 void GreeterSurface::clearSchemeMenu() {
-  invalidateMenuPointers();
   if (m_schemeMenuPanel != nullptr) {
     (void)m_root.removeChild(m_schemeMenuPanel);
     m_schemeMenuPanel = nullptr;
@@ -3380,6 +3442,7 @@ void GreeterSurface::clearSchemeMenu() {
     (void)m_root.removeChild(label);
   }
   for (auto* area : m_schemeMenuAreas) {
+    m_inputDispatcher.invalidatePointersFor(area);
     (void)m_root.removeChild(area);
   }
   for (auto* row : m_schemeMenuRows) {
@@ -3389,6 +3452,7 @@ void GreeterSurface::clearSchemeMenu() {
   m_schemeMenuAreas.clear();
   m_schemeMenuRows.clear();
   if (!m_schemeMenuOpen && m_schemeMenuScroll.bar != nullptr) {
+    m_inputDispatcher.invalidatePointersFor(m_schemeMenuScroll.bar);
     (void)m_root.removeChild(m_schemeMenuScroll.bar);
     m_schemeMenuScroll = {};
   }

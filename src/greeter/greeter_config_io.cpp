@@ -48,6 +48,7 @@ namespace {
         || key == "appearance"
         || key == "output"
         || key == "cursor"
+        || key == "pointer"
         || key == "keyboard"
         || key == "auth"
         || key == "idle"
@@ -165,7 +166,24 @@ namespace {
     return std::nullopt;
   }
 
-  [[nodiscard]] greeter::config::GreeterTomlWallpaper parseWallpaperTable(const toml::table& table) {
+  [[nodiscard]] std::optional<float>
+  wallpaperIntensityValue(const std::filesystem::path& path, const toml::table& table, std::string_view key) {
+    const auto* node = table.get(key);
+    if (node == nullptr) {
+      return std::nullopt;
+    }
+    if (const auto value = node->value<double>()) {
+      const auto intensity = static_cast<float>(*value);
+      if (std::isfinite(intensity) && intensity >= 0.0f && intensity <= 1.0f) {
+        return intensity;
+      }
+    }
+    kLog.warn("{}: invalid wallpaper {} value (expected 0.0-1.0)", path.string(), key);
+    return std::nullopt;
+  }
+
+  [[nodiscard]] greeter::config::GreeterTomlWallpaper
+  parseWallpaperTable(const std::filesystem::path& path, const toml::table& table) {
     greeter::config::GreeterTomlWallpaper wallpaper;
     if (const auto* pathNode = table.get("path")) {
       wallpaper.path = stringValue(*pathNode);
@@ -176,6 +194,8 @@ namespace {
     if (const auto* fillColorNode = table.get("fill_color")) {
       wallpaper.fillColor = stringValue(*fillColorNode);
     }
+    wallpaper.blur = wallpaperIntensityValue(path, table, "blur");
+    wallpaper.tint = wallpaperIntensityValue(path, table, "tint");
     return wallpaper;
   }
 
@@ -270,7 +290,7 @@ namespace {
             }
           } else if (entryView == "wallpaper") {
             if (const auto* wallpaperTable = entryNode.as_table()) {
-              config.appearance.wallpaper = parseWallpaperTable(*wallpaperTable);
+              config.appearance.wallpaper = parseWallpaperTable(path, *wallpaperTable);
             } else {
               kLog.warn("{}: appearance.wallpaper must be a table", path.string());
             }
@@ -278,7 +298,8 @@ namespace {
             if (const auto* wallpapersTable = entryNode.as_table()) {
               for (const auto& [connectorKey, connectorNode] : *wallpapersTable) {
                 if (const auto* connectorTable = connectorNode.as_table()) {
-                  config.appearance.wallpapers[std::string(connectorKey.str())] = parseWallpaperTable(*connectorTable);
+                  config.appearance.wallpapers[std::string(connectorKey.str())] =
+                      parseWallpaperTable(path, *connectorTable);
                 } else {
                   kLog.warn("{}: appearance.wallpapers.{} must be a table", path.string(), connectorKey.str());
                 }
@@ -397,6 +418,24 @@ namespace {
           } else {
             kLog.warn("{}: invalid cursor.size value", path.string());
           }
+        } else if (keyView == "pointer") {
+          if (entryView == "accel_profile") {
+            const auto profile = stringValue(entryNode);
+            if (profile.has_value() && (*profile == "flat" || *profile == "adaptive")) {
+              config.pointerAccelProfile = *profile;
+            } else {
+              kLog.warn("{}: invalid pointer.accel_profile (expected flat or adaptive)", path.string());
+            }
+          } else if (entryView == "accel_speed") {
+            const auto speed = entryNode.value<double>();
+            if (speed.has_value() && std::isfinite(*speed) && *speed >= -1.0 && *speed <= 1.0) {
+              config.pointerAccelSpeed = *speed;
+            } else {
+              kLog.warn("{}: invalid pointer.accel_speed (expected a number from -1 to 1)", path.string());
+            }
+          } else {
+            warnUnknownSectionKey(path, keyView, entryView);
+          }
         } else if (keyView == "keyboard") {
           if (!isKnownKeyboardKey(entryView)) {
             warnUnknownSectionKey(path, keyView, entryView);
@@ -459,6 +498,12 @@ namespace {
           t.insert_or_assign(std::string(key), value);
         }
     );
+    if (wallpaper.blur.has_value()) {
+      table.insert_or_assign("blur", static_cast<double>(*wallpaper.blur));
+    }
+    if (wallpaper.tint.has_value()) {
+      table.insert_or_assign("tint", static_cast<double>(*wallpaper.tint));
+    }
     return table;
   }
 
@@ -669,6 +714,20 @@ namespace {
     );
     if (!cursor.empty()) {
       root.insert("cursor", std::move(cursor));
+    }
+
+    toml::table pointer;
+    insertString(
+        pointer, "accel_profile", config.pointerAccelProfile,
+        [](toml::table& table, std::string_view key, const std::string& value) {
+          table.insert_or_assign(std::string(key), value);
+        }
+    );
+    if (config.pointerAccelSpeed.has_value()) {
+      pointer.insert_or_assign("accel_speed", *config.pointerAccelSpeed);
+    }
+    if (!pointer.empty()) {
+      root.insert("pointer", std::move(pointer));
     }
 
     toml::table keyboard;
@@ -1028,11 +1087,12 @@ namespace greeter::config {
     out << "# [session] default, [user] default\n";
     out << "# [appearance] scheme, password_style, hide_logo, power_buttons_position, scheme_selector_position, "
            "theme_mode, corner_radius_scale, font_family\n";
-    out << "# [appearance.palette] full color role table, [appearance.wallpaper] path/fill_mode/fill_color\n";
+    out << "# [appearance.palette] full color role table, [appearance.wallpaper] "
+           "path/fill_mode/fill_color/blur/tint\n";
     out << "# [appearance.wallpapers.<connector>] per-output wallpaper overrides\n";
     out << "# [output] name/use_synced_settings/layout/scale/scales/width/height/refresh_rate/transforms, "
            "[idle] timeout, [cursor] theme/size/path\n";
-    out << "# [keyboard] layout/variant/options/numlock\n";
+    out << "# [keyboard] layout/variant/options/numlock, [pointer] accel_profile/accel_speed\n";
     out << "# [auth] allow_empty_password (bool), request_timeout (0-3600 seconds; default 60, 0 disables)\n";
     out << "# [clock] enabled/position/time_format/date_format/time_font_size/date_font_size\n";
     out << '\n';
@@ -1113,7 +1173,7 @@ namespace {
     greeter::config::GreeterSyncFile sync =
         hasLegacyState ? greeter::config::loadSync(legacyStatePath) : greeter::config::GreeterSyncFile{};
 
-    greeter::config::GreeterConfigFile conf = greeter::config::loadConfig(confPath);
+    const greeter::config::GreeterConfigFile conf = greeter::config::loadConfig(confPath);
     const bool migrateOutputs = conf.outputUseSyncedSettings.value_or(true);
     const bool hasRuntime = (conf.sessionLast.has_value() && !conf.sessionLast->empty())
         || (conf.appearanceScheme.has_value() && !conf.appearanceScheme->empty())
@@ -1146,18 +1206,8 @@ namespace {
     }
 
     if (hasRuntime) {
-      conf.sessionLast.reset();
-      conf.appearanceScheme.reset();
-      if (migrateOutputs) {
-        conf.outputLayout.reset();
-        conf.outputTransforms.reset();
-        conf.outputScales.reset();
-      }
-      if (!greeter::config::writeConfig(confPath, conf)) {
-        kLog.warn("migrated sync.toml but failed to strip runtime keys from {}", confPath.string());
-        return;
-      }
-      kLog.info("migrated runtime keys from greeter.toml into {}", syncPath.string());
+      // Keep declarative settings intact so they still override later Sync/UI changes.
+      kLog.info("copied legacy runtime keys from {} into {}", confPath.string(), syncPath.string());
     } else {
       kLog.info("migrated {} to {}", legacyStatePath.string(), syncPath.string());
     }
@@ -1189,6 +1239,11 @@ extern "C" void greeter_compositor_config_load(const char* state_dir, struct gre
   copyString(out->preferred_output, sizeof(out->preferred_output), config.outputName);
   copyString(out->cursor_theme, sizeof(out->cursor_theme), config.cursorTheme);
   copyString(out->cursor_path, sizeof(out->cursor_path), config.cursorPath);
+  copyString(out->pointer_accel_profile, sizeof(out->pointer_accel_profile), config.pointerAccelProfile);
+  if (config.pointerAccelSpeed.has_value()) {
+    out->pointer_accel_speed_set = 1;
+    out->pointer_accel_speed = *config.pointerAccelSpeed;
+  }
   copyString(out->keyboard_layout, sizeof(out->keyboard_layout), config.keyboardLayout);
   copyString(out->keyboard_variant, sizeof(out->keyboard_variant), config.keyboardVariant);
   copyString(out->keyboard_options, sizeof(out->keyboard_options), config.keyboardOptions);

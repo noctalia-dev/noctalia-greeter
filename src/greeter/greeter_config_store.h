@@ -19,6 +19,9 @@ namespace greeter::config {
     std::optional<std::string> path;
     std::optional<std::string> fillMode;
     std::optional<std::string> fillColor;
+    // Background effect intensities in [0, 1]; 0 disables.
+    std::optional<float> blur;
+    std::optional<float> tint;
   };
 
   // Declarative Synced appearance under [appearance] in greeter.toml.
@@ -70,6 +73,9 @@ namespace greeter::config {
     std::optional<std::string> cursorTheme;
     std::optional<int> cursorSize;
     std::optional<std::string> cursorPath;
+
+    std::optional<std::string> pointerAccelProfile;
+    std::optional<double> pointerAccelSpeed;
 
     std::optional<std::string> keyboardLayout;
     std::optional<std::string> keyboardVariant;

@@ -29,6 +29,8 @@ A minimal login greeter for [greetd](https://github.com/kennylevinsen/greetd) th
 
 Noctalia Greeter is the screen you see before your desktop session starts. It lets you pick a user, enter your password, choose a Wayland session, and pick a color scheme - with the same visual language as Noctalia. A [configurable clock](docs/user/configuration.md#clock) uses Noctalia-compatible time/date formats, separate time and date font sizes, and the active greeter palette.
 
+The default date format matches Noctalia (`%A, %x`). When no time locale is inherited, the greeter reads the system locale configuration, then falls back to an installed English locale. See [Clock](docs/user/configuration.md#clock) for locale precedence and overrides.
+
 Long session and color scheme menus fit within the screen and show a scrollbar.
 Use the mouse wheel, drag the scrollbar, or navigate with the arrow keys; see
 [keyboard and cursor controls](docs/user/input.md#keyboard-controls).
@@ -51,6 +53,15 @@ After installation:
 - [Set up optional Sync with Noctalia](docs/user/sync.md)
 - [Troubleshoot a login or display problem](docs/user/troubleshooting.md)
 
+Administrator settings in `greeter.toml` survive startup migration, appearance
+Sync, and login-screen choices unchanged. Mutable state lives in `sync.toml`.
+
+Configure mouse speed and acceleration under `[pointer]`; see
+[Pointer sensitivity](docs/user/input.md#pointer-sensitivity).
+
+Account switching and login cancellation are shared across monitors; see
+[Keyboard controls](docs/user/input.md#keyboard-controls).
+
 ## Scope
 
 Noctalia Greeter is a **display/login greeter** for greetd. It handles user/session selection and authentication UI.
@@ -71,3 +82,11 @@ Distributed under the MIT License. See [LICENSE](LICENSE) for details.
 
 Bundled Wuffs code is available under Apache-2.0 or MIT. See
 [packaging notes](PACKAGING.md#vendored-no-system-package) for its license notices.
+
+## Star History
+
+<p align="center">
+  <a href="https://github.com/noctalia-dev/noctalia/stargazers">
+    <img src="https://api.noctalia.dev/stars-animated/greeter" alt="Star History" />
+  </a>
+</p>

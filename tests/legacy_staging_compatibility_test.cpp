@@ -7,11 +7,13 @@
 #include <algorithm>
 #include <array>
 #include <cerrno>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <limits>
 #include <optional>
 #include <stdexcept>
@@ -97,6 +99,44 @@ namespace {
   private:
     std::optional<std::string> previous;
   };
+
+  class ScopedStderrCapture {
+  public:
+    explicit ScopedStderrCapture(const std::filesystem::path& path) {
+      std::fflush(stderr);
+      originalFd = ::dup(STDERR_FILENO);
+      if (originalFd < 0) {
+        throw std::runtime_error("failed to duplicate stderr");
+      }
+      file = std::fopen(path.c_str(), "w");
+      if (file == nullptr || ::dup2(::fileno(file), STDERR_FILENO) < 0) {
+        if (file != nullptr) {
+          std::fclose(file);
+        }
+        ::close(originalFd);
+        throw std::runtime_error("failed to capture stderr");
+      }
+    }
+
+    ~ScopedStderrCapture() {
+      std::fflush(stderr);
+      ::dup2(originalFd, STDERR_FILENO);
+      ::close(originalFd);
+      std::fclose(file);
+    }
+
+    ScopedStderrCapture(const ScopedStderrCapture&) = delete;
+    ScopedStderrCapture& operator=(const ScopedStderrCapture&) = delete;
+
+  private:
+    int originalFd = -1;
+    FILE* file = nullptr;
+  };
+
+  std::string readFile(const std::filesystem::path& path) {
+    std::ifstream file(path, std::ios::binary);
+    return {std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
+  }
 
   [[nodiscard]] bool validate(
       const Fixture& fixture, const std::filesystem::path& stagingDirectory, const std::optional<uid_t> invokingUid,
@@ -190,6 +230,96 @@ on_hover = "#161616"
 )toml";
   }
 
+  void testConfigMigration(bool& passed) {
+    struct ConfigCase {
+      const char* name;
+      bool symlink;
+      bool readOnly;
+    };
+    for (const bool compositorFirst : {true, false}) {
+      for (const auto& configCase : std::array{
+               ConfigCase{"read-only symlink", true, true},
+               ConfigCase{"read-only regular file", false, true},
+               ConfigCase{"writable legacy file", false, false},
+               ConfigCase{"writable legacy symlink", true, false},
+           }) {
+        Fixture fixture(0700, 0600);
+        const auto configPath = fixture.runtimeDirectory / "greeter.toml";
+        const auto targetPath = configCase.symlink ? fixture.runtimeParent / "declarative.toml" : configPath;
+        constexpr std::string_view original = R"toml(# Preserve declarative defaults and comments.
+[session]
+last = "Niri"
+
+[appearance]
+scheme = "Synced"
+
+[keyboard]
+layout = "us"
+
+[output]
+layout = "DP-1:0,0; DP-2:1280,0"
+transforms = "DP-1:90; DP-2:normal"
+scales = "DP-1:2; DP-2:1.25"
+)toml";
+        std::ofstream(targetPath) << original;
+        Fixture::chmodOrThrow(targetPath, configCase.readOnly ? 0444 : 0644);
+        if (configCase.symlink) {
+          std::filesystem::create_symlink(targetPath, configPath);
+        }
+        const ScopedStateDirectory stateDirectory(fixture.runtimeDirectory);
+        const auto logPath = fixture.runtimeDirectory / "migration.log";
+        const std::string name = std::string(compositorFirst ? "compositor " : "client ") + configCase.name;
+        {
+          const ScopedStderrCapture capture(logPath);
+          if (compositorFirst) {
+            greeter_compositor_config config{};
+            greeter_compositor_config_load(fixture.runtimeDirectory.c_str(), &config);
+          } else {
+            (void)greeter::loadGreeterPreferences();
+          }
+        }
+        const std::string log = readFile(logPath);
+        expect(name + " has no migration warnings", log.find("[WRN]") == std::string::npos, true, log, passed);
+        const auto syncPath = fixture.runtimeDirectory / "sync.toml";
+        expect(name + " creates sync.toml", std::filesystem::is_regular_file(syncPath), true, {}, passed);
+        const auto sync = greeter::config::loadSync(syncPath);
+        expect(name + " migrates last session", sync.sessionLast == "Niri", true, {}, passed);
+        expect(name + " migrates scheme", sync.appearanceScheme == "Synced", true, {}, passed);
+        expect(name + " migrates layout", sync.outputLayout == kSyncedOutputLayout, true, {}, passed);
+        expect(name + " migrates transforms", sync.outputTransforms == kSyncedOutputTransforms, true, {}, passed);
+        expect(name + " migrates scales", sync.outputScales == kSyncedOutputScales, true, {}, passed);
+        const auto config = greeter::config::loadConfig(configPath);
+        expect(name + " keeps keyboard defaults", config.keyboardLayout == "us", true, {}, passed);
+        expect(name + " preserves config bytes", readFile(configPath) == original, true, {}, passed);
+        expect(name + " preserves target bytes", readFile(targetPath) == original, true, {}, passed);
+        if (configCase.readOnly) {
+          expect(
+              name + " preserves read-only permissions",
+              (std::filesystem::status(targetPath).permissions() & std::filesystem::perms::mask)
+                  == (std::filesystem::perms::owner_read
+                      | std::filesystem::perms::group_read
+                      | std::filesystem::perms::others_read),
+              true, {}, passed
+          );
+        }
+        if (configCase.symlink) {
+          expect(name + " preserves symlink", std::filesystem::is_symlink(configPath), true, {}, passed);
+          expect(
+              name + " preserves link target", std::filesystem::read_symlink(configPath) == targetPath, true, {}, passed
+          );
+        }
+        const auto preferences = greeter::loadGreeterPreferences();
+        expect(name + " loads migrated session", preferences.session == "Niri", true, {}, passed);
+        expect(name + " loads scheme", preferences.scheme == "Synced", true, {}, passed);
+        greeter_compositor_config compositorConfig{};
+        greeter_compositor_config_load(fixture.runtimeDirectory.c_str(), &compositorConfig);
+        expectOutputMappings(
+            name, compositorConfig, kSyncedOutputLayout, kSyncedOutputTransforms, kSyncedOutputScales, passed
+        );
+      }
+    }
+  }
+
 } // namespace
 
 int main() {
@@ -197,6 +327,10 @@ int main() {
   std::string error;
 
   try {
+    if (::setenv("NOCTALIA_GREETER_LOG", "stderr", 1) != 0) {
+      throw std::runtime_error("failed to set test logging");
+    }
+    testConfigMigration(passed);
     expectFillMode("center fill mode", "center", WallpaperFillMode::Center, passed);
     expectFillMode("crop fill mode", "crop", WallpaperFillMode::Crop, passed);
     expectFillMode("fit fill mode", "fit", WallpaperFillMode::Fit, passed);
@@ -227,6 +361,36 @@ fill_mode = "center"
       expect(
           "wallpaper mode loads without synced palette",
           wallpaper.has_value() && wallpaper->fillMode == WallpaperFillMode::Center, true, {}, passed
+      );
+    }
+
+    {
+      Fixture fixture(0700, 0600);
+      std::ofstream(fixture.runtimeDirectory / "greeter.toml") << R"toml(
+[appearance.wallpaper]
+path = "/nix/store/example-wallpaper.png"
+blur = 0.75
+tint = 0.4
+
+[appearance.wallpapers.DP-1]
+blur = 0.0
+
+[appearance.wallpapers.DP-2]
+blur = 1.5
+)toml";
+
+      const ScopedStateDirectory stateDirectory(fixture.runtimeDirectory);
+      const auto appearance = loadGreeterWallpaperAppearance();
+      const auto wallpaper = appearance.has_value() ? appearance->wallpaperForOutput("") : std::nullopt;
+      expect("wallpaper blur loads", wallpaper.has_value() && wallpaper->blur == 0.75f, true, {}, passed);
+      expect("wallpaper tint loads", wallpaper.has_value() && wallpaper->tint == 0.4f, true, {}, passed);
+      const auto disabled = appearance.has_value() ? appearance->wallpaperForOutput("DP-1") : std::nullopt;
+      expect(
+          "per-output wallpaper blur can be disabled", disabled.has_value() && disabled->blur == 0.0f, true, {}, passed
+      );
+      const auto outOfRange = appearance.has_value() ? appearance->wallpaperForOutput("DP-2") : std::nullopt;
+      expect(
+          "out-of-range wallpaper blur is ignored", outOfRange.has_value() && outOfRange->blur == 0.0f, true, {}, passed
       );
     }
 
@@ -468,26 +632,39 @@ refresh_rate = 120
       const char* name;
       bool existingSync;
       bool compositorFirst;
+      std::optional<bool> useSyncedSettings;
     };
     for (const auto& startup : std::array{
-             OutputStartupCase{"existing sync", true, true},
-             OutputStartupCase{"first compositor startup", false, true},
-             OutputStartupCase{"first client startup", false, false},
+             OutputStartupCase{"sync first, default output sync", true, true, std::nullopt},
+             OutputStartupCase{"sync first, output sync enabled", true, true, true},
+             OutputStartupCase{"sync first, output sync disabled", true, true, false},
+             OutputStartupCase{"compositor first, default output sync", false, true, std::nullopt},
+             OutputStartupCase{"compositor first, output sync enabled", false, true, true},
+             OutputStartupCase{"compositor first, output sync disabled", false, true, false},
+             OutputStartupCase{"client first, default output sync", false, false, std::nullopt},
+             OutputStartupCase{"client first, output sync enabled", false, false, true},
+             OutputStartupCase{"client first, output sync disabled", false, false, false},
          }) {
       Fixture fixture(0700, 0600);
       const auto configPath = fixture.runtimeDirectory / "greeter.toml";
-      std::ofstream(configPath) << R"toml(
+      {
+        std::ofstream configFile(configPath);
+        configFile << R"toml(# Keep this comment and the configured display arrangement.
 [appearance]
-scheme = "Synced"
+scheme = "Noctalia"
 
 [output]
-use_synced_settings = false
 name = "DP-2"
 layout = "DP-1:10,20; DP-2:1800,20"
 transforms = "DP-1:normal; DP-2:180"
 scales = "DP-1:1.25; DP-2:1.5"
 scale = 1.5
 )toml";
+        if (startup.useSyncedSettings.has_value()) {
+          configFile << "use_synced_settings = " << (*startup.useSyncedSettings ? "true" : "false") << '\n';
+        }
+      }
+      const std::string original = readFile(configPath);
       const ScopedStateDirectory stateDirectory(fixture.runtimeDirectory);
       if (startup.existingSync) {
         expect(
@@ -524,8 +701,10 @@ scale = 1.5
       );
 
       const auto preserved = greeter::config::loadConfig(configPath);
+      expect("startup preserves declarative bytes", readFile(configPath) == original, true, startup.name, passed);
       expect(
-          "output opt-out remains declarative", preserved.outputUseSyncedSettings == false, true, startup.name, passed
+          "output sync setting remains declarative", preserved.outputUseSyncedSettings == startup.useSyncedSettings,
+          true, startup.name, passed
       );
       expect(
           "manual layout remains declarative", preserved.outputLayout == "DP-1:10,20; DP-2:1800,20", true, startup.name,
@@ -539,6 +718,32 @@ scale = 1.5
           "manual scales remain declarative", preserved.outputScales == "DP-1:1.25; DP-2:1.5", true, startup.name,
           passed
       );
+      expect("manual scheme remains declarative", preserved.appearanceScheme == "Noctalia", true, startup.name, passed);
+
+      expect(
+          "later sync accepts conflicting output mappings",
+          greeter::applyAppearanceSyncGreeterConf(
+              std::string(kSyncedOutputLayout), std::string(kSyncedOutputTransforms), std::string(kSyncedOutputScales),
+              std::nullopt
+          ),
+          true, startup.name, passed
+      );
+      auto preferences = greeter::loadGreeterPreferences();
+      preferences.session = "GNOME";
+      preferences.scheme = "Dracula";
+      expect("picker state saves", greeter::saveGreeterPreferences(preferences), true, startup.name, passed);
+      expect("sync and picker preserve config bytes", readFile(configPath) == original, true, startup.name, passed);
+      expect(
+          "declarative scheme wins after sync and picker changes",
+          greeter::loadGreeterPreferences().scheme == "Noctalia", true, startup.name, passed
+      );
+      greeter_compositor_config_load(fixture.runtimeDirectory.c_str(), &config);
+      expectOutputMappings(
+          startup.name, config, "DP-1:10,20; DP-2:1800,20", "DP-1:normal; DP-2:180", "DP-1:1.25; DP-2:1.5", passed
+      );
+      const auto sync = greeter::config::loadSync(fixture.runtimeDirectory / "sync.toml");
+      expect("picker session remains mutable", sync.sessionLast == "GNOME", true, startup.name, passed);
+      expect("picker scheme remains mutable", sync.appearanceScheme == "Dracula", true, startup.name, passed);
     }
 
     {
