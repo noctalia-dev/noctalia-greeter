@@ -58,7 +58,7 @@ namespace {
   [[nodiscard]] bool isKnownSessionKey(std::string_view key) {
     // "power"/"actions" are Sync-only (sync.toml); recognized here only so parseConfig
     // does not warn about them when parsing sync.toml through the shared session-table loop.
-    return key == "default" || key == "last" || key == "power" || key == "actions";
+    return key == "default" || key == "last" || key == "users" || key == "power" || key == "actions";
   }
 
   [[nodiscard]] bool isKnownUserKey(std::string_view key) { return key == "default"; }
@@ -238,6 +238,14 @@ namespace {
             config.sessionDefault = stringValue(entryNode);
           } else if (entryView == "last") {
             config.sessionLast = stringValue(entryNode);
+          } else if (entryView == "users") {
+            if (const toml::table* users = entryNode.as_table()) {
+              for (const auto& [userKey, userNode] : *users) {
+                if (const auto name = stringValue(userNode)) {
+                  config.sessionUsers[std::string(userKey.str())] = *name;
+                }
+              }
+            }
           }
           // power/actions: Sync-only, parsed directly from the root table by parseSync.
         } else if (keyView == "user") {
@@ -567,6 +575,13 @@ namespace {
           table.insert_or_assign(std::string(key), value);
         }
     );
+    if (!config.sessionUsers.empty()) {
+      toml::table users;
+      for (const auto& [name, value] : config.sessionUsers) {
+        users.insert_or_assign(name, value);
+      }
+      session.insert_or_assign("users", std::move(users));
+    }
     if (!session.empty()) {
       root.insert("session", std::move(session));
     }

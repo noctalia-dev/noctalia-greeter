@@ -15,6 +15,10 @@
 # Session Name from `noctalia-greeter sessions` (picker label) or its .desktop filename.
 default = "niri"
 
+# Per-user session, preselected when that user is chosen.
+# [session.users]
+# alice = "niri"
+
 [user]
 # Opens the password step for this account on startup.
 default = "lysec"

@@ -40,6 +40,8 @@ namespace greeter::config {
   // Full declarative greeter.toml. UI and Sync never write this file.
   struct GreeterConfigFile {
     std::optional<std::string> sessionDefault;
+    // [session.users]: username -> session name, applied when that user is selected.
+    std::unordered_map<std::string, std::string> sessionUsers;
     // Legacy only: migrated into sync.toml; stripped on greeter.toml write.
     std::optional<std::string> sessionLast;
 

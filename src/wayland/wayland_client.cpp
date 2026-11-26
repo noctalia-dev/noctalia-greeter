@@ -348,6 +348,10 @@ void WaylandClient::setPointerEventCallback(WaylandSeat::PointerEventCallback ca
   m_seatHandler.setPointerEventCallback(std::move(callback));
 }
 
+void WaylandClient::setLayoutChangedCallback(WaylandSeat::LayoutChangedCallback callback) {
+  m_seatHandler.setLayoutChangedCallback(std::move(callback));
+}
+
 void WaylandClient::setKeyboardEventCallback(WaylandSeat::KeyboardEventCallback callback) {
   m_seatHandler.setKeyboardEventCallback(std::move(callback));
 }
