@@ -12,6 +12,7 @@
 #include "greeter/greeter_sessions.h"
 #include "greeter/greeter_window.h"
 #include "greeter/power_actions.h"
+#include "render/core/image_decoder.h"
 #include "render/core/renderer.h"
 #include "render/core/texture_manager.h"
 #include "render/render_context.h"
@@ -41,6 +42,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <linux/input-event-codes.h>
 #include <nlohmann/json.hpp>
 #include <pwd.h>
@@ -54,6 +56,9 @@ namespace {
   constexpr const char* kAuthCancelStatus = "Waiting for the previous login attempt to finish...";
   constexpr float kHeaderUserIconBase = 64.0f;
   constexpr float kHeaderAvatarBorderScale = 2.0f;
+  constexpr std::streamoff kMaxAvatarGifFileSize = 4 * 1024 * 1024;
+  constexpr std::size_t kMaxAvatarGifFrameBytes = 32 * 1024 * 1024;
+  constexpr int kMaxAvatarGifFrames = 256;
   // Blur taps at quarter resolution; matches the shader's 40-tap cap.
   constexpr float kWallpaperMaxBlurRadius = 40.0f;
 
@@ -174,6 +179,34 @@ namespace {
     return indices;
   }
 
+  std::optional<DecodedRasterAnimation> loadAvatarGif(const std::string& path) {
+    std::ifstream file(path, std::ios::binary | std::ios::ate);
+    const std::streamoff size = file.tellg();
+    if (size < 6 || size > kMaxAvatarGifFileSize) {
+      return std::nullopt;
+    }
+    file.seekg(0);
+    char signature[6];
+    if (!file.read(signature, sizeof(signature))) {
+      return std::nullopt;
+    }
+    // AccountsService can store the original bytes under an extensionless name.
+    const std::string_view magic(signature, sizeof(signature));
+    if (magic != "GIF87a" && magic != "GIF89a") {
+      return std::nullopt;
+    }
+    std::vector<std::uint8_t> bytes(static_cast<std::size_t>(size));
+    file.seekg(0);
+    if (!file.read(reinterpret_cast<char*>(bytes.data()), size)) {
+      return std::nullopt;
+    }
+    auto animation = decodeAnimatedGif(bytes.data(), bytes.size(), kMaxAvatarGifFrames, kMaxAvatarGifFrameBytes);
+    if (!animation || animation->truncated || animation->frames.size() < 2) {
+      return std::nullopt;
+    }
+    return animation;
+  }
+
   bool parseColorWallpaperPath(std::string_view path, Color& out) {
     constexpr std::string_view kPrefix = "color:";
     if (!path.starts_with(kPrefix)) {
@@ -193,6 +226,9 @@ GreeterSurface::~GreeterSurface() {
     }
     if (m_wallpaperTexture.id != 0) {
       m_renderContext->textureManager().unload(m_wallpaperTexture);
+    }
+    if (m_headerAvatarTexture.id != 0) {
+      m_renderContext->textureManager().unload(m_headerAvatarTexture);
     }
   }
 }
@@ -1022,6 +1058,7 @@ void GreeterSurface::prepareFrame(std::uint32_t width, std::uint32_t height, boo
     layoutScene(width, height);
     m_inLayout = false;
   }
+  advanceHeaderAvatar();
 }
 
 bool GreeterSurface::updateClock() {
@@ -2055,16 +2092,9 @@ void GreeterSurface::syncHeaderUserAvatar(
   // size is logical; decode at buffer resolution so HiDPI outputs stay sharp.
   const int avatarPixelSize = canShowAvatar ? static_cast<int>(std::lround(size * m_renderContext->renderScale())) : 0;
 
-  if (canShowAvatar
-      && !iconPath.empty()
+  if (m_renderContext != nullptr
       && (iconPath != m_loadedHeaderAvatarPath || avatarPixelSize != m_loadedHeaderAvatarPixelSize)) {
-    if (m_headerAvatarTexture.id != 0) {
-      m_renderContext->textureManager().unload(m_headerAvatarTexture);
-      m_headerAvatarTexture = {};
-    }
-    m_loadedHeaderAvatarPath = iconPath;
-    m_loadedHeaderAvatarPixelSize = avatarPixelSize;
-    m_headerAvatarTexture = m_renderContext->textureManager().loadFromFile(iconPath, avatarPixelSize, true);
+    loadHeaderAvatar(iconPath, avatarPixelSize);
   }
 
   if (!canShowAvatar || iconPath.empty() || m_headerAvatarTexture.id == 0) {
@@ -2100,6 +2130,65 @@ void GreeterSurface::syncHeaderUserAvatar(
   m_headerUserAvatar->setSize(size, size);
   m_headerUserAvatar->setPosition(avatarX, avatarY);
   m_headerUserAvatar->setVisible(true);
+}
+
+void GreeterSurface::loadHeaderAvatar(const std::string& path, int pixelSize) {
+  auto& textures = m_renderContext->textureManager();
+  if (m_headerAvatarTexture.id != 0) {
+    textures.unload(m_headerAvatarTexture);
+  }
+  m_headerAvatarAnimation.reset();
+  m_loadedHeaderAvatarPath = path;
+  m_loadedHeaderAvatarPixelSize = pixelSize;
+  if (path.empty()) {
+    return;
+  }
+
+  if (auto animation = loadAvatarGif(path)) {
+    m_headerAvatarTexture =
+        textures.loadFromRgba(animation->frames.front().rgba.data(), animation->width, animation->height);
+    if (m_headerAvatarTexture.id != 0) {
+      m_headerAvatarLoopDuration = std::chrono::milliseconds::zero();
+      for (const auto& frame : animation->frames) {
+        m_headerAvatarLoopDuration += std::chrono::milliseconds(frame.durationMs);
+      }
+      m_headerAvatarFrame = 0;
+      m_headerAvatarStartedAt = std::chrono::steady_clock::now();
+      m_headerAvatarAnimation = std::move(animation);
+      return;
+    }
+  }
+  m_headerAvatarTexture = textures.loadFromFile(path, pixelSize, true);
+}
+
+void GreeterSurface::advanceHeaderAvatar() {
+  if (!m_headerAvatarAnimation) {
+    return;
+  }
+
+  const auto elapsed =
+      std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - m_headerAvatarStartedAt);
+  auto offset = elapsed % m_headerAvatarLoopDuration;
+  const auto& animation = *m_headerAvatarAnimation;
+  for (std::size_t index = 0; index < animation.frames.size(); ++index) {
+    const auto& frame = animation.frames[index];
+    const auto duration = std::chrono::milliseconds(frame.durationMs);
+    if (offset < duration) {
+      if (index != m_headerAvatarFrame) {
+        auto& textures = m_renderContext->textureManager();
+        if (textures.updateSubImage(
+                m_headerAvatarTexture, frame.rgba.data(), 0, 0, animation.width, animation.height,
+                TextureDataFormat::Rgba
+            )) {
+          m_headerAvatarFrame = index;
+        } else {
+          m_headerAvatarAnimation.reset();
+        }
+      }
+      return;
+    }
+    offset -= duration;
+  }
 }
 
 void GreeterSurface::syncWallpaperTexture() {
