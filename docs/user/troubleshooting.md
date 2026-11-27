@@ -429,6 +429,11 @@ Correct the system locale configuration or set `LC_TIME` explicitly in greetd's 
 
 Install and enable AccountsService, commonly provided by an `accountsservice` package and `accounts-daemon` service. The greeter reads each user's `IconFile` from AccountsService and displays a fallback when the service or image is unavailable. Avatars are not copied by appearance sync.
 
+If the account's avatar is an animated GIF, the greeter loops its frames at
+their encoded delays. Use a GIF up to 4 MiB with fewer than 256 frames
+and less than 32 MiB of decoded RGBA frame data. Larger GIFs use the static
+image path.
+
 ### Cursor theme is missing or falls back to the default
 
 Set `[cursor].theme` to the exact, case-sensitive directory name of an installed

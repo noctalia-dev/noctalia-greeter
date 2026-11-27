@@ -6,6 +6,7 @@
 #include "greeter/greeter_sessions.h"
 #include "render/animation/animation_manager.h"
 #include "render/core/color.h"
+#include "render/core/image_decoder.h"
 #include "render/core/texture_handle.h"
 #include "render/core/wallpaper_types.h"
 #include "render/scene/input_dispatcher.h"
@@ -94,7 +95,9 @@ public:
   void clearOutputViewport();
 
   [[nodiscard]] Node* sceneRoot() noexcept { return &m_root; }
-  [[nodiscard]] bool animating() const noexcept { return m_animations.hasActive(); }
+  [[nodiscard]] bool animating() const noexcept {
+    return m_animations.hasActive() || m_headerAvatarAnimation.has_value();
+  }
 
 private:
   void notifyStateChanged();
@@ -185,6 +188,8 @@ private:
   [[nodiscard]] bool isSyncedScheme(std::size_t schemeIndex) const;
   [[nodiscard]] std::optional<std::size_t> findSchemeIndex(std::string_view name) const;
   void syncWallpaperTexture();
+  void loadHeaderAvatar(const std::string& path, int pixelSize);
+  void advanceHeaderAvatar();
   void syncHeaderUserAvatar(class Renderer& renderer, float size, float panelX, float panelWidth, float headerY);
 
   // Nodes unregister animations while being destroyed, so the manager must
@@ -276,6 +281,10 @@ private:
   std::function<void(const GreetdError&)> m_onGreetdTransportError;
   TextureHandle m_brandLogoTexture{};
   TextureHandle m_headerAvatarTexture{};
+  std::optional<DecodedRasterAnimation> m_headerAvatarAnimation;
+  std::chrono::steady_clock::time_point m_headerAvatarStartedAt{};
+  std::chrono::milliseconds m_headerAvatarLoopDuration{};
+  std::size_t m_headerAvatarFrame = 0;
   TextureHandle m_wallpaperTexture{};
   std::string m_loadedHeaderAvatarPath;
   int m_loadedHeaderAvatarPixelSize = 0;
